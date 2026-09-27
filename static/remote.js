@@ -13,7 +13,6 @@
   const passwordInput = document.querySelector('#login-password');
   let authorized = false;
   let booting;
-  let recoveryMode = false;
 
   function message(value, error = false) {
     feedback.textContent = value;
@@ -56,13 +55,6 @@
   booting = authorize();
   sb.auth.onAuthStateChange((event) => {
     if (event === 'SIGNED_OUT') showLogin();
-    if (event === 'PASSWORD_RECOVERY') {
-      recoveryMode = true;
-      showLogin();
-      document.querySelector('#login-title').textContent = 'Crie uma nova senha';
-      document.querySelector('#login-submit').textContent = 'Salvar nova senha';
-      message('Digite sua nova senha e salve para voltar ao sistema.');
-    }
   });
 
   document.querySelector('#login-form').addEventListener('submit', async (event) => {
@@ -72,43 +64,12 @@
     feedback.hidden = true;
     const email = emailInput.value.trim().toLowerCase();
     try {
-      if (recoveryMode) {
-        const reset = await sb.auth.updateUser({ password: passwordInput.value });
-        if (reset.error) throw reset.error;
-        recoveryMode = false;
-        document.querySelector('#login-title').textContent = 'Acesse o sistema';
-        document.querySelector('#login-submit').textContent = 'Entrar';
-        await authorize(true);
-        return;
-      }
       const result = await sb.auth.signInWithPassword({ email, password: passwordInput.value });
       if (result.error) throw result.error;
       await authorize(true);
     } catch (error) {
-      message(error.message === 'Invalid login credentials' ? 'E-mail ou senha incorretos. Se for seu primeiro acesso, crie uma senha abaixo.' : error.message, true);
+      message(error.message === 'Invalid login credentials' ? 'E-mail ou senha incorretos.' : error.message, true);
     } finally { button.disabled = false; }
-  });
-  document.querySelector('#login-create').addEventListener('click', async () => {
-    const email = emailInput.value.trim().toLowerCase();
-    const password = passwordInput.value;
-    if (!emailInput.checkValidity() || password.length < 6) {
-      message('Preencha um e-mail válido e uma senha com pelo menos 6 caracteres.', true);
-      return;
-    }
-    feedback.hidden = true;
-    const result = await sb.auth.signUp({
-      email, password,
-      options: { emailRedirectTo: location.origin }
-    });
-    if (result.error) message(result.error.message, true);
-    else message('Confira seu e-mail e confirme o cadastro. Depois, volte a esta página e entre com a senha criada.');
-  });
-  document.querySelector('#login-reset').addEventListener('click', async () => {
-    const email = emailInput.value.trim().toLowerCase();
-    if (!emailInput.checkValidity()) { message('Informe seu e-mail para recuperar a senha.', true); return; }
-    const result = await sb.auth.resetPasswordForEmail(email, { redirectTo: location.origin });
-    if (result.error) message(result.error.message, true);
-    else message('Se o e-mail estiver cadastrado, você receberá as instruções de recuperação.');
   });
   document.querySelector('#logout-button').addEventListener('click', async () => {
     await sb.auth.signOut();
