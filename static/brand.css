@@ -26,13 +26,12 @@
 
 .brand-logo {
   display: block;
-  width: 72px;
-  height: 72px;
-  object-fit: cover;
-  border-radius: 50%;
-  border: 3px solid #fff;
-  background: #fff;
-  box-shadow: 0 12px 25px #010c3a60, 0 0 0 1px #aac7ff55;
+  width: 58px;
+  height: 58px;
+  object-fit: contain;
+  border: 0;
+  background: transparent;
+  box-shadow: none;
 }
 
 .brand-name strong { font-size: 16px; letter-spacing: .13em; }
@@ -217,7 +216,7 @@ label small, .section-help { color: #7081a2; }
 
 @media (max-width: 1000px) {
   .sidebar { width: 188px; }
-  .brand-logo { width: 64px; height: 64px; }
+  .brand-logo { width: 52px; height: 52px; }
   .finance-filters { padding: 0 20px 20px; }
   .order-filters { padding: 0 20px 20px; }
 }
