@@ -25,6 +25,17 @@ function formatCep(value) {
   return value.replace(/\D/g, '').slice(0, 8).replace(/^(\d{5})(\d)/, '$1-$2');
 }
 
+function validCpf(value) {
+  const cpf = value.replace(/\D/g, '');
+  if (!/^\d{11}$/.test(cpf) || /^(\d)\1{10}$/.test(cpf)) return false;
+  for (const size of [9, 10]) {
+    const total = [...cpf.slice(0, size)].reduce((sum, digit, index) => sum + Number(digit) * (size + 1 - index), 0);
+    const calculated = (total * 10) % 11;
+    if ((calculated === 10 ? 0 : calculated) !== Number(cpf[size])) return false;
+  }
+  return true;
+}
+
 function maskCpf(cpf) {
   return `***.***.${cpf.slice(6, 9)}-${cpf.slice(9)}`;
 }
@@ -153,6 +164,8 @@ function formData() {
 function validateForm(data) {
   const required = [['nome', 'nome'], ['cpf', 'CPF'], ['setores', 'setores de experiência'], ['cep', 'CEP'], ['logradouro', 'logradouro'], ['numero', 'número'], ['bairro', 'bairro']];
   for (const [key, label] of required) if (!(Array.isArray(data[key]) ? data[key].length : data[key].trim())) return `Preencha ${label}.`;
+  if (!validCpf(data.cpf)) return 'Informe um CPF válido.';
+  if (data.cep.replace(/\D/g, '').length !== 8) return 'Informe um CEP válido.';
   if (data.trabalhando && !data.local_trabalho.trim()) return 'Informe o local onde está trabalhando.';
   if (!data.disponibilidade.length) return 'Selecione ao menos um dia disponível.';
   if (data.disponibilidade.some(slot => !slot.inicio || !slot.fim || slot.inicio >= slot.fim)) return 'Confira os horários selecionados.';
