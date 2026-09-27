@@ -6,11 +6,13 @@
   <meta name="theme-color" content="#07165c">
   <meta name="description" content="Sistema de gestão da Direct Promoções.">
   <title>Diaristas | Direct Promoções</title>
+  <script src="/theme.js"></script>
   <link rel="icon" href="/favicon.svg" type="image/svg+xml">
   <link rel="stylesheet" href="/style.css">
   <link rel="stylesheet" href="/brand.css">
   <link rel="stylesheet" href="/stores.css">
   <link rel="stylesheet" href="/login.css">
+  <link rel="stylesheet" href="/theme.css">
   <script src="/vendor/supabase-2.117.2.js" defer></script>
   <script src="/remote.js" defer></script>
   <script src="/app.js" defer></script>
@@ -21,6 +23,10 @@
 <body>
   <section id="login-screen" class="login-screen" hidden aria-labelledby="login-title">
     <div class="login-card">
+      <button id="login-theme-toggle" class="login-theme-toggle" type="button" aria-label="Ativar tema escuro" title="Ativar tema escuro" aria-pressed="false">
+        <svg class="theme-icon-moon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20.5 14.4A8.5 8.5 0 0 1 9.6 3.5 8.5 8.5 0 1 0 20.5 14.4Z"/></svg>
+        <svg class="theme-icon-sun" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="4"/><path d="M12 2v2m0 16v2M4.93 4.93l1.42 1.42m11.3 11.3 1.42 1.42M2 12h2m16 0h2M4.93 19.07l1.42-1.42m11.3-11.3 1.42-1.42"/></svg>
+      </button>
       <img src="/logo-direct-promocoes-transparente.png" alt="Direct Promoções" class="login-logo">
       <span class="eyebrow">ÁREA ADMINISTRATIVA</span>
       <h1 id="login-title">Acesse o sistema</h1>
@@ -43,7 +49,19 @@
         <a href="#redes" id="nav-redes"><span class="nav-icon" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M3 9h18l-2-5H5L3 9ZM4 9v11h16V9M9 20v-7h6v7"/><path d="M3 9c0 1.7 1.4 3 3 3s3-1.3 3-3c0 1.7 1.4 3 3 3s3-1.3 3-3c0 1.7 1.4 3 3 3s3-1.3 3-3"/></svg></span>Redes e lojas</a>
         <a href="#financeiro" id="nav-financeiro"><span class="nav-icon" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M20 8V6a2 2 0 0 0-2-2H6a3 3 0 0 0-3 3v10a3 3 0 0 0 3 3h14V8H6a3 3 0 0 1-3-3"/><path d="M20 11h-6a3 3 0 0 0 0 6h6M16 14h.01"/></svg></span>Financeiro</a>
       </nav>
-      <div class="sidebar-foot"><span class="status-dot" aria-hidden="true"></span><span id="storage-status">Dados salvos neste computador</span><button id="logout-button" class="logout-button" type="button" hidden>Sair da conta</button></div>
+      <div class="sidebar-foot">
+        <div class="sidebar-status"><span class="status-dot" aria-hidden="true"></span><span id="storage-status">Dados salvos neste computador</span></div>
+        <div class="sidebar-controls">
+          <button id="theme-toggle" class="sidebar-control theme-toggle" type="button" aria-label="Ativar tema escuro" title="Ativar tema escuro" aria-pressed="false">
+            <svg class="theme-icon-moon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20.5 14.4A8.5 8.5 0 0 1 9.6 3.5 8.5 8.5 0 1 0 20.5 14.4Z"/></svg>
+            <svg class="theme-icon-sun" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="4"/><path d="M12 2v2m0 16v2M4.93 4.93l1.42 1.42m11.3 11.3 1.42 1.42M2 12h2m16 0h2M4.93 19.07l1.42-1.42m11.3-11.3 1.42-1.42"/></svg>
+            <span class="theme-toggle-label">Tema escuro</span>
+          </button>
+          <button id="logout-button" class="sidebar-control logout-button" type="button" aria-label="Sair da conta" title="Sair da conta" hidden>
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 3h11v18H4V3Z"/><path d="m9 4 10 2v14L9 18V4Z"/><circle cx="16" cy="12" r=".7" fill="currentColor" stroke="none"/></svg>
+          </button>
+        </div>
+      </div>
     </aside>
     <main class="main-content" id="diaristas-page">
       <header class="page-header">
