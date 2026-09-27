@@ -1,0 +1,26 @@
+.store-overview { display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); gap:12px; margin-bottom:19px; }
+.store-filters { display:flex; flex-wrap:wrap; gap:10px; padding:0 28px 24px; }
+.store-filters .search-wrap { flex:1 1 260px; }
+.store-filters select { min-height:42px; max-width:240px; padding:8px 10px; border:1px solid #d8e2f3; border-radius:8px; color:#1c356d; background:#fff; font-size:14px; }
+.store-groups { padding:0 28px 28px; display:grid; gap:25px; }
+.store-group { border:1px solid #e0e8f7; border-radius:12px; overflow:hidden; background:#fff; }
+.store-group-heading { display:flex; align-items:center; justify-content:space-between; gap:12px; padding:16px 20px; background:#f4f8ff; border-bottom:1px solid #e0e8f7; }
+.store-group-heading h3 { margin:0; font-size:17px; }
+.store-group-heading span { color:#60749b; font-size:13px; font-weight:700; }
+.store-list { display:grid; }
+.store-item { display:flex; align-items:center; justify-content:space-between; gap:20px; padding:17px 20px; border-bottom:1px solid #edf1fa; }
+.store-item:last-child { border-bottom:0; }
+.store-info { min-width:0; }
+.store-title { display:flex; align-items:center; flex-wrap:wrap; gap:8px 12px; }
+.store-title strong { color:#11295f; font-size:15px; }
+.store-state { display:inline-flex; padding:4px 8px; border-radius:20px; font-size:11px; font-weight:700; }
+.store-state.ready { background:#e4f4ee; color:#206748; }
+.store-state.review { background:#fff2d7; color:#86570e; }
+.store-address { margin:7px 0 0; color:#344f7c; font-size:14px; line-height:1.45; overflow-wrap:anywhere; }
+.store-note { margin:6px 0 0; color:#8a5b16; font-size:12px; line-height:1.4; }
+.store-source { display:inline-block; margin-top:7px; color:#1457b9; font-size:12px; font-weight:700; text-decoration:none; }
+.store-source:hover { text-decoration:underline; }
+.store-actions { display:flex; align-items:center; gap:8px; flex:none; }
+.store-copy { min-height:38px; padding:7px 12px; font-size:13px; white-space:nowrap; }
+@media (max-width:850px) { .store-item { align-items:flex-start; flex-direction:column; gap:10px; } }
+@media (max-width:700px) { .store-overview { grid-template-columns:1fr; } .store-filters,.store-groups { padding-left:18px; padding-right:18px; } .store-filters select { flex:1 1 160px; max-width:none; } }

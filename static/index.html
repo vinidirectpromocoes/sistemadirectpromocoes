@@ -1,0 +1,209 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#07165c">
+  <meta name="description" content="Sistema de gestão da Direct Promoções.">
+  <title>Diaristas | Direct Promoções</title>
+  <link rel="icon" href="/favicon.svg" type="image/svg+xml">
+  <link rel="stylesheet" href="/style.css">
+  <link rel="stylesheet" href="/brand.css">
+  <link rel="stylesheet" href="/stores.css">
+  <link rel="stylesheet" href="/login.css">
+  <script src="/vendor/supabase-2.117.2.js" defer></script>
+  <script src="/remote.js" defer></script>
+  <script src="/app.js" defer></script>
+  <script src="/stores.js" defer></script>
+  <script src="/finance.js" defer></script>
+  <script src="/orders.js" defer></script>
+</head>
+<body>
+  <section id="login-screen" class="login-screen" hidden aria-labelledby="login-title">
+    <div class="login-card">
+      <img src="/logo-direct-promocoes.jpg" alt="Direct Promoções" class="login-logo">
+      <span class="eyebrow">ÁREA ADMINISTRATIVA</span>
+      <h1 id="login-title">Acesse o sistema</h1>
+      <p>Entre com seu e-mail e senha para gerenciar diaristas, pedidos, lojas e financeiro.</p>
+      <form id="login-form">
+        <label>E-mail<input id="login-email" type="email" autocomplete="email" required placeholder="seu@email.com"></label>
+        <label>Senha<input id="login-password" type="password" autocomplete="current-password" minlength="6" required placeholder="Sua senha"></label>
+        <div id="login-feedback" class="login-feedback" role="status" aria-live="polite" hidden></div>
+        <button id="login-submit" class="button button-primary" type="submit">Entrar</button>
+      </form>
+      <button id="login-create" class="text-button" type="button">Primeiro acesso? Criar senha</button>
+      <button id="login-reset" class="text-button" type="button">Esqueci minha senha</button>
+    </div>
+  </section>
+  <div class="app-shell">
+    <aside class="sidebar" aria-label="Navegação principal">
+      <div class="brand"><img class="brand-logo" src="/logo-direct-promocoes.jpg" alt="Logo da Direct Promoções"><span class="brand-name"><strong>DIRECT</strong><small>PROMOÇÕES</small></span></div>
+      <div class="nav-label">GESTÃO</div>
+      <nav>
+        <a href="#diaristas" id="nav-diaristas" class="nav-active" aria-current="page"><span class="nav-icon" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="9" cy="8" r="3"/><path d="M3.5 20v-2a5.5 5.5 0 0 1 11 0v2H3.5Z"/><path d="M16.5 5.5a3 3 0 0 1 0 5.8M17 14a5 5 0 0 1 3.5 4.8V20h-3"/></svg></span>Diaristas</a>
+        <a href="#pedidos" id="nav-pedidos"><span class="nav-icon" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="5" y="4" width="14" height="17" rx="2"/><path d="M9 4.5V3h6v1.5M9 10h6M9 14h6M9 18h4"/></svg></span>Pedidos</a>
+        <a href="#redes" id="nav-redes"><span class="nav-icon" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M3 9h18l-2-5H5L3 9ZM4 9v11h16V9M9 20v-7h6v7"/><path d="M3 9c0 1.7 1.4 3 3 3s3-1.3 3-3c0 1.7 1.4 3 3 3s3-1.3 3-3c0 1.7 1.4 3 3 3s3-1.3 3-3"/></svg></span>Redes e lojas</a>
+        <a href="#financeiro" id="nav-financeiro"><span class="nav-icon" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M20 8V6a2 2 0 0 0-2-2H6a3 3 0 0 0-3 3v10a3 3 0 0 0 3 3h14V8H6a3 3 0 0 1-3-3"/><path d="M20 11h-6a3 3 0 0 0 0 6h6M16 14h.01"/></svg></span>Financeiro</a>
+      </nav>
+      <div class="sidebar-foot"><span class="status-dot" aria-hidden="true"></span><span id="storage-status">Dados salvos neste computador</span><button id="logout-button" class="logout-button" type="button" hidden>Sair da conta</button></div>
+    </aside>
+    <main class="main-content" id="diaristas-page">
+      <header class="page-header">
+        <div><div class="eyebrow">CADASTROS <span>/</span> DIARISTAS</div><h1>Diaristas</h1><p>Organize as informações e a disponibilidade da sua equipe.</p></div>
+        <button class="button button-primary" id="new-button" type="button"><span aria-hidden="true">＋</span> Nova diarista</button>
+      </header>
+      <section class="stats" aria-label="Resumo">
+        <div class="stat-card"><span class="stat-icon blue" aria-hidden="true">◫</span><div><span class="stat-label">Total cadastrados</span><strong id="total-count">0</strong></div></div>
+        <div class="stat-card"><span class="stat-icon coral" aria-hidden="true">✓</span><div><span class="stat-label">Diaristas disponíveis</span><strong id="available-count">0</strong></div></div>
+        <div class="stat-card"><span class="stat-icon mint" aria-hidden="true">⊘</span><div><span class="stat-label">Diaristas bloqueados</span><strong id="blocked-count">0</strong></div></div>
+      </section>
+      <section class="list-card" aria-labelledby="list-title">
+        <div class="list-top"><div><h2 id="list-title">Pessoas cadastradas</h2><p>Encontre e atualize os dados de cada diarista.</p></div><div class="search-wrap"><span aria-hidden="true">⌕</span><input id="search" type="search" placeholder="Buscar por nome, CPF ou setor" aria-label="Buscar diaristas"></div></div>
+        <div id="feedback" class="feedback" role="status" aria-live="polite" hidden></div>
+        <div id="empty-state" class="empty-state" hidden><div class="empty-illustration" aria-hidden="true">◫</div><h3>Nenhuma diarista cadastrada</h3><p>Comece adicionando as informações da primeira profissional.</p><button class="button button-outline" id="empty-new-button" type="button">Cadastrar diarista</button></div>
+        <div id="no-results" class="empty-state compact" hidden><h3>Nenhum resultado encontrado</h3><p>Tente buscar por outro nome, CPF ou setor.</p></div>
+        <div class="table-scroll" id="table-wrap" hidden><table><thead><tr><th>DIARISTA</th><th>EXPERIÊNCIA</th><th>BAIRRO</th><th>SITUAÇÃO</th><th><span class="sr-only">Ver ficha</span></th></tr></thead><tbody id="rows"></tbody></table></div>
+      </section>
+    </main>
+    <main class="main-content" id="financeiro-page" hidden>
+      <header class="page-header">
+        <div><div class="eyebrow">GESTÃO <span>/</span> FINANCEIRO</div><h1>Financeiro</h1><p>Acompanhe entradas, pagamentos e pendências da empresa.</p></div>
+        <button class="button button-primary" id="new-finance-button" type="button"><span aria-hidden="true">＋</span> Novo lançamento</button>
+      </header>
+      <div class="finance-period-bar"><label for="finance-month">Mês de referência</label><input id="finance-month" type="month"><label class="finance-all-months"><input id="finance-all-months" type="checkbox"> Ver todos os meses</label></div>
+      <section class="finance-stats" aria-label="Resumo financeiro">
+        <div class="finance-stat"><span>Entradas no mês</span><strong id="finance-in">R$ 0,00</strong></div>
+        <div class="finance-stat"><span>Saídas no mês</span><strong id="finance-out">R$ 0,00</strong></div>
+        <div class="finance-stat emphasis"><span>Saldo realizado</span><strong id="finance-balance">R$ 0,00</strong></div>
+        <div class="finance-stat"><span>A receber · total</span><strong id="finance-receivable">R$ 0,00</strong></div>
+        <div class="finance-stat"><span>A pagar · total</span><strong id="finance-payable">R$ 0,00</strong></div>
+      </section>
+      <div id="finance-warning" class="finance-warning" hidden></div>
+      <section class="list-card finance-list" aria-labelledby="finance-list-title">
+        <div class="list-top finance-list-top"><div><h2 id="finance-list-title">Lançamentos</h2><p>Pagamentos de diárias entram aqui automaticamente. Registre as demais entradas e saídas pelo botão acima.</p></div></div>
+        <div class="finance-filters"><div class="search-wrap"><span aria-hidden="true">⌕</span><input id="finance-search" type="search" placeholder="Buscar descrição ou pessoa" aria-label="Buscar lançamentos"></div><select id="finance-type-filter" aria-label="Filtrar por tipo"><option value="todos">Entradas e saídas</option><option value="receita">Somente entradas</option><option value="despesa">Somente saídas</option></select><select id="finance-status-filter" aria-label="Filtrar por situação"><option value="todos">Todas as situações</option><option value="pendente">Pendentes</option><option value="pago">Pagos ou recebidos</option><option value="sem-valor">Sem valor informado</option></select><button class="button button-outline" id="finance-export-button" type="button">Exportar CSV</button></div>
+        <div id="finance-feedback" class="feedback" role="status" aria-live="polite" hidden></div>
+        <div id="finance-empty" class="empty-state compact" hidden><h3>Nenhum lançamento encontrado</h3><p>Altere os filtros ou registre a primeira entrada ou saída.</p></div>
+        <div id="finance-table-wrap" class="table-scroll" hidden><table class="finance-table"><thead><tr><th>DESCRIÇÃO</th><th>PESSOA / CLIENTE</th><th>REFERÊNCIA</th><th>TIPO</th><th>VALOR</th><th>SITUAÇÃO</th><th><span class="sr-only">Ações</span></th></tr></thead><tbody id="finance-rows"></tbody></table></div>
+      </section>
+    </main>
+    <main class="main-content" id="pedidos-page" hidden>
+      <header class="page-header">
+        <div><div class="eyebrow">OPERAÇÃO <span>/</span> PEDIDOS</div><h1>Pedidos dos supermercados</h1><p>Registre a demanda de diaristas por setor, data e horário.</p></div>
+        <button class="button button-primary" id="new-order-button" type="button"><span aria-hidden="true">＋</span> Novo pedido</button>
+      </header>
+      <section class="order-stats" aria-label="Resumo dos pedidos">
+        <div class="finance-stat"><span>Pedidos em aberto</span><strong id="orders-open-count">0</strong></div>
+        <div class="finance-stat"><span>Diárias solicitadas · em aberto</span><strong id="orders-demand-count">0</strong></div>
+        <div class="finance-stat"><span>Pedidos confirmados</span><strong id="orders-confirmed-count">0</strong></div>
+        <div class="finance-stat"><span>Pedidos concluídos</span><strong id="orders-done-count">0</strong></div>
+      </section>
+      <section class="list-card" aria-labelledby="orders-list-title">
+        <div class="list-top order-list-top"><div><h2 id="orders-list-title">Solicitações recebidas</h2><p>Acompanhe cada pedido desde o recebimento até a conclusão.</p></div></div>
+        <div class="order-filters"><div class="search-wrap"><span aria-hidden="true">⌕</span><input id="orders-search" type="search" placeholder="Buscar supermercado, unidade ou setor" aria-label="Buscar pedidos"></div><select id="orders-status-filter" aria-label="Filtrar pedidos por situação"><option value="todos">Todas as situações</option><option value="novo">Novos</option><option value="em_selecao">Em seleção</option><option value="confirmado">Confirmados</option><option value="concluido">Concluídos</option><option value="cancelado">Cancelados</option></select></div>
+        <div id="orders-feedback" class="feedback" role="status" aria-live="polite" hidden></div>
+        <div id="orders-empty" class="empty-state" hidden><div class="empty-illustration" aria-hidden="true">▤</div><h3>Nenhum pedido registrado</h3><p>Cadastre a primeira solicitação recebida de um supermercado.</p><button class="button button-outline" id="orders-empty-new" type="button">Registrar pedido</button></div>
+        <div id="orders-no-results" class="empty-state compact" hidden><h3>Nenhum pedido encontrado</h3><p>Altere a busca ou o filtro de situação.</p></div>
+        <div id="orders-table-wrap" class="table-scroll" hidden><table class="orders-table"><thead><tr><th>SUPERMERCADO</th><th>SETOR</th><th>DIAS E HORÁRIOS</th><th>DEMANDA</th><th>SITUAÇÃO</th><th><span class="sr-only">Ver pedido</span></th></tr></thead><tbody id="orders-rows"></tbody></table></div>
+      </section>
+    </main>
+    <main class="main-content" id="redes-page" hidden>
+      <header class="page-header">
+        <div><div class="eyebrow">CADASTROS <span>/</span> REDES E LOJAS</div><h1>Redes e lojas</h1><p>Consulte as unidades da Grande Fortaleza e copie o local da diária em um clique.</p></div>
+        <button class="button button-primary" id="new-store-button" type="button"><span aria-hidden="true">＋</span> Nova loja</button>
+      </header>
+      <section class="store-overview" aria-label="Resumo de lojas"><div class="finance-stat"><span>Redes cadastradas</span><strong id="store-network-count">6</strong></div><div class="finance-stat"><span>Lojas localizadas</span><strong id="store-total-count">0</strong></div><div class="finance-stat"><span>Endereços para conferir</span><strong id="store-review-count">0</strong></div></section>
+      <section class="list-card" aria-labelledby="stores-list-title">
+        <div class="list-top"><div><h2 id="stores-list-title">Unidades por rede</h2><p>Endereços pesquisados em fontes públicas. Confira com a rede antes de enviar os marcados para revisão.</p></div></div>
+        <div class="store-filters"><div class="search-wrap"><span aria-hidden="true">⌕</span><input id="stores-search" type="search" placeholder="Buscar rede, loja, bairro ou cidade" aria-label="Buscar lojas"></div><select id="stores-network-filter" aria-label="Filtrar por rede"><option value="">Todas as redes</option></select><select id="stores-city-filter" aria-label="Filtrar por cidade"><option value="">Todas as cidades</option></select></div>
+        <div id="stores-feedback" class="feedback" role="status" aria-live="polite" hidden></div>
+        <div id="stores-empty" class="empty-state compact" hidden><h3>Nenhuma loja encontrada</h3><p>Ajuste os filtros ou cadastre uma nova loja.</p></div>
+        <div id="stores-groups" class="store-groups"></div>
+      </section>
+    </main>
+  </div>
+
+  <dialog id="store-dialog" aria-labelledby="store-dialog-title">
+    <form id="store-form" novalidate>
+      <div class="dialog-header"><div><span class="eyebrow">REDES E LOJAS</span><h2 id="store-dialog-title">Nova loja</h2></div><button class="icon-button" id="store-close-button" type="button" aria-label="Fechar">×</button></div>
+      <div class="dialog-body"><div id="store-form-error" class="form-error" role="alert" hidden></div>
+        <div class="field-grid two"><label>Rede <span class="required">*</span><select id="store-network" required></select></label><label>Nome da loja <span class="required">*</span><input id="store-name" maxlength="120" required placeholder="Ex.: Messejana"></label></div>
+        <label>Endereço <span class="required">*</span><input id="store-address" maxlength="250" required placeholder="Rua ou avenida, número e complemento"></label>
+        <div class="field-grid two"><label>Bairro<input id="store-district" maxlength="100"></label><label>Cidade <span class="required">*</span><input id="store-city" maxlength="80" required value="Fortaleza"></label></div>
+        <label>Link da fonte<input id="store-source" type="url" maxlength="500" placeholder="https://..."><small>Site da rede, lista de lojas ou outra referência.</small></label>
+        <label>Situação do endereço<select id="store-status"><option value="revisar">Precisa conferir</option><option value="confirmado">Endereço publicado ou conferido</option></select></label>
+        <label>Observação<textarea id="store-note" maxlength="400" rows="2" placeholder="Ex.: endereço divergente em outra fonte"></textarea></label>
+      </div>
+      <div class="dialog-footer"><button class="button button-quiet" id="store-cancel-button" type="button">Cancelar</button><button class="button button-primary" id="store-save-button" type="submit">Salvar loja</button></div>
+    </form>
+  </dialog>
+
+  <dialog id="form-dialog" aria-labelledby="dialog-title">
+    <form id="diarista-form" novalidate>
+      <div class="dialog-header"><div><span class="eyebrow">CADASTRO DE DIARISTA</span><h2 id="dialog-title">Nova diarista</h2></div><button class="icon-button" type="button" id="close-button" aria-label="Fechar">×</button></div>
+      <div class="dialog-body">
+        <div id="form-error" class="form-error" role="alert" hidden></div>
+        <fieldset><legend>Dados pessoais</legend><div class="field-grid two"><label>Nome completo <span class="required">*</span><input id="nome" name="nome" autocomplete="name" maxlength="180" required placeholder="Nome da profissional"></label><label>CPF <span class="required">*</span><input id="cpf" name="cpf" inputmode="numeric" maxlength="14" required placeholder="000.000.000-00"></label></div><label>Setores de experiência <span class="required">*</span><input id="setores" name="setores" maxlength="720" required placeholder="Ex.: eventos, limpeza, promoção"><small>Separe os setores por vírgula.</small></label></fieldset>
+        <fieldset><legend>Endereço em Fortaleza–CE</legend><div class="field-grid address-top"><label>CEP <span class="required">*</span><input id="cep" name="cep" inputmode="numeric" maxlength="9" required placeholder="00000-000"></label><label>Logradouro <span class="required">*</span><input id="logradouro" name="logradouro" autocomplete="street-address" maxlength="180" required placeholder="Rua, avenida..."></label><label>Número <span class="required">*</span><input id="numero" name="numero" maxlength="30" required placeholder="Nº ou S/N"></label></div><div class="field-grid two"><label>Complemento<input id="complemento" name="complemento" maxlength="120" placeholder="Apartamento, bloco..."></label><label>Bairro <span class="required">*</span><input id="bairro" name="bairro" maxlength="100" required></label></div></fieldset>
+        <fieldset><legend>Trabalho atual</legend><div class="choice-row"><label><input type="radio" name="trabalhando" value="false" checked> Não está trabalhando</label><label><input type="radio" name="trabalhando" value="true"> Está trabalhando</label></div><label id="workplace-wrap" hidden>Em qual local? <span class="required">*</span><input id="local_trabalho" name="local_trabalho" maxlength="180" placeholder="Empresa ou local de trabalho"></label></fieldset>
+        <fieldset><legend>Disponibilidade de dias e horários</legend><p class="section-help">Marque os dias disponíveis e ajuste os horários de cada um.</p><div class="day-list" id="day-list"></div></fieldset>
+        <fieldset><legend>Locomoção</legend><div class="choice-row"><label><input type="radio" name="pode_se_deslocar" value="true" checked> Pode se deslocar</label><label><input type="radio" name="pode_se_deslocar" value="false"> Não pode se deslocar</label></div><div id="transport-wrap"><label>Meio de transporte <span class="required">*</span><select id="transporte" name="transporte" required><option value="">Selecione</option><option>Veículo próprio</option><option>Transporte público</option><option>Aplicativo / táxi</option><option>Outros meios</option></select></label></div><label>Observações sobre locomoção<textarea id="observacoes_locomocao" name="observacoes_locomocao" maxlength="300" rows="2" placeholder="Ex.: atende somente em determinada região"></textarea></label></fieldset>
+      </div>
+      <div class="dialog-footer"><button class="button button-quiet" id="cancel-button" type="button">Cancelar</button><button class="button button-primary" id="save-button" type="submit">Salvar cadastro</button></div>
+    </form>
+  </dialog>
+
+  <dialog id="detail-dialog" aria-labelledby="detail-title">
+    <div class="dialog-header"><div><span class="eyebrow">FICHA DA DIARISTA</span><h2 id="detail-title"></h2></div><button class="icon-button" type="button" id="detail-close-button" aria-label="Fechar">×</button></div>
+    <div class="dialog-body detail-body">
+      <div id="detail-status" class="detail-status"></div>
+      <div id="detail-error" class="form-error" role="alert" hidden></div>
+      <div id="detail-fields" class="detail-fields"></div>
+      <section class="history-section" aria-labelledby="history-title"><div class="history-heading"><div><h3 id="history-title">Histórico de diárias</h3><p>Diárias registradas para esta profissional.</p></div><button class="button button-outline" id="add-daily-button" type="button">＋ Registrar diária</button></div><div id="history-list"></div></section>
+    </div>
+    <div class="dialog-footer detail-footer"><button class="button button-danger" id="delete-button" type="button">Excluir</button><div><button class="button button-quiet" id="block-button" type="button"></button><button class="button button-primary" id="edit-button" type="button">Editar cadastro</button></div></div>
+  </dialog>
+
+  <dialog id="daily-dialog" aria-labelledby="daily-title">
+    <form id="daily-form" novalidate>
+      <div class="dialog-header"><div><span class="eyebrow">HISTÓRICO DE DIÁRIAS</span><h2 id="daily-title">Registrar diária</h2></div><button class="icon-button" type="button" id="daily-close-button" aria-label="Fechar">×</button></div>
+      <div class="dialog-body"><div id="daily-error" class="form-error" role="alert" hidden></div><div class="field-grid two"><label>Data da diária <span class="required">*</span><input id="daily-date" type="date" required></label><label>Setor <span class="required">*</span><input id="daily-sector" maxlength="80" required placeholder="Ex.: eventos"></label></div><label>Local da diária <span class="required">*</span><input id="daily-place" maxlength="180" required placeholder="Empresa ou endereço do serviço"></label><div class="field-grid two daily-notes-label"><label>Valor a pagar (R$)<input id="daily-value" type="number" min="0.01" step="0.01" inputmode="decimal" placeholder="0,00"></label><label>Vencimento do pagamento<input id="daily-due" type="date"></label></div><div class="field-grid two"><label>Data do pagamento<input id="daily-payment-date" type="date"><small>Em branco = pendente</small></label><label>Forma de pagamento<input id="daily-method" maxlength="80" placeholder="Ex.: Pix, transferência"></label></div><label class="daily-notes-label">Observações<textarea id="daily-notes" maxlength="500" rows="3" placeholder="Detalhes opcionais"></textarea></label></div>
+      <div class="dialog-footer"><button class="button button-quiet" id="daily-cancel-button" type="button">Cancelar</button><button class="button button-primary" id="daily-save-button" type="submit">Salvar diária</button></div>
+    </form>
+  </dialog>
+
+  <dialog id="payment-dialog" aria-labelledby="payment-title">
+    <form id="payment-form" novalidate>
+      <div class="dialog-header"><div><span class="eyebrow">PAGAMENTO DE DIÁRIA</span><h2 id="payment-title">Dados do pagamento</h2></div><button class="icon-button" type="button" id="payment-close-button" aria-label="Fechar">×</button></div>
+      <div class="dialog-body"><div id="payment-error" class="form-error" role="alert" hidden></div><p id="payment-context" class="payment-context"></p><div class="field-grid two"><label>Valor a pagar (R$)<input id="payment-value" type="number" min="0.01" step="0.01" inputmode="decimal" placeholder="0,00"></label><label>Vencimento<input id="payment-due" type="date"></label></div><div class="field-grid two"><label>Data em que foi pago<input id="payment-date" type="date"></label><label>Forma de pagamento<input id="payment-method" maxlength="80" placeholder="Ex.: Pix, transferência"></label></div><small class="payment-help">Deixe a data do pagamento em branco enquanto estiver pendente.</small></div>
+      <div class="dialog-footer"><button class="button button-quiet" id="payment-cancel-button" type="button">Cancelar</button><button class="button button-primary" id="payment-save-button" type="submit">Salvar</button></div>
+    </form>
+  </dialog>
+
+  <dialog id="finance-dialog" aria-labelledby="finance-form-title">
+    <form id="finance-form" novalidate>
+      <div class="dialog-header"><div><span class="eyebrow">CONTROLE FINANCEIRO</span><h2 id="finance-form-title">Novo lançamento</h2></div><button class="icon-button" type="button" id="finance-close-button" aria-label="Fechar">×</button></div>
+      <div class="dialog-body"><div id="finance-form-error" class="form-error" role="alert" hidden></div><div class="field-grid two"><label>Tipo <span class="required">*</span><select id="finance-type"><option value="receita">Entrada / a receber</option><option value="despesa">Saída / a pagar</option></select></label><label>Valor (R$) <span class="required">*</span><input id="finance-value" type="number" min="0.01" step="0.01" inputmode="decimal" required placeholder="0,00"></label></div><label>Descrição <span class="required">*</span><input id="finance-description" maxlength="180" required placeholder="Ex.: serviço de promoção no evento"></label><div class="field-grid two daily-notes-label"><label id="finance-counterparty-label">Cliente <span class="required">*</span><input id="finance-counterparty" maxlength="180" required placeholder="Nome do cliente"></label><label>Categoria <span class="required">*</span><input id="finance-category" list="finance-categories" maxlength="80" required placeholder="Ex.: Serviços"><datalist id="finance-categories"><option value="Serviços"><option value="Reembolso"><option value="Transporte"><option value="Materiais"><option value="Administrativo"><option value="Outros"></datalist></label></div><div class="field-grid two"><label>Vencimento <span class="required">*</span><input id="finance-due" type="date" required></label><label>Data do pagamento / recebimento<input id="finance-paid" type="date"><small>Deixe em branco enquanto estiver pendente.</small></label></div><label>Forma de pagamento<input id="finance-method" maxlength="80" placeholder="Ex.: Pix, transferência, dinheiro"></label><label class="daily-notes-label">Observações<textarea id="finance-notes" maxlength="500" rows="3" placeholder="Detalhes opcionais"></textarea></label></div>
+      <div class="dialog-footer"><button class="button button-quiet" id="finance-cancel-button" type="button">Cancelar</button><button class="button button-primary" id="finance-save-button" type="submit">Salvar lançamento</button></div>
+    </form>
+  </dialog>
+  <dialog id="order-dialog" aria-labelledby="order-form-title">
+    <form id="order-form" novalidate>
+      <div class="dialog-header"><div><span class="eyebrow">SOLICITAÇÃO DE DIARISTAS</span><h2 id="order-form-title">Novo pedido</h2></div><button class="icon-button" type="button" id="order-close-button" aria-label="Fechar">×</button></div>
+      <div class="dialog-body">
+        <div id="order-form-error" class="form-error" role="alert" hidden></div>
+        <fieldset><legend>Supermercado</legend><label>Nome do supermercado <span class="required">*</span><input id="order-market" maxlength="180" required placeholder="Ex.: Supermercado Central"></label><div class="field-grid two order-field-row"><label>Unidade ou local<input id="order-unit" maxlength="180" placeholder="Ex.: Loja Aldeota"></label><label>Contato do solicitante<input id="order-contact" maxlength="180" placeholder="Nome ou telefone"></label></div></fieldset>
+        <fieldset><legend>Equipe solicitada</legend><div class="field-grid two"><label>Setor <span class="required">*</span><input id="order-sector" maxlength="80" required placeholder="Ex.: reposição, frente de loja"></label><label>Diaristas por dia <span class="required">*</span><input id="order-quantity" type="number" min="1" max="100" step="1" inputmode="numeric" required value="1"></label></div></fieldset>
+        <fieldset><legend>Dias e horários</legend><p class="section-help">Adicione cada data solicitada. O horário pode variar de um dia para outro.</p><div id="order-shifts" class="order-shifts"></div><button class="button button-outline order-add-day" id="order-add-day" type="button">＋ Adicionar data</button><p id="order-demand-preview" class="order-demand-preview" aria-live="polite">1 dia · 1 diária solicitada</p></fieldset>
+        <fieldset><legend>Acompanhamento</legend><label>Situação<select id="order-status"><option value="novo">Novo pedido</option><option value="em_selecao">Em seleção</option><option value="confirmado">Confirmado</option><option value="concluido">Concluído</option><option value="cancelado">Cancelado</option></select></label><label class="daily-notes-label">Observações<textarea id="order-notes" maxlength="500" rows="3" placeholder="Ex.: uniforme necessário, ponto de encontro ou instruções da loja"></textarea></label></fieldset>
+      </div>
+      <div class="dialog-footer"><button class="button button-quiet" id="order-cancel-button" type="button">Cancelar</button><button class="button button-primary" id="order-save-button" type="submit">Salvar pedido</button></div>
+    </form>
+  </dialog>
+  <dialog id="order-detail-dialog" aria-labelledby="order-detail-title">
+    <div class="dialog-header"><div><span class="eyebrow">PEDIDO DO SUPERMERCADO</span><h2 id="order-detail-title"></h2></div><button class="icon-button" type="button" id="order-detail-close" aria-label="Fechar">×</button></div>
+    <div class="dialog-body"><div id="order-detail-fields" class="detail-fields"></div><section class="history-section"><h3>Dias e horários solicitados</h3><div id="order-detail-shifts" class="order-detail-shifts"></div></section><div id="order-detail-error" class="form-error" role="alert" hidden></div></div>
+    <div class="dialog-footer detail-footer"><button class="button button-danger" id="order-delete-button" type="button">Excluir pedido</button><div><button class="button button-quiet" id="order-detail-close-bottom" type="button">Fechar</button><button class="button button-primary" id="order-edit-button" type="button">Editar pedido</button></div></div>
+  </dialog>
+</body>
+</html>
