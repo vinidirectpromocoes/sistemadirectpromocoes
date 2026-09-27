@@ -4,6 +4,8 @@ Sistema da Direct Promoções com abas de Diaristas, Pedidos, Redes e lojas e Fi
 
 ## Site publicado e primeiro acesso
 
+Endereço público: **https://sistemadirectpromocoes-zeta.vercel.app/**. A página de login é pública; os dados exigem uma conta administradora autorizada.
+
 O administrador autorizado deve informar seu e-mail na tela de login, escolher uma senha de pelo menos seis caracteres e clicar em **Primeiro acesso? Criar senha**. Após confirmar o cadastro pelo e-mail recebido, pode entrar no site. O e-mail precisa estar registrado em `public.direct_admins`; o cadastro de uma conta por outra pessoa não concede acesso a nenhuma tabela de operação.
 
 O arquivo `vercel.json` publica somente `static/`. O JavaScript desta pasta usa a chave publicável do Supabase, e as políticas RLS verificam o administrador em cada tabela. A chave de serviço e o banco SQLite não pertencem ao site ou repositório. Enviar alterações para `main` no GitHub aciona um novo deploy pela integração Git da Vercel.
