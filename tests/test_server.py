@@ -265,7 +265,7 @@ class CadastroTest(unittest.TestCase):
         self.assertEqual({item["rede"] for item in stores}, {"Super do Povo", "Super Lagoa", "Fazendinha", "Hipermarket", "Pinheiro", "Variedades"})
         self.assertTrue(any(item["cidade"] == "Aquiraz" for item in stores))
         target = next(item for item in stores if item["rede"] == "Super Lagoa" and item["nome"] == "Cidade 2000")
-        self.assertEqual(target["situacao"], "revisar")
+        self.assertEqual(target["situacao"], "confirmado")
         payload = {key: target[key] for key in ("rede", "nome", "endereco", "bairro", "cidade", "fonte_url", "situacao", "observacao")}
         payload.update(endereco="Av. Central Oeste, 1001", situacao="confirmado", observacao="Conferido por telefone")
         status, saved = self.call("PUT", f"/api/lojas/{target['id']}", payload)
