@@ -65,7 +65,7 @@ function renderStores() {
       const info = storeElement('div', 'store-info');
       const title = storeElement('div', 'store-title');
       title.append(storeElement('strong', '', item.nome));
-      title.append(storeElement('span', item.situacao === 'confirmado' ? 'store-state ready' : 'store-state review', item.situacao === 'confirmado' ? 'Endereço publicado' : 'Conferir endereço'));
+      title.append(storeElement('span', item.situacao === 'confirmado' ? 'store-state ready' : 'store-state review', item.situacao === 'confirmado' ? 'Endereço confirmado' : 'Conferir endereço'));
       info.append(title, storeElement('p', 'store-address', storeAddress(item)));
       if (item.observacao) info.append(storeElement('p', 'store-note', item.observacao));
       const source = storeElement('a', 'store-source', 'Ver fonte ↗');

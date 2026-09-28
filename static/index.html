@@ -131,7 +131,7 @@
       </header>
       <section class="store-overview" aria-label="Resumo de lojas"><div class="finance-stat"><span>Redes cadastradas</span><strong id="store-network-count">6</strong></div><div class="finance-stat"><span>Lojas localizadas</span><strong id="store-total-count">0</strong></div><div class="finance-stat"><span>Endereços para conferir</span><strong id="store-review-count">0</strong></div></section>
       <section class="list-card" aria-labelledby="stores-list-title">
-        <div class="list-top"><div><h2 id="stores-list-title">Unidades por rede</h2><p>Endereços pesquisados em fontes públicas. Confira com a rede antes de enviar os marcados para revisão.</p></div></div>
+        <div class="list-top"><div><h2 id="stores-list-title">Unidades por rede</h2><p>As lojas atuais foram confirmadas pela empresa. Novos endereços podem ser marcados para revisão.</p></div></div>
         <div class="store-filters"><div class="search-wrap"><span aria-hidden="true">⌕</span><input id="stores-search" type="search" placeholder="Buscar rede, loja, bairro ou cidade" aria-label="Buscar lojas"></div><select id="stores-network-filter" aria-label="Filtrar por rede"><option value="">Todas as redes</option></select><select id="stores-city-filter" aria-label="Filtrar por cidade"><option value="">Todas as cidades</option></select></div>
         <div id="stores-feedback" class="feedback" role="status" aria-live="polite" hidden></div>
         <div id="stores-empty" class="empty-state compact" hidden><h3>Nenhuma loja encontrada</h3><p>Ajuste os filtros ou cadastre uma nova loja.</p></div>
@@ -148,7 +148,7 @@
         <label>Endereço <span class="required">*</span><input id="store-address" maxlength="250" required placeholder="Rua ou avenida, número e complemento"></label>
         <div class="field-grid two"><label>Bairro<input id="store-district" maxlength="100"></label><label>Cidade <span class="required">*</span><input id="store-city" maxlength="80" required value="Fortaleza"></label></div>
         <label>Link da fonte<input id="store-source" type="url" maxlength="500" placeholder="https://..."><small>Site da rede, lista de lojas ou outra referência.</small></label>
-        <label>Situação do endereço<select id="store-status"><option value="revisar">Precisa conferir</option><option value="confirmado">Endereço publicado ou conferido</option></select></label>
+        <label>Situação do endereço<select id="store-status"><option value="revisar">Precisa conferir</option><option value="confirmado">Endereço confirmado</option></select></label>
         <label>Observação<textarea id="store-note" maxlength="400" rows="2" placeholder="Ex.: endereço divergente em outra fonte"></textarea></label>
       </div>
       <div class="dialog-footer"><button class="button button-quiet" id="store-cancel-button" type="button">Cancelar</button><button class="button button-primary" id="store-save-button" type="submit">Salvar loja</button></div>
