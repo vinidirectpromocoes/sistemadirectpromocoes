@@ -177,7 +177,14 @@
   .login-screen { padding: 12px; }
   .login-card { padding: 26px 20px; }
   .login-card h1 { font-size: 25px; }
-  input:not([type=radio]):not([type=checkbox]), select, textarea { font-size: 16px !important; }
+  input:not([type=radio]):not([type=checkbox]), select, textarea { font-size: 17px !important; }
+}
+
+/* O celular pode ultrapassar 700px em paisagem; mantenha os campos legíveis
+   para evitar que o navegador amplie a página ao abrir o teclado. */
+@media (hover: none) and (pointer: coarse) {
+  html { -webkit-text-size-adjust: 100%; text-size-adjust: 100%; }
+  input:not([type=radio]):not([type=checkbox]), select, textarea { font-size: 17px !important; }
 }
 
 @media (max-width: 360px) {
