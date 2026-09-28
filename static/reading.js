@@ -121,13 +121,14 @@
   function orderKey(order) { return parser.fingerprint({ tipo: 'pedido', dados: order }); }
   async function processItem(item, existing) {
     const cpf = item.dados.cpf;
+    const draftKey = `rascunho:${parser.textKey(item.texto)}`;
     const duplicate = item.tipo === 'diarista' ? cpf && existing.workers.has(cpf) : item.tipo === 'pedido' ? existing.orders.has(item.chave) : false;
     if (duplicate) return { state: 'duplicate', description: 'Registro já existe; nenhum dado foi sobrescrito.' };
     if (item.faltando.length) {
-      if (existing.drafts.has(item.chave)) return { state: 'duplicate', description: 'Esta pendência já está salva.' };
+      if (existing.drafts.has(draftKey)) return { state: 'duplicate', description: 'Esta pendência já está salva.' };
       try {
-        await request('/api/leituras-pendentes', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: body(item) });
-        existing.drafts.add(item.chave);
+        await request('/api/leituras-pendentes', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: body({ ...item, chave: draftKey }) });
+        existing.drafts.add(draftKey);
         return { state: 'pending', description: `Falta confirmar: ${item.faltando.join(', ')}.` };
       } catch (error) { return { state: 'error', description: `Não foi possível salvar a pendência: ${error.message}` }; }
     }
@@ -139,15 +140,19 @@
         await request('/api/pedidos', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: body(item.dados) });
         existing.orders.add(item.chave);
       }
-      const old = existing.draftRecords.find(record => record.chave === item.chave && record.status === 'pendente');
-      if (old) await request(`/api/leituras-pendentes/${old.id}`, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: body({ status: 'resolvido' }) });
+      const previous = existing.draftRecords.filter(record => record.status === 'pendente' &&
+        (item.tipo === 'diarista' ? record.tipo === 'diarista' && record.dados.cpf === cpf : record.chave === item.chave));
+      for (const old of previous) {
+        try { await request(`/api/leituras-pendentes/${old.id}`, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: body({ status: 'resolvido' }) }); }
+        catch { /* O registro principal foi salvo; a pendência pode ser resolvida pela lista. */ }
+      }
       return { state: 'saved', description: item.tipo === 'pedido' ? `${item.dados.turnos.length} dia(s) · ${item.dados.setor} · ${item.dados.quantidade_diaristas} diarista(s) por dia.` : `CPF ${cpf} · ${item.dados.setores.join(', ')}.` };
     } catch (error) {
-      if (!existing.drafts.has(item.chave)) {
+      if (!existing.drafts.has(draftKey)) {
         try {
           await request('/api/leituras-pendentes', { method: 'POST', headers: { 'Content-Type': 'application/json' },
-            body: body({ ...item, faltando: [`Corrigir falha ao registrar: ${error.message}`] }) });
-          existing.drafts.add(item.chave);
+            body: body({ ...item, chave: draftKey, faltando: [`Corrigir falha ao registrar: ${error.message}`] }) });
+          existing.drafts.add(draftKey);
           return { state: 'pending', description: `Não foi possível registrar; informações preservadas para revisão: ${error.message}` };
         } catch { /* O erro original aparece no resultado. */ }
       }

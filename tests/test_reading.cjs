@@ -71,3 +71,11 @@ test('registros repetidos têm a mesma chave', () => {
   const [b] = parser.parse(text, { stores, sectors, today });
   assert.equal(a.chave, b.chave);
 });
+
+test('preserva registros incompletos separados e revisões posteriores', () => {
+  const pieces = parser.parse('Nome Completo: Maria\nNome Completo: Joana', { stores, sectors, today });
+  assert.equal(pieces.length, 2);
+  assert.equal(pieces[0].dados.nome, 'Maria');
+  assert.equal(pieces[1].dados.nome, 'Joana');
+  assert.notEqual(parser.textKey('CPF: 52998224725\nBairro: Centro'), parser.textKey('CPF: 52998224725\nBairro: Aldeota'));
+});

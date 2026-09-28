@@ -35,7 +35,7 @@
     for (const line of String(text || '').replace(/\r/g, '').split('\n')) {
       const startsWorker = /^\s*\*?\s*(?:nome completo|nome do operador|nome da diarista)\s*\*?\s*:/i.test(line);
       const startsOrder = /^\s*\*?\s*(?:loja|unidade)\s*\*?\s*:/i.test(line);
-      const hasRecord = current.some(item => /\b(?:cpf|cep|hor[aá]rio|fun[cç][aã]o|setor|data de in[ií]cio)\s*:/i.test(item));
+      const hasRecord = current.some(item => /\b(?:nome completo|nome do operador|nome da diarista|loja|unidade|cpf|cep|hor[aá]rio|fun[cç][aã]o|setor|data de in[ií]cio)\s*:/i.test(item));
       if ((startsWorker || startsOrder) && hasRecord) flush();
       current.push(line);
     }
@@ -163,15 +163,18 @@
     if (people < 1 || people > 100) missing.push('quantidade de diaristas');
     return { tipo: 'pedido', dados: data, faltando: missing, texto: text, avisos: peopleField ? [] : ['Quantidade de diaristas não informada: considerado 1 por dia.'] };
   }
+  function textKey(text) {
+    let hash = 2166136261;
+    for (const char of normal(text)) hash = Math.imul(hash ^ char.charCodeAt(0), 16777619);
+    return `texto:${(hash >>> 0).toString(16)}`;
+  }
   function fingerprint(item) {
     if (item.tipo === 'diarista' && item.dados.cpf) return `cpf:${item.dados.cpf}`;
     if (item.tipo === 'pedido' && item.dados.turnos.length) {
       const p = item.dados;
       return `pedido:${normal(p.supermercado)}:${normal(p.unidade)}:${normal(p.setor)}:${p.quantidade_diaristas}:${p.turnos.map(t => `${t.data}/${t.inicio}/${t.fim}`).join(',')}`;
     }
-    let hash = 2166136261;
-    for (const char of normal(item.texto)) hash = Math.imul(hash ^ char.charCodeAt(0), 16777619);
-    return `texto:${(hash >>> 0).toString(16)}`;
+    return textKey(item.texto);
   }
   function parse(text, context = {}) {
     const today = context.today || new Intl.DateTimeFormat('en-CA', { timeZone: 'America/Fortaleza', year: 'numeric', month: '2-digit', day: '2-digit' }).format(new Date());
@@ -182,5 +185,5 @@
       return item;
     });
   }
-  return { parse, split, classify, range, validCpf, fingerprint };
+  return { parse, split, classify, range, validCpf, fingerprint, textKey };
 });
