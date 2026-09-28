@@ -151,7 +151,7 @@
         <div id="settings-network-grid" class="settings-network-grid"></div>
       </section>
       <section class="settings-section settings-sector-section" aria-labelledby="settings-sector-title">
-        <div class="settings-heading"><div><h2 id="settings-sector-title">Valores por setor</h2><p>Se um setor não tiver valor próprio, será usada a diária padrão da rede.</p></div><button class="button button-primary" id="new-sector-rate" type="button"><span aria-hidden="true">＋</span> Adicionar setor</button></div>
+        <div class="settings-heading"><div><h2 id="settings-sector-title">Valores por setor</h2><p>Preencha o valor de cada setor. Um campo vazio mantém a diária padrão da rede.</p></div><button class="button button-primary" id="new-sector-rate" type="button"><span aria-hidden="true">＋</span> Adicionar setor</button></div>
         <div class="list-card"><div id="settings-sector-empty" class="settings-empty">Nenhum valor por setor cadastrado. As diárias usam os valores padrão das redes.</div><div id="settings-sector-list" class="settings-sector-list"></div></div>
       </section>
       <p class="settings-note">Alterações nos valores servem para novos pagamentos. Diárias já registradas mantêm o valor que foi salvo nelas.</p>
@@ -176,7 +176,7 @@
   <dialog id="sector-rate-dialog" aria-labelledby="sector-rate-title">
     <form id="sector-rate-form" novalidate>
       <div class="dialog-header"><div><span class="eyebrow">CONFIGURAÇÕES</span><h2 id="sector-rate-title">Adicionar setor</h2></div><button class="icon-button" id="sector-rate-close" type="button" aria-label="Fechar">×</button></div>
-      <div class="dialog-body"><div id="sector-rate-error" class="form-error" role="alert" hidden></div><label>Rede <span class="required">*</span><select id="sector-rate-network" required></select></label><div class="field-grid two settings-sector-fields"><label>Setor <span class="required">*</span><input id="sector-rate-name" maxlength="80" required placeholder="Ex.: Operador de caixa"></label><label>Valor pago por diária (R$) <span class="required">*</span><input id="sector-rate-value" type="number" min="0.01" step="0.01" inputmode="decimal" required placeholder="90,00"></label></div><p class="section-help">Este valor substitui a diária padrão somente para o setor e a rede escolhidos.</p></div>
+      <div class="dialog-body"><div id="sector-rate-error" class="form-error" role="alert" hidden></div><label>Aplicar a<select id="sector-rate-network"></select></label><div class="field-grid two settings-sector-fields"><label>Setor <span class="required">*</span><input id="sector-rate-name" maxlength="80" required placeholder="Ex.: Operador de caixa"></label><label>Valor pago por diária (R$)<input id="sector-rate-value" type="number" min="0.01" step="0.01" inputmode="decimal" placeholder="Deixe vazio para usar o padrão"></label></div><p class="section-help">Escolha Todas as redes para um valor geral. Uma regra da rede tem prioridade; valor vazio usa a diária padrão da rede.</p></div>
       <div class="dialog-footer"><button class="button button-quiet" id="sector-rate-cancel" type="button">Cancelar</button><button class="button button-primary" id="sector-rate-save" type="submit">Salvar setor</button></div>
     </form>
   </dialog>

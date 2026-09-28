@@ -114,7 +114,16 @@ class CadastroTest(unittest.TestCase):
         self.assertEqual((rates["Hipermarket"]["valor_recebido_centavos"], rates["Hipermarket"]["valor_padrao_centavos"]), (12400, 8500))
         self.assertEqual((rates["Fazendinha"]["valor_recebido_centavos"], rates["Fazendinha"]["valor_padrao_centavos"]), (12900, 8500))
         self.assertEqual((rates["Super do Povo"]["valor_recebido_centavos"], rates["Super do Povo"]["valor_padrao_centavos"]), (13400, 9000))
-        self.assertEqual(data["setores"], [])
+        self.assertEqual(len(data["setores"]), 10)
+        self.assertEqual({row["setor"] for row in data["setores"]}, set(server.SETORES_INICIAIS))
+        self.assertTrue(all(row["rede"] is None and row["valor_pago_centavos"] is None for row in data["setores"]))
+        general = next(row for row in data["setores"] if row["setor"] == "Operador de caixa")
+        global_path = f"/api/tarifas/setores/{general['id']}"
+        status, filled = self.call("PUT", global_path, {"rede": None, "setor": "Operador de caixa", "valor_pago": "95.00"})
+        self.assertEqual(status, 200)
+        self.assertEqual(filled["valor_pago_centavos"], 9500)
+        self.assertEqual(self.call("PUT", global_path, {"rede": None, "setor": "Operador de caixa", "valor_pago": None})[1]["valor_pago_centavos"], None)
+        self.assertEqual(self.call("POST", "/api/tarifas/setores", {"rede": None, "setor": "operador de caixa", "valor_pago": None})[0], 409)
         path = f"/api/tarifas/redes/{rates['Super do Povo']['id']}"
         self.assertEqual(self.call("PUT", path, {"valor_recebido": "0", "valor_padrao": "90"})[0], 400)
         status, updated = self.call("PUT", path, {"valor_recebido": "135.50", "valor_padrao": "92.00"})
@@ -130,11 +139,14 @@ class CadastroTest(unittest.TestCase):
         status, changed = self.call("PUT", f"/api/tarifas/setores/{created['id']}", {**sector, "valor_pago": "98.00"})
         self.assertEqual(status, 200)
         self.assertEqual(changed["valor_pago_centavos"], 9800)
-        self.assertEqual(len(self.call("GET", "/api/tarifas")[1]["setores"]), 1)
+        self.assertEqual(len(self.call("GET", "/api/tarifas")[1]["setores"]), 11)
         self.assertEqual(self.call("DELETE", f"/api/tarifas/setores/{created['id']}")[0], 200)
-        self.assertEqual(self.call("GET", "/api/tarifas")[1]["setores"], [])
+        self.assertEqual(len(self.call("GET", "/api/tarifas")[1]["setores"]), 10)
+        self.assertEqual(self.call("DELETE", global_path)[0], 200)
+        server.init_db()
+        self.assertEqual(len(self.call("GET", "/api/tarifas")[1]["setores"]), 9)
         with server.connect() as db:
-            self.assertEqual(db.execute("SELECT count(*) FROM direct_auditoria WHERE tabela LIKE 'tarifas_%'").fetchone()[0], 4)
+            self.assertEqual(db.execute("SELECT count(*) FROM direct_auditoria WHERE tabela LIKE 'tarifas_%'").fetchone()[0], 17)
 
     def test_blocking_and_daily_history(self):
         _, created = self.call("POST", "/api/diaristas", SAMPLE)

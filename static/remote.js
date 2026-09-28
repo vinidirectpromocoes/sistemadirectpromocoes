@@ -229,7 +229,7 @@
         const [redes, setores] = await Promise.all([rows('tarifas_redes'), rows('tarifas_setores')]);
         return {
           redes: redes.sort((a, b) => a.rede.localeCompare(b.rede, 'pt-BR')),
-          setores: setores.sort((a, b) => a.rede.localeCompare(b.rede, 'pt-BR') || a.setor.localeCompare(b.setor, 'pt-BR'))
+          setores: setores.sort((a, b) => (a.rede || '').localeCompare(b.rede || '', 'pt-BR') || a.setor.localeCompare(b.setor, 'pt-BR'))
         };
       }
       const table = parts[2] === 'redes' ? 'tarifas_redes' : parts[2] === 'setores' ? 'tarifas_setores' : null;

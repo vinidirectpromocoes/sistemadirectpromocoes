@@ -30,6 +30,11 @@ TARIFAS_INICIAIS = (
     ("Super Lagoa", 13400, 9000), ("Fazendinha", 12900, 8500),
     ("Pinheiro", 13400, 9000), ("Variedades", 13400, 9000),
 )
+SETORES_INICIAIS = (
+    "Operador de caixa", "Repositor de mercearia", "Repositor de FLV",
+    "Repositor de frios", "Balconista de padaria", "Balconista de frios",
+    "Balconista de açougue", "Auxiliar de depósito", "ASG", "Açougueiro",
+)
 
 
 def connect():
@@ -164,12 +169,26 @@ def init_db():
         )""")
         db.execute("""CREATE TABLE IF NOT EXISTS tarifas_setores (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
-            rede TEXT NOT NULL REFERENCES tarifas_redes(rede) ON UPDATE CASCADE,
+            rede TEXT REFERENCES tarifas_redes(rede) ON UPDATE CASCADE,
             setor TEXT NOT NULL CHECK (length(trim(setor)) BETWEEN 1 AND 80 AND setor = trim(setor)),
-            valor_pago_centavos INTEGER NOT NULL CHECK (valor_pago_centavos > 0),
+            valor_pago_centavos INTEGER CHECK (valor_pago_centavos > 0),
             atualizado_em TEXT NOT NULL
         )""")
-        db.execute("CREATE UNIQUE INDEX IF NOT EXISTS tarifas_setores_rede_setor_ci ON tarifas_setores(rede, lower(setor))")
+        sector_columns = {row["name"]: row for row in db.execute("PRAGMA table_info(tarifas_setores)")}
+        if sector_columns["rede"]["notnull"] or sector_columns["valor_pago_centavos"]["notnull"]:
+            db.execute("""CREATE TABLE tarifas_setores_new (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                rede TEXT REFERENCES tarifas_redes(rede) ON UPDATE CASCADE,
+                setor TEXT NOT NULL CHECK (length(trim(setor)) BETWEEN 1 AND 80 AND setor = trim(setor)),
+                valor_pago_centavos INTEGER CHECK (valor_pago_centavos > 0),
+                atualizado_em TEXT NOT NULL
+            )""")
+            db.execute("INSERT INTO tarifas_setores_new SELECT id, rede, setor, valor_pago_centavos, atualizado_em FROM tarifas_setores")
+            db.execute("DROP TABLE tarifas_setores")
+            db.execute("ALTER TABLE tarifas_setores_new RENAME TO tarifas_setores")
+        db.execute("CREATE UNIQUE INDEX IF NOT EXISTS tarifas_setores_rede_setor_ci ON tarifas_setores(rede, lower(setor)) WHERE rede IS NOT NULL")
+        db.execute("CREATE UNIQUE INDEX IF NOT EXISTS tarifas_setores_geral_ci ON tarifas_setores(lower(setor)) WHERE rede IS NULL")
+        db.execute("CREATE TABLE IF NOT EXISTS direct_config_meta (chave TEXT PRIMARY KEY, valor TEXT NOT NULL)")
         db.execute("""CREATE TABLE IF NOT EXISTS direct_auditoria (
             id INTEGER PRIMARY KEY AUTOINCREMENT, tabela TEXT NOT NULL, registro_id INTEGER NOT NULL,
             operacao TEXT NOT NULL, antes TEXT, depois TEXT, email_autor TEXT NOT NULL DEFAULT 'Servidor local',
@@ -198,6 +217,11 @@ def init_db():
         db.executemany("""INSERT OR IGNORE INTO tarifas_redes
             (rede, valor_recebido_centavos, valor_padrao_centavos, atualizado_em)
             VALUES (?, ?, ?, ?)""", (item + (now,) for item in TARIFAS_INICIAIS))
+        if not db.execute("SELECT 1 FROM direct_config_meta WHERE chave = 'setores_iniciais_v1'").fetchone():
+            db.executemany("""INSERT OR IGNORE INTO tarifas_setores
+                (rede, setor, valor_pago_centavos, atualizado_em) VALUES (NULL, ?, NULL, ?)""",
+                ((setor, now) for setor in SETORES_INICIAIS))
+            db.execute("INSERT INTO direct_config_meta (chave, valor) VALUES ('setores_iniciais_v1', 'aplicado')")
 
 
 def valid_cpf(cpf):
@@ -488,12 +512,12 @@ def validate_sector_tariff(payload):
     if not isinstance(payload, dict):
         raise ValueError("Dados do setor inválidos.")
     rede = payload.get("rede")
-    if rede not in REDES:
+    if rede not in (None, *REDES):
         raise ValueError("Selecione uma rede cadastrada.")
     return {
         "rede": rede,
         "setor": clean_text(payload.get("setor"), "o setor", 80),
-        "valor_pago_centavos": money_cents(payload.get("valor_pago"), True),
+        "valor_pago_centavos": money_cents(payload.get("valor_pago")),
     }
 
 
