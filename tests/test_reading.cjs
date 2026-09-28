@@ -35,7 +35,7 @@ Quantidade de dias: 7`;
   const item = parser.parse(text, { stores, sectors, today })[0];
   assert.equal(item.dados.quantidade_diaristas, 1);
   assert.equal(item.dados.turnos.length, 7);
-  assert.match(item.avisos[0], /1 por dia/);
+  assert.match(item.avisos[0], /1 diarista por dia/);
 });
 
 test('ambiguidade de loja mantém pedido como pendência', () => {
@@ -78,4 +78,20 @@ test('preserva registros incompletos separados e revisões posteriores', () => {
   assert.equal(pieces[0].dados.nome, 'Maria');
   assert.equal(pieces[1].dados.nome, 'Joana');
   assert.notEqual(parser.textKey('CPF: 52998224725\nBairro: Centro'), parser.textKey('CPF: 52998224725\nBairro: Aldeota'));
+});
+
+test('Cambeba: reconhece a função e as seis datas; pede a rede ambígua', () => {
+  const message = 'Loja: Cambeba\\\nFunção: op. caixa\\\nHorário: 13:40 as 22:00\\\nData de inicio : 29 a 04\\\nQuantidade de dias : 6';
+  const catalog = [{ rede: 'Super do Povo', nome: 'Cambeba' }, { rede: 'Pinheiro', nome: 'Cambeba' }];
+  const [item] = parser.parse(message, { stores: catalog, sectors, today });
+  assert.equal(item.tipo, 'pedido');
+  assert.equal(item.dados.unidade, 'Cambeba');
+  assert.equal(item.dados.setor, 'Operador de caixa');
+  assert.equal(item.dados.turnos.length, 6);
+  assert.equal(item.dados.turnos[0].data, '2026-09-29');
+  assert.equal(item.dados.turnos.at(-1).data, '2026-10-04');
+  assert.deepEqual(item.faltando, ['rede']);
+  assert.match(item.avisos[0], /Super do Povo ou Pinheiro/);
+  const [complete] = parser.parse(`Rede: Pinheiro\n${message}`, { stores: catalog, sectors, today });
+  assert.deepEqual(complete.faltando, []);
 });

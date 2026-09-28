@@ -64,7 +64,7 @@ Os indicadores contam como **disponíveis** os cadastros não bloqueados e como 
 
 - A aba **Leitura IA** aceita vários registros em texto, várias fotos e PDFs de até 10 MB e 20 páginas. O reconhecimento de texto em imagens usa Tesseract.js no navegador; PDFs usam PDF.js para texto e OCR nas páginas digitalizadas. As bibliotecas e o modelo de português são baixados da internet na primeira leitura. Não há chamada à API OpenAI nem cobrança por créditos.
 - O sistema separa cadastros e pedidos pelas etiquetas das mensagens, identifica seus campos e registra automaticamente os completos. Verifica CPF, datas, loja e duplicidade antes de salvar. Informações incompletas ficam na lista **Informações pendentes**, preservadas no banco e disponíveis para completar no formulário.
-- Para pedidos, intervalos abreviados como `29 a 05` são interpretados com base no dia atual em Fortaleza. A rede é associada ao nome da loja quando há correspondência única no catálogo. A quantidade de dias nunca é usada como quantidade de diaristas. Se a quantidade de pessoas não vier informada, assume 1 por dia e sinaliza essa suposição no resultado.
+- Para pedidos, intervalos abreviados como `29 a 05` são interpretados com base no dia atual em Fortaleza. A rede é associada ao nome da loja quando há correspondência única no catálogo. A quantidade de dias nunca é usada como quantidade de diaristas. Se a quantidade de pessoas não vier informada, o padrão da empresa é 1 por dia.
 - A leitura segue formatos com etiquetas como `Nome Completo:`, `CPF:`, `Loja:`, `Função:` e `Horário:`. Texto ilegível, escrita manual ou mensagens ambíguas podem exigir revisão na lista de pendências.
 
 ## Redes e lojas

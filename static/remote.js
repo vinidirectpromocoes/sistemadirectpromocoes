@@ -202,9 +202,10 @@
     }
     if (entity === 'leituras-pendentes') {
       if (method === 'GET') return unwrap(await sb.from('leituras_pendentes').select('*').order('id', { ascending: false }).limit(500));
-      if (method === 'POST') return unwrap(await sb.from('leituras_pendentes').insert({
-        tipo: p.tipo, chave: p.chave, dados: p.dados, texto: p.texto, faltando: p.faltando, avisos: p.avisos || []
-      }).select().single());
+      if (method === 'POST') return unwrap(await sb.from('leituras_pendentes').upsert({
+        tipo: p.tipo, chave: p.chave, dados: p.dados, texto: p.texto, faltando: p.faltando,
+        avisos: p.avisos || [], status: 'pendente', atualizado_em: new Date().toISOString()
+      }, { onConflict: 'chave' }).select().single());
       if (method === 'PATCH') return unwrap(await sb.from('leituras_pendentes').update({ status: 'resolvido', atualizado_em: new Date().toISOString() }).eq('id', id).select().single());
       if (method === 'DELETE') { unwrap(await sb.from('leituras_pendentes').delete().eq('id', id)); return { ok: true }; }
     }

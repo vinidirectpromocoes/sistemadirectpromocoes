@@ -692,15 +692,20 @@ class Handler(BaseHTTPRequestHandler):
                 data = validate_reading(self.read_json(max_length=70000))
                 now = datetime.now(timezone.utc).isoformat()
                 with connect() as db:
+                    existed = db.execute("SELECT 1 FROM leituras_pendentes WHERE chave = ?", (data["chave"],)).fetchone() is not None
                     columns = ", ".join(data)
                     marks = ", ".join("?" for _ in data)
-                    cur = db.execute(f"INSERT INTO leituras_pendentes ({columns}, criado_em, atualizado_em) VALUES ({marks}, ?, ?)", (*data.values(), now, now))
-                    row = db.execute("SELECT * FROM leituras_pendentes WHERE id = ?", (cur.lastrowid,)).fetchone()
-                return self.respond(HTTPStatus.CREATED, public_reading(row))
+                    db.execute(f"""INSERT INTO leituras_pendentes ({columns}, criado_em, atualizado_em)
+                        VALUES ({marks}, ?, ?)
+                        ON CONFLICT(chave) DO UPDATE SET
+                            tipo = excluded.tipo, dados = excluded.dados, texto = excluded.texto,
+                            faltando = excluded.faltando, avisos = excluded.avisos,
+                            status = 'pendente', atualizado_em = excluded.atualizado_em""",
+                        (*data.values(), now, now))
+                    row = db.execute("SELECT * FROM leituras_pendentes WHERE chave = ?", (data["chave"],)).fetchone()
+                return self.respond(HTTPStatus.OK if existed else HTTPStatus.CREATED, public_reading(row))
             except (ValueError, json.JSONDecodeError, TypeError) as exc:
                 return self.respond(HTTPStatus.BAD_REQUEST, {"erro": str(exc)})
-            except sqlite3.IntegrityError:
-                return self.respond(HTTPStatus.CONFLICT, {"erro": "Esta leitura já está salva."})
         if urlparse(self.path).path == "/api/tarifas/setores":
             try:
                 data = validate_sector_tariff(self.read_json())

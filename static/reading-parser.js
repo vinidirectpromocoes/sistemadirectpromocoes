@@ -15,7 +15,7 @@
     const wanted = labels.map(normal);
     for (const line of text.split(/\n/)) {
       const match = /^\s*\*?\s*([^:]{2,48}?)\s*\*?\s*:\s*(.*?)\s*$/.exec(line);
-      if (match && wanted.includes(normal(match[1]))) return match[2].replace(/^\*|\*$/g, '').trim();
+      if (match && wanted.includes(normal(match[1]))) return match[2].replace(/^\*|[\\*]+$/g, '').trim();
     }
     return '';
   };
@@ -50,7 +50,7 @@
   }
   function sector(value, known) {
     const key = normal(value);
-    const aliases = { flv: 'Repositor de FLV', caixa: 'Operador de caixa', 'operadora de caixa': 'Operador de caixa', 'operador de caixa': 'Operador de caixa', asg: 'ASG', 'auxiliar de servicos gerais': 'ASG', deposito: 'Auxiliar de depósito', acougueiro: 'Açougueiro' };
+    const aliases = { flv: 'Repositor de FLV', caixa: 'Operador de caixa', 'op caixa': 'Operador de caixa', 'operadora de caixa': 'Operador de caixa', 'operador de caixa': 'Operador de caixa', asg: 'ASG', 'auxiliar de servicos gerais': 'ASG', deposito: 'Auxiliar de depósito', acougueiro: 'Açougueiro' };
     if (aliases[key]) return aliases[key];
     return known.find(item => normal(item) === key) || value.trim();
   }
@@ -156,12 +156,14 @@
     const data = { supermercado: market, unidade: unit, contato: field(text, ['Contato']), setor, quantidade_diaristas: people, turnos, situacao: 'novo', observacoes: field(text, ['Observações', 'Observacoes']) };
     const missing = [];
     if (!market) missing.push('rede');
-    if (!unit || !validStore) missing.push('loja conhecida da rede');
+    if (!unit || (market && !validStore)) missing.push('loja conhecida da rede');
     if (!setor) missing.push('função');
     if (!turnos.length) missing.push('datas e horário');
     if (reported && reported !== turnos.length) missing.push('confirmar quantidade de dias');
     if (people < 1 || people > 100) missing.push('quantidade de diaristas');
-    return { tipo: 'pedido', dados: data, faltando: missing, texto: text, avisos: peopleField ? [] : ['Quantidade de diaristas não informada: considerado 1 por dia.'] };
+    const avisos = peopleField ? [] : ['Padrão aplicado: 1 diarista por dia.'];
+    if (!market && matches.length > 1) avisos.unshift(`A loja ${unit} pertence a ${[...new Set(matches.map(item => item.rede))].join(' ou ')}. Informe a rede.`);
+    return { tipo: 'pedido', dados: data, faltando: missing, texto: text, avisos };
   }
   function textKey(text) {
     let hash = 2166136261;

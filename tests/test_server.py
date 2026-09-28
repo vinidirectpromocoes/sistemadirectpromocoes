@@ -115,7 +115,9 @@ class CadastroTest(unittest.TestCase):
         status, saved = self.call("POST", "/api/leituras-pendentes", reading)
         self.assertEqual(status, 201)
         self.assertEqual(saved["dados"], {"nome": "Maria"})
-        self.assertEqual(self.call("POST", "/api/leituras-pendentes", reading)[0], 409)
+        status, repeated = self.call("POST", "/api/leituras-pendentes", reading)
+        self.assertEqual(status, 200)
+        self.assertEqual(repeated["id"], saved["id"])
         status, rows = self.call("GET", "/api/leituras-pendentes")
         self.assertEqual(status, 200)
         self.assertEqual(len(rows), 1)
@@ -124,6 +126,11 @@ class CadastroTest(unittest.TestCase):
         status, changed = self.call("PATCH", f"/api/leituras-pendentes/{saved['id']}", {"status": "resolvido"})
         self.assertEqual(status, 200)
         self.assertEqual(changed["status"], "resolvido")
+        status, reopened = self.call("POST", "/api/leituras-pendentes", {**reading, "faltando": ["setor", "horário"]})
+        self.assertEqual(status, 200)
+        self.assertEqual(reopened["id"], saved["id"])
+        self.assertEqual(reopened["status"], "pendente")
+        self.assertEqual(reopened["faltando"], ["setor", "horário"])
 
     def test_network_and_sector_rates(self):
         status, data = self.call("GET", "/api/tarifas")
