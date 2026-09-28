@@ -99,6 +99,7 @@ class CadastroTest(unittest.TestCase):
             ("/settings.js", "text/javascript; charset=utf-8"),
             ("/settings.css", "text/css; charset=utf-8"),
             ("/reading.js", "text/javascript; charset=utf-8"),
+            ("/reading-parser.js", "text/javascript; charset=utf-8"),
             ("/reading.css", "text/css; charset=utf-8"),
             ("/logo-direct-promocoes.jpg", "image/jpeg"),
             ("/favicon.svg", "image/svg+xml"),
@@ -107,6 +108,22 @@ class CadastroTest(unittest.TestCase):
                 self.assertEqual(response.status, 200)
                 self.assertEqual(response.headers["Content-Type"], content_type)
                 self.assertTrue(response.read())
+
+    def test_pending_reading_is_saved_once_and_can_be_resolved(self):
+        reading = {"tipo": "diarista", "chave": "cpf:52998224725", "dados": {"nome": "Maria"},
+                   "texto": "Nome Completo: Maria\nCPF: 529.982.247-25", "faltando": ["setor"], "avisos": []}
+        status, saved = self.call("POST", "/api/leituras-pendentes", reading)
+        self.assertEqual(status, 201)
+        self.assertEqual(saved["dados"], {"nome": "Maria"})
+        self.assertEqual(self.call("POST", "/api/leituras-pendentes", reading)[0], 409)
+        status, rows = self.call("GET", "/api/leituras-pendentes")
+        self.assertEqual(status, 200)
+        self.assertEqual(len(rows), 1)
+        server.init_db()
+        self.assertEqual(len(self.call("GET", "/api/leituras-pendentes")[1]), 1)
+        status, changed = self.call("PATCH", f"/api/leituras-pendentes/{saved['id']}", {"status": "resolvido"})
+        self.assertEqual(status, 200)
+        self.assertEqual(changed["status"], "resolvido")
 
     def test_network_and_sector_rates(self):
         status, data = self.call("GET", "/api/tarifas")

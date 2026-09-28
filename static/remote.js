@@ -200,6 +200,14 @@
     if (entity === 'auditoria' && method === 'GET') {
       return unwrap(await sb.from('direct_auditoria').select('id,tabela,registro_id,operacao,antes,depois,email_autor,alterado_em').order('id', { ascending: false }).limit(100));
     }
+    if (entity === 'leituras-pendentes') {
+      if (method === 'GET') return unwrap(await sb.from('leituras_pendentes').select('*').order('id', { ascending: false }).limit(500));
+      if (method === 'POST') return unwrap(await sb.from('leituras_pendentes').insert({
+        tipo: p.tipo, chave: p.chave, dados: p.dados, texto: p.texto, faltando: p.faltando, avisos: p.avisos || []
+      }).select().single());
+      if (method === 'PATCH') return unwrap(await sb.from('leituras_pendentes').update({ status: 'resolvido', atualizado_em: new Date().toISOString() }).eq('id', id).select().single());
+      if (method === 'DELETE') { unwrap(await sb.from('leituras_pendentes').delete().eq('id', id)); return { ok: true }; }
+    }
     if (entity === 'pedidos') {
       if (child === 'escalas') {
         const scaleId = parts[4] ? Number(parts[4]) : null;
@@ -245,18 +253,5 @@
     }
     throw new Error('Operação não disponível.');
   }
-  async function readAI(payload) {
-    if (!authorized) throw new Error('Entre na sua conta para usar a leitura.');
-    const { data: { session } } = await sb.auth.getSession();
-    if (!session) throw new Error('Sessão expirada. Entre novamente.');
-    const response = await fetch('/api/ler', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${session.access_token}` },
-      body: JSON.stringify(payload),
-    });
-    const data = await response.json().catch(() => ({}));
-    if (!response.ok) throw new Error(data.erro || 'Não foi possível ler os dados.');
-    return data;
-  }
-  window.directRemote = { request: run, readAI, client: sb };
+  window.directRemote = { request: run, client: sb };
 })();

@@ -1,0 +1,186 @@
+/* Leitura local de mensagens de cadastro e pedidos. Sem chamadas a modelos pagos. */
+(function (root, factory) {
+  const api = factory();
+  if (typeof module === 'object' && module.exports) module.exports = api;
+  else root.DirectReadingParser = api;
+})(typeof window === 'undefined' ? globalThis : window, function () {
+  const normal = value => String(value || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim();
+  const digits = value => String(value || '').replace(/\D/g, '');
+  const pad = value => String(value).padStart(2, '0');
+  const iso = date => `${date.getUTCFullYear()}-${pad(date.getUTCMonth() + 1)}-${pad(date.getUTCDate())}`;
+  const dateUTC = (year, month, day) => { const d = new Date(Date.UTC(year, month - 1, day)); return d.getUTCFullYear() === year && d.getUTCMonth() + 1 === month && d.getUTCDate() === day ? d : null; };
+  const nextDay = date => new Date(date.getTime() + 86400000);
+  const daysBetween = (a, b) => Math.round((b - a) / 86400000);
+  const field = (text, labels) => {
+    const wanted = labels.map(normal);
+    for (const line of text.split(/\n/)) {
+      const match = /^\s*\*?\s*([^:]{2,48}?)\s*\*?\s*:\s*(.*?)\s*$/.exec(line);
+      if (match && wanted.includes(normal(match[1]))) return match[2].replace(/^\*|\*$/g, '').trim();
+    }
+    return '';
+  };
+  function validCpf(value) {
+    const cpf = digits(value);
+    if (!/^\d{11}$/.test(cpf) || /^(\d)\1{10}$/.test(cpf)) return false;
+    for (const size of [9, 10]) {
+      const sum = [...cpf.slice(0, size)].reduce((n, digit, i) => n + Number(digit) * (size + 1 - i), 0);
+      const check = (sum * 10) % 11;
+      if ((check === 10 ? 0 : check) !== Number(cpf[size])) return false;
+    }
+    return true;
+  }
+  function split(text) {
+    const result = []; let current = [];
+    const flush = () => { const value = current.join('\n').trim(); if (value) result.push(value); current = []; };
+    for (const line of String(text || '').replace(/\r/g, '').split('\n')) {
+      const startsWorker = /^\s*\*?\s*(?:nome completo|nome do operador|nome da diarista)\s*\*?\s*:/i.test(line);
+      const startsOrder = /^\s*\*?\s*(?:loja|unidade)\s*\*?\s*:/i.test(line);
+      const hasRecord = current.some(item => /\b(?:cpf|cep|hor[aá]rio|fun[cç][aã]o|setor|data de in[ií]cio)\s*:/i.test(item));
+      if ((startsWorker || startsOrder) && hasRecord) flush();
+      current.push(line);
+    }
+    flush();
+    return result;
+  }
+  function classify(text) {
+    const value = normal(text);
+    const worker = /\bcpf\b/.test(value) || /\bnome completo\b/.test(value);
+    const order = /\bloja\b|\bunidade\b|\bsupermercado\b/.test(value) && /\bhorario\b|\bdata\b|\bfuncao\b|\bsetor\b/.test(value);
+    return worker && !order ? 'diarista' : order && !worker ? 'pedido' : 'indefinido';
+  }
+  function sector(value, known) {
+    const key = normal(value);
+    const aliases = { flv: 'Repositor de FLV', caixa: 'Operador de caixa', 'operadora de caixa': 'Operador de caixa', 'operador de caixa': 'Operador de caixa', asg: 'ASG', 'auxiliar de servicos gerais': 'ASG', deposito: 'Auxiliar de depósito', acougueiro: 'Açougueiro' };
+    if (aliases[key]) return aliases[key];
+    return known.find(item => normal(item) === key) || value.trim();
+  }
+  function parseClock(value) {
+    const match = /(?:^|\D)([01]?\d|2[0-3])\s*(?:[:hH])\s*([0-5]\d)(?!\d)/.exec(value);
+    return match ? `${pad(match[1])}:${match[2]}` : '';
+  }
+  function clocks(value) {
+    const matches = [...String(value).matchAll(/(?:^|\D)([01]?\d|2[0-3])\s*(?:[:hH])\s*([0-5]\d)(?!\d)/g)];
+    return matches.slice(0, 2).map(match => `${pad(match[1])}:${match[2]}`);
+  }
+  function readDate(raw, today) {
+    const match = /^(\d{1,2})(?:\/(\d{1,2}))?(?:\/(\d{4}))?$/.exec(raw);
+    if (!match) return null;
+    const day = Number(match[1]), month = Number(match[2]), year = Number(match[3]);
+    if (month && year) return dateUTC(year, month, day);
+    if (month) {
+      const thisYear = dateUTC(today.getUTCFullYear(), month, day);
+      return thisYear && thisYear >= today ? thisYear : dateUTC(today.getUTCFullYear() + 1, month, day);
+    }
+    for (let step = 0; step < 14; step++) {
+      const cursor = new Date(Date.UTC(today.getUTCFullYear(), today.getUTCMonth() + step, day));
+      if (cursor.getUTCDate() === day && cursor >= today) return cursor;
+    }
+    return null;
+  }
+  function range(raw, todayIso, startClock, endClock) {
+    const today = dateUTC(...todayIso.split('-').map(Number));
+    const match = /(\d{1,2}(?:\/\d{1,2}(?:\/\d{4})?)?)\s*(?:a|[àá]|ate|até|-)\s*(\d{1,2}(?:\/\d{1,2}(?:\/\d{4})?)?)/i.exec(raw);
+    if (!match || !today || !startClock || !endClock || startClock >= endClock) return [];
+    const start = readDate(match[1], today); if (!start) return [];
+    let end;
+    if (/^\d{1,2}$/.test(match[2])) {
+      const finalDay = Number(match[2]);
+      for (let step = 0; step < 4; step++) {
+        const candidate = dateUTC(start.getUTCFullYear(), start.getUTCMonth() + 1 + step, finalDay);
+        if (candidate && candidate >= start) { end = candidate; break; }
+      }
+      if (finalDay >= start.getUTCDate()) end = dateUTC(start.getUTCFullYear(), start.getUTCMonth() + 1, finalDay);
+    } else {
+      end = readDate(match[2], start);
+    }
+    if (!end || end < start || daysBetween(start, end) > 89) return [];
+    const shifts = [];
+    for (let cursor = start; cursor <= end; cursor = nextDay(cursor)) shifts.push({ data: iso(cursor), inicio: startClock, fim: endClock });
+    return shifts;
+  }
+  function worker(text, sectors) {
+    const nome = field(text, ['Nome Completo', 'Nome do operador', 'Nome da diarista', 'Nome']);
+    const cpf = digits(field(text, ['CPF']));
+    const cep = digits(field(text, ['CEP']));
+    const street = field(text, ['Rua/Nº', 'Rua/No', 'Rua', 'Endereço', 'Endereco', 'Logradouro']);
+    const streetMatch = /^(.*?)(?:,|\s+n[º°o.]?\s*)\s*(\d+[a-z]?)(?:\s*[-,]\s*(.*))?$/i.exec(street);
+    const logradouro = streetMatch ? streetMatch[1].trim() : street;
+    const numero = field(text, ['Número', 'Numero']) || (streetMatch ? streetMatch[2] : '');
+    const setorText = field(text, ['Setor', 'Setores', 'Função', 'Funcao', 'Experiência', 'Experiencia']);
+    const known = sectors || [];
+    const setores = setorText ? [...new Set(setorText.split(/[,;]+/).map(item => sector(item, known)).filter(Boolean))] : [];
+    const job = normal(field(text, ['Trabalhando atualmente', 'Está trabalhando', 'Esta trabalhando', 'Trabalhando']));
+    const trabalhando = /^(sim|s|estou|trabalho)\b/.test(job) ? true : /^(nao|n|desempregado)\b/.test(job) ? false : null;
+    const local_trabalho = field(text, ['Local de trabalho', 'Onde trabalha', 'Trabalha em']);
+    const locomocao = field(text, ['Meios de locomoção', 'Meios de locomocao', 'Locomoção', 'Locomocao', 'Transporte']);
+    const mobility = normal(locomocao);
+    const transporte = ['Ônibus', 'Moto', 'Carro', 'Bicicleta', 'A pé', 'Aplicativo'].find(item => mobility.includes(normal(item))) || '';
+    const pode_se_deslocar = /qualquer regiao|toda fortaleza|sem restricao/.test(mobility) || !!transporte ? true : /nao posso me deslocar|nao pode se deslocar/.test(mobility) ? false : null;
+    const available = field(text, ['Disponibilidade', 'Dias e horários', 'Dias e horarios']);
+    const times = clocks(available);
+    const weekdays = [['segunda','segunda'],['terca','terca'],['quarta','quarta'],['quinta','quinta'],['sexta','sexta'],['sabado','sabado'],['domingo','domingo']];
+    const availableNormal = normal(available);
+    const selected = /todos os dias|semana inteira/.test(availableNormal) ? weekdays : /fim de semana/.test(availableNormal) ? weekdays.slice(5) : /durante a semana|dias de semana|segunda a sexta/.test(availableNormal) ? weekdays.slice(0, 5) : weekdays.filter(([key]) => availableNormal.includes(key));
+    const disponibilidade = times.length === 2 && times[0] < times[1] ? selected.map(([dia]) => ({ dia, inicio: times[0], fim: times[1] })) : [];
+    const data = { nome, cpf, setores, cep, logradouro, numero, complemento: field(text, ['Complemento']), bairro: field(text, ['Bairro']), trabalhando, local_trabalho, disponibilidade, pode_se_deslocar, transporte, observacoes_locomocao: locomocao };
+    const missing = [];
+    if (!nome) missing.push('nome');
+    if (!validCpf(cpf)) missing.push(cpf ? 'CPF válido' : 'CPF');
+    if (!setores.length) missing.push('setor de experiência');
+    if (!/^\d{8}$/.test(cep)) missing.push('CEP');
+    if (!logradouro || !numero) missing.push('rua e número');
+    if (!data.bairro) missing.push('bairro');
+    if (trabalhando === null || (trabalhando && !local_trabalho)) missing.push('trabalho atual');
+    if (!disponibilidade.length) missing.push('dias e horários exatos');
+    if (pode_se_deslocar === null || (pode_se_deslocar && !transporte)) missing.push('locomoção e transporte');
+    return { tipo: 'diarista', dados: data, faltando: missing, texto: text };
+  }
+  function order(text, stores, sectors, today) {
+    const unit = field(text, ['Loja', 'Unidade']);
+    let market = field(text, ['Rede', 'Supermercado']);
+    const matches = (stores || []).filter(item => normal(item.nome) === normal(unit));
+    if (!market && matches.length === 1) market = matches[0].rede;
+    const validStore = !unit || (stores || []).some(item => normal(item.nome) === normal(unit) && normal(item.rede) === normal(market));
+    const setor = sector(field(text, ['Função', 'Funcao', 'Setor', 'Cargo']), sectors || []);
+    const [inicio, fim] = clocks(field(text, ['Horário', 'Horario', 'Turno']));
+    const period = field(text, ['Data de inicio', 'Data de início', 'Datas', 'Período', 'Periodo', 'Data']) || text;
+    let turnos = range(period, today, inicio, fim);
+    if (!turnos.length && inicio && fim && inicio < fim) {
+      const match = /\b(\d{1,2}\/\d{1,2}(?:\/\d{4})?)\b/.exec(period);
+      const when = match && readDate(match[1], dateUTC(...today.split('-').map(Number)));
+      if (when) turnos = [{ data: iso(when), inicio, fim }];
+    }
+    const reported = Number(digits(field(text, ['Quantidade de dias', 'Número de dias', 'Numero de dias'])) || 0);
+    const peopleField = field(text, ['Quantidade de diaristas', 'Diaristas por dia', 'Quantidade de pessoas', 'Vagas']);
+    const people = Number(digits(peopleField) || 1);
+    const data = { supermercado: market, unidade: unit, contato: field(text, ['Contato']), setor, quantidade_diaristas: people, turnos, situacao: 'novo', observacoes: field(text, ['Observações', 'Observacoes']) };
+    const missing = [];
+    if (!market) missing.push('rede');
+    if (!unit || !validStore) missing.push('loja conhecida da rede');
+    if (!setor) missing.push('função');
+    if (!turnos.length) missing.push('datas e horário');
+    if (reported && reported !== turnos.length) missing.push('confirmar quantidade de dias');
+    if (people < 1 || people > 100) missing.push('quantidade de diaristas');
+    return { tipo: 'pedido', dados: data, faltando: missing, texto: text, avisos: peopleField ? [] : ['Quantidade de diaristas não informada: considerado 1 por dia.'] };
+  }
+  function fingerprint(item) {
+    if (item.tipo === 'diarista' && item.dados.cpf) return `cpf:${item.dados.cpf}`;
+    if (item.tipo === 'pedido' && item.dados.turnos.length) {
+      const p = item.dados;
+      return `pedido:${normal(p.supermercado)}:${normal(p.unidade)}:${normal(p.setor)}:${p.quantidade_diaristas}:${p.turnos.map(t => `${t.data}/${t.inicio}/${t.fim}`).join(',')}`;
+    }
+    let hash = 2166136261;
+    for (const char of normal(item.texto)) hash = Math.imul(hash ^ char.charCodeAt(0), 16777619);
+    return `texto:${(hash >>> 0).toString(16)}`;
+  }
+  function parse(text, context = {}) {
+    const today = context.today || new Intl.DateTimeFormat('en-CA', { timeZone: 'America/Fortaleza', year: 'numeric', month: '2-digit', day: '2-digit' }).format(new Date());
+    return split(text).map(part => {
+      const kind = classify(part);
+      const item = kind === 'diarista' ? worker(part, context.sectors) : kind === 'pedido' ? order(part, context.stores, context.sectors, today) : { tipo: 'indefinido', dados: {}, faltando: ['identificar cadastro ou pedido'], texto: part };
+      item.chave = fingerprint(item);
+      return item;
+    });
+  }
+  return { parse, split, classify, range, validCpf, fingerprint };
+});

@@ -1,101 +1,73 @@
 const { test } = require('node:test');
 const assert = require('node:assert/strict');
-const handler = require('../api/ler');
-const { inferShortRange, filePart, normalizeResult } = handler._test;
+const parser = require('../static/reading-parser.js');
+const stores = [{ rede: 'Super do Povo', nome: 'Meireles' }];
+const sectors = ['Repositor de FLV', 'Operador de caixa'];
+const today = '2026-09-28';
 
-function response() {
-  return {
-    statusCode: 200, body: null,
-    setHeader() {},
-    status(value) { this.statusCode = value; return this; },
-    json(value) { this.body = value; return this; },
-  };
-}
-
-test('deduz 29/09 a 05/10 com sete datas consecutivas', () => {
-  const shifts = inferShortRange('Data de inicio: 29 á 05', '2026-09-28', '07:00', '15:20');
-  assert.equal(shifts.length, 7);
-  assert.deepEqual(shifts[0], { data: '2026-09-29', inicio: '07:00', fim: '15:20' });
-  assert.deepEqual(shifts.at(-1), { data: '2026-10-05', inicio: '07:00', fim: '15:20' });
+test('separa texto misto em diaristas e pedidos', () => {
+  const text = `Nome Completo: Maria da Silva
+CPF: 529.982.247-25
+Bairro: Aldeota
+Loja: Meireles
+Função: FLV
+Horário: 07:00 as 15:20
+Data de inicio: 29 á 05
+Quantidade de dias: 7`;
+  const items = parser.parse(text, { stores, sectors, today });
+  assert.deepEqual(items.map(item => item.tipo), ['diarista', 'pedido']);
+  assert.equal(items[1].dados.supermercado, 'Super do Povo');
+  assert.equal(items[1].dados.setor, 'Repositor de FLV');
+  assert.equal(items[1].dados.turnos.length, 7);
+  assert.equal(items[1].dados.turnos[0].data, '2026-09-29');
+  assert.equal(items[1].dados.turnos.at(-1).data, '2026-10-05');
+  assert.equal(items[1].dados.quantidade_diaristas, 1);
+  assert.deepEqual(items[1].faltando, []);
+  assert.ok(items[0].faltando.includes('setor de experiência'));
 });
 
-test('associa Meireles à rede única e preserva quantidade de pessoas não informada', () => {
-  const result = { tipo: 'pedido', pedido: {
-    supermercado: '', unidade: 'Meireles', quantidade_diaristas: 0, quantidade_dias_reportada: 7,
-    turnos: [{ data: '2026-12-01', inicio: '07:00', fim: '15:20' }],
-  }, avisos: [] };
-  normalizeResult(result, [{ rede: 'Super do Povo', nome: 'Meireles' }], 'Loja: Meireles\n29 á 05\n07:00 as 15:20', '2026-09-28');
-  assert.equal(result.pedido.supermercado, 'Super do Povo');
-  assert.equal(result.pedido.quantidade_diaristas, 0);
-  assert.equal(result.pedido.turnos.length, 7);
-  assert.equal(result.pedido.turnos.at(-1).data, '2026-10-05');
+test('não confunde sete dias com sete diaristas', () => {
+  const text = `Loja: Meireles
+Função: FLV
+Horário: 07:00 as 15:20
+Data de inicio: 29 á 05
+Quantidade de dias: 7`;
+  const item = parser.parse(text, { stores, sectors, today })[0];
+  assert.equal(item.dados.quantidade_diaristas, 1);
+  assert.equal(item.dados.turnos.length, 7);
+  assert.match(item.avisos[0], /1 por dia/);
 });
 
-test('recusa anexos não permitidos', () => {
-  assert.throws(() => filePart({ mime: 'text/html', base64: 'PGgxPg==' }), /foto|PDF/);
-  assert.equal(filePart({ mime: 'application/pdf', base64: 'JVBERg==' }).type, 'input_file');
+test('ambiguidade de loja mantém pedido como pendência', () => {
+  const item = parser.parse('Loja: Centro\nFunção: Caixa\nHorário: 07:00 as 15:20\nData: 29/09/2026', {
+    stores: [{ rede: 'Rede A', nome: 'Centro' }, { rede: 'Rede B', nome: 'Centro' }], sectors, today,
+  })[0];
+  assert.ok(item.faltando.includes('rede'));
+  assert.equal(item.dados.turnos.length, 1);
 });
 
-test('API exige sessão antes de chamar a OpenAI', async () => {
-  const res = response();
-  await handler({ method: 'POST', headers: {}, body: { texto: 'teste' } }, res);
-  assert.equal(res.statusCode, 401);
+test('cadastro completo fica pronto e CPF inválido não passa', () => {
+  const text = `Nome Completo: Maria da Silva
+CPF: 529.982.247-25
+Setor: Operador de caixa
+Bairro: Aldeota
+Rua/Nº: Rua das Flores, 123
+CEP: 60150-000
+Trabalhando atualmente: Não
+Meios de locomoção: Ônibus, posso ir para qualquer região
+Disponibilidade: segunda a sexta, 07:00 às 15:20`;
+  const item = parser.parse(text, { stores, sectors, today })[0];
+  assert.deepEqual(item.faltando, []);
+  assert.equal(item.dados.disponibilidade.length, 5);
+  assert.equal(item.dados.logradouro, 'Rua das Flores');
+  assert.equal(item.dados.numero, '123');
+  assert.ok(parser.validCpf(item.dados.cpf));
+  assert.equal(parser.validCpf('11111111111'), false);
 });
 
-test('API informa falta de créditos sem expor a chave', async () => {
-  const originalFetch = global.fetch;
-  const originalKey = process.env.OPENAI_API_KEY;
-  process.env.OPENAI_API_KEY = 'chave-de-teste';
-  global.fetch = async url => {
-    if (url.includes('/auth/v1/user')) return new Response(JSON.stringify({ email: 'admin@direct.test' }), { status: 200 });
-    if (url.includes('/rest/v1/direct_admins')) return new Response(JSON.stringify([{ email: 'admin@direct.test' }]), { status: 200 });
-    if (url.includes('/rest/v1/lojas')) return new Response(JSON.stringify([]), { status: 200 });
-    return new Response(JSON.stringify({ error: { code: 'credit_balance_exhausted' } }), { status: 429 });
-  };
-  try {
-    const res = response();
-    await handler({ method: 'POST', headers: { authorization: 'Bearer sessao-de-teste' }, body: { texto: 'Pedido para amanhã' } }, res);
-    assert.equal(res.statusCode, 503);
-    assert.match(res.body.erro, /sem créditos/);
-    assert.doesNotMatch(JSON.stringify(res.body), /chave-de-teste/);
-  } finally {
-    global.fetch = originalFetch;
-    if (originalKey === undefined) delete process.env.OPENAI_API_KEY;
-    else process.env.OPENAI_API_KEY = originalKey;
-  }
-});
-
-test('API envia PDF com store=false e retorna pedido estruturado para revisão', async () => {
-  const originalFetch = global.fetch;
-  const originalKey = process.env.OPENAI_API_KEY;
-  process.env.OPENAI_API_KEY = 'chave-de-teste';
-  let upstreamPayload;
-  global.fetch = async (url, options) => {
-    if (url.includes('/auth/v1/user')) return new Response(JSON.stringify({ email: 'admin@direct.test' }), { status: 200 });
-    if (url.includes('/rest/v1/direct_admins')) return new Response(JSON.stringify([{ email: 'admin@direct.test' }]), { status: 200 });
-    if (url.includes('/rest/v1/lojas')) return new Response(JSON.stringify([{ rede: 'Super do Povo', nome: 'Meireles' }]), { status: 200 });
-    upstreamPayload = JSON.parse(options.body);
-    const modelResult = { tipo: 'pedido', diarista: {}, pedido: {
-      supermercado: '', unidade: 'Meireles', contato: '', setor: 'Repositor de FLV',
-      quantidade_diaristas: 0, quantidade_dias_reportada: 7, turnos: [{ data: '2026-09-29', inicio: '07:00', fim: '15:20' }], observacoes: '',
-    }, avisos: [] };
-    return new Response(JSON.stringify({ output: [{ content: [{ type: 'output_text', text: JSON.stringify(modelResult) }] }] }), { status: 200 });
-  };
-  try {
-    const res = response();
-    await handler({ method: 'POST', headers: { authorization: 'Bearer sessao-de-teste' }, body: {
-      tipo: 'pedido', texto: 'Loja: Meireles, 29 á 05, 07:00 as 15:20, quantidade de dias: 7',
-      arquivo: { mime: 'application/pdf', base64: 'JVBERg==' },
-    } }, res);
-    assert.equal(res.statusCode, 200);
-    assert.equal(upstreamPayload.store, false);
-    assert.equal(upstreamPayload.input[0].content[1].type, 'input_file');
-    assert.equal(res.body.pedido.supermercado, 'Super do Povo');
-    assert.equal(res.body.pedido.turnos.length, 7);
-    assert.equal(res.body.pedido.quantidade_diaristas, 0);
-  } finally {
-    global.fetch = originalFetch;
-    if (originalKey === undefined) delete process.env.OPENAI_API_KEY;
-    else process.env.OPENAI_API_KEY = originalKey;
-  }
+test('registros repetidos têm a mesma chave', () => {
+  const text = 'Loja: Meireles\nFunção: FLV\nHorário: 07:00 as 15:20\nData de inicio: 29 á 05';
+  const [a] = parser.parse(text, { stores, sectors, today });
+  const [b] = parser.parse(text, { stores, sectors, today });
+  assert.equal(a.chave, b.chave);
 });

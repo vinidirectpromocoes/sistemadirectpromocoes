@@ -5,9 +5,7 @@ from __future__ import annotations
 import json
 import os
 import re
-import shutil
 import sqlite3
-import subprocess
 from datetime import date, datetime, timezone
 from decimal import Decimal, InvalidOperation
 from http import HTTPStatus
@@ -25,15 +23,6 @@ DB_PATH = Path(os.environ.get("DIARISTAS_DB_PATH", ROOT / "data" / "diaristas.db
 PORT = int(os.environ.get("DIARISTAS_PORT", "8000"))
 
 
-def local_openai_key():
-    if os.environ.get("OPENAI_API_KEY"):
-        return os.environ["OPENAI_API_KEY"]
-    target = ROOT / ".env.local"
-    if target.is_file():
-        for line in target.read_text().splitlines():
-            if line.startswith("OPENAI_API_KEY="):
-                return line.split("=", 1)[1].strip().strip("\"'")
-    return ""
 DAYS = {"segunda", "terca", "quarta", "quinta", "sexta", "sabado", "domingo"}
 ORDER_STATUSES = {"novo", "em_selecao", "confirmado", "concluido", "cancelado"}
 FORTALEZA = ZoneInfo("America/Fortaleza")
@@ -145,6 +134,18 @@ def init_db():
             atualizado_em TEXT NOT NULL
         )""")
         db.execute("CREATE INDEX IF NOT EXISTS idx_pedidos_situacao ON pedidos(situacao)")
+        db.execute("""CREATE TABLE IF NOT EXISTS leituras_pendentes (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            tipo TEXT NOT NULL CHECK (tipo IN ('diarista', 'pedido', 'indefinido')),
+            chave TEXT NOT NULL UNIQUE,
+            dados TEXT NOT NULL,
+            texto TEXT NOT NULL,
+            faltando TEXT NOT NULL,
+            avisos TEXT NOT NULL DEFAULT '[]',
+            status TEXT NOT NULL DEFAULT 'pendente' CHECK (status IN ('pendente', 'resolvido')),
+            criado_em TEXT NOT NULL,
+            atualizado_em TEXT NOT NULL
+        )""")
         db.execute("""CREATE TABLE IF NOT EXISTS pedido_escalas (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             pedido_id INTEGER NOT NULL REFERENCES pedidos(id) ON DELETE RESTRICT,
@@ -470,6 +471,33 @@ def public_order(row):
     return item
 
 
+def public_reading(row):
+    item = dict(row)
+    for key in ("dados", "faltando", "avisos"):
+        item[key] = json.loads(item[key])
+    return item
+
+
+def validate_reading(payload):
+    if not isinstance(payload, dict):
+        raise ValueError("Leitura inválida.")
+    tipo = payload.get("tipo")
+    if tipo not in ("diarista", "pedido", "indefinido"):
+        raise ValueError("Tipo de leitura inválido.")
+    chave = clean_text(payload.get("chave"), "a chave", 300)
+    texto = clean_text(payload.get("texto"), "o texto", 30000)
+    dados = payload.get("dados")
+    faltando = payload.get("faltando")
+    avisos = payload.get("avisos", [])
+    if not isinstance(dados, dict) or not isinstance(faltando, list) or not isinstance(avisos, list):
+        raise ValueError("Dados da leitura inválidos.")
+    if len(json.dumps(dados)) > 30000 or len(faltando) > 20 or len(avisos) > 20:
+        raise ValueError("Leitura grande demais.")
+    return {"tipo": tipo, "chave": chave, "dados": json.dumps(dados, ensure_ascii=False),
+            "texto": texto, "faltando": json.dumps(faltando, ensure_ascii=False),
+            "avisos": json.dumps(avisos, ensure_ascii=False)}
+
+
 def public_scale(row):
     item = dict(row)
     item["diaria"] = None if item.get("diaria_id") is None else {
@@ -576,7 +604,7 @@ class Handler(BaseHTTPRequestHandler):
         self.send_header("Content-Length", str(len(data)))
         self.send_header("Cache-Control", "no-store")
         self.send_header("X-Content-Type-Options", "nosniff")
-        self.send_header("Content-Security-Policy", "default-src 'self'; script-src 'self'; style-src 'self'; object-src 'none'; frame-ancestors 'none'")
+        self.send_header("Content-Security-Policy", "default-src 'self'; script-src 'self' https://cdn.jsdelivr.net 'wasm-unsafe-eval'; worker-src 'self' blob: https://cdn.jsdelivr.net; style-src 'self'; img-src 'self' data: blob:; connect-src 'self' https://cdn.jsdelivr.net https://tessdata.projectnaptha.com; object-src 'none'; frame-ancestors 'none'")
         self.end_headers()
         self.wfile.write(data)
 
@@ -622,6 +650,10 @@ class Handler(BaseHTTPRequestHandler):
             with connect() as db:
                 rows = db.execute("SELECT * FROM pedidos ORDER BY id DESC").fetchall()
             return self.respond(HTTPStatus.OK, [public_order(row) for row in rows])
+        if path == "/api/leituras-pendentes":
+            with connect() as db:
+                rows = db.execute("SELECT * FROM leituras_pendentes ORDER BY id DESC LIMIT 500").fetchall()
+            return self.respond(HTTPStatus.OK, [public_reading(row) for row in rows])
         scale_route = self.route_escalas()
         if scale_route and scale_route[1] is None:
             with connect() as db:
@@ -647,7 +679,7 @@ class Handler(BaseHTTPRequestHandler):
             return self.respond(HTTPStatus.OK, [dict(row) for row in rows])
         if path == "/":
             path = "/index.html"
-        assets = {"/index.html": "text/html; charset=utf-8", "/style.css": "text/css; charset=utf-8", "/brand.css": "text/css; charset=utf-8", "/theme.css": "text/css; charset=utf-8", "/mobile.css": "text/css; charset=utf-8", "/reading.css": "text/css; charset=utf-8", "/app.js": "text/javascript; charset=utf-8", "/theme.js": "text/javascript; charset=utf-8", "/finance.js": "text/javascript; charset=utf-8", "/orders.js": "text/javascript; charset=utf-8", "/stores.js": "text/javascript; charset=utf-8", "/settings.js": "text/javascript; charset=utf-8", "/reading.js": "text/javascript; charset=utf-8", "/remote.js": "text/javascript; charset=utf-8", "/vendor/supabase-2.117.2.js": "text/javascript; charset=utf-8", "/stores.css": "text/css; charset=utf-8", "/settings.css": "text/css; charset=utf-8", "/login.css": "text/css; charset=utf-8", "/favicon.svg": "image/svg+xml", "/logo-direct-promocoes.jpg": "image/jpeg", "/logo-direct-promocoes-transparente.png": "image/png"}
+        assets = {"/index.html": "text/html; charset=utf-8", "/style.css": "text/css; charset=utf-8", "/brand.css": "text/css; charset=utf-8", "/theme.css": "text/css; charset=utf-8", "/mobile.css": "text/css; charset=utf-8", "/reading.css": "text/css; charset=utf-8", "/app.js": "text/javascript; charset=utf-8", "/theme.js": "text/javascript; charset=utf-8", "/finance.js": "text/javascript; charset=utf-8", "/orders.js": "text/javascript; charset=utf-8", "/stores.js": "text/javascript; charset=utf-8", "/settings.js": "text/javascript; charset=utf-8", "/reading.js": "text/javascript; charset=utf-8", "/reading-parser.js": "text/javascript; charset=utf-8", "/remote.js": "text/javascript; charset=utf-8", "/vendor/supabase-2.117.2.js": "text/javascript; charset=utf-8", "/stores.css": "text/css; charset=utf-8", "/settings.css": "text/css; charset=utf-8", "/login.css": "text/css; charset=utf-8", "/favicon.svg": "image/svg+xml", "/logo-direct-promocoes.jpg": "image/jpeg", "/logo-direct-promocoes-transparente.png": "image/png"}
         if path in assets:
             return self.respond(HTTPStatus.OK, (STATIC / path[1:]).read_bytes(), assets[path])
         return self.respond(HTTPStatus.NOT_FOUND, {"erro": "Página não encontrada."})
@@ -655,27 +687,20 @@ class Handler(BaseHTTPRequestHandler):
     def do_POST(self):
         if not self._allowed_origin():
             return self.respond(HTTPStatus.FORBIDDEN, {"erro": "Acesso não permitido."})
-        if urlparse(self.path).path == "/api/ler":
+        if urlparse(self.path).path == "/api/leituras-pendentes":
             try:
-                payload = self.read_json(max_length=4_200_000)
-                key = local_openai_key()
-                if not key:
-                    return self.respond(HTTPStatus.SERVICE_UNAVAILABLE, {"erro": "A leitura por IA ainda não está configurada neste computador."})
-                node = shutil.which("node") or str(Path.home() / ".cache/codex-runtimes/codex-primary-runtime/dependencies/node/bin/node")
-                if not Path(node).is_file():
-                    return self.respond(HTTPStatus.SERVICE_UNAVAILABLE, {"erro": "Node.js não está disponível para a leitura local."})
+                data = validate_reading(self.read_json(max_length=70000))
+                now = datetime.now(timezone.utc).isoformat()
                 with connect() as db:
-                    stores = [dict(row) for row in db.execute("SELECT rede, nome FROM lojas")]
-                env = {**os.environ, "OPENAI_API_KEY": key}
-                result = subprocess.run([node, str(ROOT / "scripts/local-ai-runner.cjs")],
-                                        input=json.dumps({"body": payload, "stores": stores}),
-                                        capture_output=True, text=True, timeout=70, env=env, check=True)
-                output = json.loads(result.stdout)
-                return self.respond(output["status"], output["body"])
+                    columns = ", ".join(data)
+                    marks = ", ".join("?" for _ in data)
+                    cur = db.execute(f"INSERT INTO leituras_pendentes ({columns}, criado_em, atualizado_em) VALUES ({marks}, ?, ?)", (*data.values(), now, now))
+                    row = db.execute("SELECT * FROM leituras_pendentes WHERE id = ?", (cur.lastrowid,)).fetchone()
+                return self.respond(HTTPStatus.CREATED, public_reading(row))
             except (ValueError, json.JSONDecodeError, TypeError) as exc:
                 return self.respond(HTTPStatus.BAD_REQUEST, {"erro": str(exc)})
-            except (subprocess.TimeoutExpired, subprocess.CalledProcessError, OSError, KeyError):
-                return self.respond(HTTPStatus.BAD_GATEWAY, {"erro": "Não foi possível concluir a leitura local."})
+            except sqlite3.IntegrityError:
+                return self.respond(HTTPStatus.CONFLICT, {"erro": "Esta leitura já está salva."})
         if urlparse(self.path).path == "/api/tarifas/setores":
             try:
                 data = validate_sector_tariff(self.read_json())
@@ -884,6 +909,19 @@ class Handler(BaseHTTPRequestHandler):
     def do_PATCH(self):
         if not self._allowed_origin():
             return self.respond(HTTPStatus.FORBIDDEN, {"erro": "Acesso não permitido."})
+        reading_match = re.fullmatch(r"/api/leituras-pendentes/(\d+)", urlparse(self.path).path)
+        if reading_match:
+            try:
+                payload = self.read_json()
+                if payload.get("status") != "resolvido":
+                    raise ValueError("Situação inválida.")
+                with connect() as db:
+                    db.execute("UPDATE leituras_pendentes SET status = 'resolvido', atualizado_em = ? WHERE id = ?",
+                               (datetime.now(timezone.utc).isoformat(), int(reading_match.group(1))))
+                    row = db.execute("SELECT * FROM leituras_pendentes WHERE id = ?", (int(reading_match.group(1)),)).fetchone()
+                return self.respond(HTTPStatus.OK if row else HTTPStatus.NOT_FOUND, public_reading(row) if row else {"erro": "Leitura não encontrada."})
+            except (ValueError, json.JSONDecodeError, TypeError) as exc:
+                return self.respond(HTTPStatus.BAD_REQUEST, {"erro": str(exc)})
         scale_route = self.route_escalas()
         if scale_route and scale_route[1] is not None:
             try:
@@ -971,6 +1009,11 @@ class Handler(BaseHTTPRequestHandler):
     def do_DELETE(self):
         if not self._allowed_origin():
             return self.respond(HTTPStatus.FORBIDDEN, {"erro": "Acesso não permitido."})
+        reading_match = re.fullmatch(r"/api/leituras-pendentes/(\d+)", urlparse(self.path).path)
+        if reading_match:
+            with connect() as db:
+                cur = db.execute("DELETE FROM leituras_pendentes WHERE id = ?", (int(reading_match.group(1)),))
+            return self.respond(HTTPStatus.OK if cur.rowcount else HTTPStatus.NOT_FOUND, {"ok": bool(cur.rowcount)})
         sector_match = re.fullmatch(r"/api/tarifas/setores/(\d+)", urlparse(self.path).path)
         if sector_match:
             with connect() as db:
