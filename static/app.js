@@ -96,11 +96,11 @@ function createAvailability() {
 }
 
 function toggleConditional() {
-  const working = $('input[name="trabalhando"]:checked').value === 'true';
+  const working = $('input[name="trabalhando"]:checked')?.value === 'true';
   $('#workplace-wrap').hidden = !working;
   $('#local_trabalho').required = working;
   if (!working) $('#local_trabalho').value = '';
-  const mobile = $('input[name="pode_se_deslocar"]:checked').value === 'true';
+  const mobile = $('input[name="pode_se_deslocar"]:checked')?.value === 'true';
   $('#transport-wrap').hidden = !mobile;
   $('#transporte').required = mobile;
   if (!mobile) $('#transporte').value = '';
@@ -147,6 +147,8 @@ function openForm(record = null) {
 }
 
 function formData() {
+  const workingChoice = $('input[name="trabalhando"]:checked');
+  const travelChoice = $('input[name="pode_se_deslocar"]:checked');
   const availability = [...document.querySelectorAll('.day-row')].filter(row => row.querySelector('.day-enabled').checked).map(row => ({
     dia: row.dataset.day, inicio: row.querySelector('.day-start').value, fim: row.querySelector('.day-end').value,
   }));
@@ -155,9 +157,9 @@ function formData() {
     setores: $('#setores').value.split(',').map(value => value.trim()).filter(Boolean),
     cep: $('#cep').value, logradouro: $('#logradouro').value, numero: $('#numero').value,
     complemento: $('#complemento').value, bairro: $('#bairro').value,
-    trabalhando: $('input[name="trabalhando"]:checked').value === 'true', local_trabalho: $('#local_trabalho').value,
+    trabalhando: workingChoice ? workingChoice.value === 'true' : null, local_trabalho: $('#local_trabalho').value,
     disponibilidade: availability,
-    pode_se_deslocar: $('input[name="pode_se_deslocar"]:checked').value === 'true',
+    pode_se_deslocar: travelChoice ? travelChoice.value === 'true' : null,
     transporte: $('#transporte').value, observacoes_locomocao: $('#observacoes_locomocao').value,
   };
 }
@@ -167,9 +169,11 @@ function validateForm(data) {
   for (const [key, label] of required) if (!(Array.isArray(data[key]) ? data[key].length : data[key].trim())) return `Preencha ${label}.`;
   if (!validCpf(data.cpf)) return 'Informe um CPF válido.';
   if (data.cep.replace(/\D/g, '').length !== 8) return 'Informe um CEP válido.';
+  if (data.trabalhando === null) return 'Confirme se a pessoa está trabalhando atualmente.';
   if (data.trabalhando && !data.local_trabalho.trim()) return 'Informe o local onde está trabalhando.';
   if (!data.disponibilidade.length) return 'Selecione ao menos um dia disponível.';
   if (data.disponibilidade.some(slot => !slot.inicio || !slot.fim || slot.inicio >= slot.fim)) return 'Confira os horários selecionados.';
+  if (data.pode_se_deslocar === null) return 'Confirme a disponibilidade de locomoção.';
   if (data.pode_se_deslocar && !data.transporte) return 'Selecione o meio de transporte.';
   return null;
 }

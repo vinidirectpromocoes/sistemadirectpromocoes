@@ -377,8 +377,8 @@ async function openFinanceAudit() {
 }
 
 function showPage() {
-  const page = ['financeiro', 'pedidos', 'redes', 'configuracoes'].includes(window.location.hash.slice(1)) ? window.location.hash.slice(1) : 'diaristas';
-  for (const name of ['diaristas', 'pedidos', 'redes', 'financeiro', 'configuracoes']) {
+  const page = ['financeiro', 'pedidos', 'leitura', 'redes', 'configuracoes'].includes(window.location.hash.slice(1)) ? window.location.hash.slice(1) : 'diaristas';
+  for (const name of ['diaristas', 'pedidos', 'leitura', 'redes', 'financeiro', 'configuracoes']) {
     const active = name === page;
     $(`#${name}-page`).hidden = !active;
     const link = $(`#nav-${name}`);
@@ -386,7 +386,7 @@ function showPage() {
     if (active) link.setAttribute('aria-current', 'page');
     else link.removeAttribute('aria-current');
   }
-  document.title = `${{ diaristas: 'Diaristas', pedidos: 'Pedidos', redes: 'Redes e lojas', financeiro: 'Financeiro', configuracoes: 'Configurações' }[page]} | Direct Promoções`;
+  document.title = `${{ diaristas: 'Diaristas', pedidos: 'Pedidos', leitura: 'Leitura IA', redes: 'Redes e lojas', financeiro: 'Financeiro', configuracoes: 'Configurações' }[page]} | Direct Promoções`;
   if (page === 'financeiro') loadFinance();
   if (page === 'pedidos' && typeof loadOrders === 'function') loadOrders();
   if (page === 'redes' && typeof loadStores === 'function') loadStores();

@@ -8,7 +8,7 @@ Endereço público: **https://sistemadirectpromocoes-zeta.vercel.app/**. A pági
 
 O administrador autorizado entra com o e-mail e a senha já cadastrados no Supabase. A tela pública contém apenas o formulário de login. O e-mail precisa estar registrado em `public.direct_admins`; uma conta sem essa autorização não consegue ler ou alterar os dados da operação.
 
-O arquivo `vercel.json` publica somente `static/`. O JavaScript desta pasta usa a chave publicável do Supabase, e as políticas RLS verificam o administrador em cada tabela. A chave de serviço e o banco SQLite não pertencem ao site ou repositório. Enviar alterações para `main` no GitHub aciona um novo deploy pela integração Git da Vercel.
+O arquivo `vercel.json` publica `static/` e a função protegida `api/ler.js`. O JavaScript desta pasta usa a chave publicável do Supabase, e as políticas RLS verificam o administrador em cada tabela. A chave de serviço e o banco SQLite não pertencem ao site ou repositório. Enviar alterações para `main` no GitHub aciona um novo deploy pela integração Git da Vercel.
 
 Para adicionar outro administrador, inclua seu e-mail em `public.direct_admins` usando um acesso seguro ao banco. Não coloque a lista de administradores no código publicado. Os esquemas e políticas estão em `supabase/migrations/`.
 
@@ -60,6 +60,14 @@ Os indicadores contam como **disponíveis** os cadastros não bloqueados e como 
 - A lista oferece busca e filtro por situação; a ficha mostra todos os dias e horários e permite editar ou excluir o pedido.
 - Um pedido corresponde a um setor e a uma quantidade de diaristas por dia. Para demandas diferentes por setor, registre pedidos separados.
 
+## Leitura IA
+
+- A aba **Leitura IA** aceita mensagens coladas, uma foto ou um PDF. PDFs podem ter até 3 MB; fotos maiores são reduzidas no navegador antes da leitura.
+- A OpenAI identifica se os dados são de uma diarista ou de um pedido e mostra uma prévia. Campos ausentes ficam sinalizados. É possível revisar e editar no formulário existente ou confirmar e registrar diretamente quando todos os campos obrigatórios estão completos.
+- Para pedidos, intervalos abreviados como `29 a 05` são interpretados com base no dia atual em Fortaleza. A rede é associada ao nome da loja quando há correspondência única no catálogo. A quantidade de dias nunca é usada como quantidade de diaristas.
+- A função publicada exige uma sessão autorizada no Supabase. O texto ou arquivo é enviado à OpenAI apenas para a leitura, sem guardar o original no sistema. A chave `OPENAI_API_KEY` fica somente no servidor; no computador, no arquivo ignorado `.env.local`, e na Vercel, como variável de ambiente do projeto.
+- A leitura requer créditos ativos na conta da API OpenAI. Sem créditos ou sem a variável na Vercel, a aba exibe uma mensagem explicando a indisponibilidade.
+
 ## Redes e lojas
 
 - O catálogo inicial contém 44 unidades pesquisadas das seis redes informadas: Super do Povo, Super Lagoa, Fazendinha, Hipermarket, Pinheiro e Variedades. Abrange Fortaleza, Caucaia, Eusébio, Aquiraz e Maranguape. Nova Metrópole fica em Caucaia.
@@ -71,6 +79,7 @@ Os indicadores contam como **disponíveis** os cadastros não bloqueados e como 
 ## Estrutura
 
 - `server.py`: servidor local, validação e banco de dados
+- `api/ler.js`: leitura por IA protegida para o site publicado
 - `static/`: interface do cadastro
 - `data/`: banco local criado automaticamente na primeira execução, ignorado pelo Git
 - `supabase/migrations/`: esquema e regras de acesso do banco publicado

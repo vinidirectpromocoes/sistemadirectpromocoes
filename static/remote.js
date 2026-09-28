@@ -245,5 +245,18 @@
     }
     throw new Error('Operação não disponível.');
   }
-  window.directRemote = { request: run, client: sb };
+  async function readAI(payload) {
+    if (!authorized) throw new Error('Entre na sua conta para usar a leitura.');
+    const { data: { session } } = await sb.auth.getSession();
+    if (!session) throw new Error('Sessão expirada. Entre novamente.');
+    const response = await fetch('/api/ler', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${session.access_token}` },
+      body: JSON.stringify(payload),
+    });
+    const data = await response.json().catch(() => ({}));
+    if (!response.ok) throw new Error(data.erro || 'Não foi possível ler os dados.');
+    return data;
+  }
+  window.directRemote = { request: run, readAI, client: sb };
 })();

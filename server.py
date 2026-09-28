@@ -5,7 +5,9 @@ from __future__ import annotations
 import json
 import os
 import re
+import shutil
 import sqlite3
+import subprocess
 from datetime import date, datetime, timezone
 from decimal import Decimal, InvalidOperation
 from http import HTTPStatus
@@ -21,6 +23,17 @@ ROOT = Path(__file__).resolve().parent
 STATIC = ROOT / "static"
 DB_PATH = Path(os.environ.get("DIARISTAS_DB_PATH", ROOT / "data" / "diaristas.db"))
 PORT = int(os.environ.get("DIARISTAS_PORT", "8000"))
+
+
+def local_openai_key():
+    if os.environ.get("OPENAI_API_KEY"):
+        return os.environ["OPENAI_API_KEY"]
+    target = ROOT / ".env.local"
+    if target.is_file():
+        for line in target.read_text().splitlines():
+            if line.startswith("OPENAI_API_KEY="):
+                return line.split("=", 1)[1].strip().strip("\"'")
+    return ""
 DAYS = {"segunda", "terca", "quarta", "quinta", "sexta", "sabado", "domingo"}
 ORDER_STATUSES = {"novo", "em_selecao", "confirmado", "concluido", "cancelado"}
 FORTALEZA = ZoneInfo("America/Fortaleza")
@@ -579,11 +592,11 @@ class Handler(BaseHTTPRequestHandler):
         match = re.fullmatch(r"/api/pedidos/(\d+)/escalas(?:/(\d+))?", urlparse(self.path).path)
         return (int(match.group(1)), int(match.group(2)) if match.group(2) else None) if match else None
 
-    def read_json(self):
+    def read_json(self, max_length=20000):
         if self.headers.get("Content-Type", "").split(";")[0].strip() != "application/json":
             raise ValueError("Envie os dados em JSON.")
         length = int(self.headers.get("Content-Length", "0"))
-        if length < 1 or length > 20000:
+        if length < 1 or length > max_length:
             raise ValueError("O cadastro está vazio ou é grande demais.")
         return json.loads(self.rfile.read(length))
 
@@ -634,7 +647,7 @@ class Handler(BaseHTTPRequestHandler):
             return self.respond(HTTPStatus.OK, [dict(row) for row in rows])
         if path == "/":
             path = "/index.html"
-        assets = {"/index.html": "text/html; charset=utf-8", "/style.css": "text/css; charset=utf-8", "/brand.css": "text/css; charset=utf-8", "/theme.css": "text/css; charset=utf-8", "/mobile.css": "text/css; charset=utf-8", "/app.js": "text/javascript; charset=utf-8", "/theme.js": "text/javascript; charset=utf-8", "/finance.js": "text/javascript; charset=utf-8", "/orders.js": "text/javascript; charset=utf-8", "/stores.js": "text/javascript; charset=utf-8", "/settings.js": "text/javascript; charset=utf-8", "/remote.js": "text/javascript; charset=utf-8", "/vendor/supabase-2.117.2.js": "text/javascript; charset=utf-8", "/stores.css": "text/css; charset=utf-8", "/settings.css": "text/css; charset=utf-8", "/login.css": "text/css; charset=utf-8", "/favicon.svg": "image/svg+xml", "/logo-direct-promocoes.jpg": "image/jpeg", "/logo-direct-promocoes-transparente.png": "image/png"}
+        assets = {"/index.html": "text/html; charset=utf-8", "/style.css": "text/css; charset=utf-8", "/brand.css": "text/css; charset=utf-8", "/theme.css": "text/css; charset=utf-8", "/mobile.css": "text/css; charset=utf-8", "/reading.css": "text/css; charset=utf-8", "/app.js": "text/javascript; charset=utf-8", "/theme.js": "text/javascript; charset=utf-8", "/finance.js": "text/javascript; charset=utf-8", "/orders.js": "text/javascript; charset=utf-8", "/stores.js": "text/javascript; charset=utf-8", "/settings.js": "text/javascript; charset=utf-8", "/reading.js": "text/javascript; charset=utf-8", "/remote.js": "text/javascript; charset=utf-8", "/vendor/supabase-2.117.2.js": "text/javascript; charset=utf-8", "/stores.css": "text/css; charset=utf-8", "/settings.css": "text/css; charset=utf-8", "/login.css": "text/css; charset=utf-8", "/favicon.svg": "image/svg+xml", "/logo-direct-promocoes.jpg": "image/jpeg", "/logo-direct-promocoes-transparente.png": "image/png"}
         if path in assets:
             return self.respond(HTTPStatus.OK, (STATIC / path[1:]).read_bytes(), assets[path])
         return self.respond(HTTPStatus.NOT_FOUND, {"erro": "Página não encontrada."})
@@ -642,6 +655,27 @@ class Handler(BaseHTTPRequestHandler):
     def do_POST(self):
         if not self._allowed_origin():
             return self.respond(HTTPStatus.FORBIDDEN, {"erro": "Acesso não permitido."})
+        if urlparse(self.path).path == "/api/ler":
+            try:
+                payload = self.read_json(max_length=4_200_000)
+                key = local_openai_key()
+                if not key:
+                    return self.respond(HTTPStatus.SERVICE_UNAVAILABLE, {"erro": "A leitura por IA ainda não está configurada neste computador."})
+                node = shutil.which("node") or str(Path.home() / ".cache/codex-runtimes/codex-primary-runtime/dependencies/node/bin/node")
+                if not Path(node).is_file():
+                    return self.respond(HTTPStatus.SERVICE_UNAVAILABLE, {"erro": "Node.js não está disponível para a leitura local."})
+                with connect() as db:
+                    stores = [dict(row) for row in db.execute("SELECT rede, nome FROM lojas")]
+                env = {**os.environ, "OPENAI_API_KEY": key}
+                result = subprocess.run([node, str(ROOT / "scripts/local-ai-runner.cjs")],
+                                        input=json.dumps({"body": payload, "stores": stores}),
+                                        capture_output=True, text=True, timeout=70, env=env, check=True)
+                output = json.loads(result.stdout)
+                return self.respond(output["status"], output["body"])
+            except (ValueError, json.JSONDecodeError, TypeError) as exc:
+                return self.respond(HTTPStatus.BAD_REQUEST, {"erro": str(exc)})
+            except (subprocess.TimeoutExpired, subprocess.CalledProcessError, OSError, KeyError):
+                return self.respond(HTTPStatus.BAD_GATEWAY, {"erro": "Não foi possível concluir a leitura local."})
         if urlparse(self.path).path == "/api/tarifas/setores":
             try:
                 data = validate_sector_tariff(self.read_json())

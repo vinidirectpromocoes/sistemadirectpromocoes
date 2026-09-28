@@ -15,6 +15,7 @@
   <link rel="stylesheet" href="/login.css">
   <link rel="stylesheet" href="/theme.css">
   <link rel="stylesheet" href="/mobile.css">
+  <link rel="stylesheet" href="/reading.css">
   <script src="/vendor/supabase-2.117.2.js" defer></script>
   <script src="/remote.js" defer></script>
   <script src="/app.js" defer></script>
@@ -22,6 +23,7 @@
   <script src="/finance.js" defer></script>
   <script src="/orders.js" defer></script>
   <script src="/settings.js" defer></script>
+  <script src="/reading.js" defer></script>
 </head>
 <body>
   <section id="login-screen" class="login-screen" hidden aria-labelledby="login-title">
@@ -49,6 +51,7 @@
       <nav>
         <a href="#diaristas" id="nav-diaristas" class="nav-active" aria-current="page"><span class="nav-icon" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="9" cy="8" r="3"/><path d="M3.5 20v-2a5.5 5.5 0 0 1 11 0v2H3.5Z"/><path d="M16.5 5.5a3 3 0 0 1 0 5.8M17 14a5 5 0 0 1 3.5 4.8V20h-3"/></svg></span>Diaristas</a>
         <a href="#pedidos" id="nav-pedidos"><span class="nav-icon" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="5" y="4" width="14" height="17" rx="2"/><path d="M9 4.5V3h6v1.5M9 10h6M9 14h6M9 18h4"/></svg></span>Pedidos</a>
+        <a href="#leitura" id="nav-leitura"><span class="nav-icon" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M5 3h9l5 5v13H5V3Z"/><path d="M14 3v5h5M8 13h8M8 17h5"/><path d="m17 14 1 2 2 1-2 1-1 2-1-2-2-1 2-1 1-2Z"/></svg></span>Leitura IA</a>
         <a href="#redes" id="nav-redes"><span class="nav-icon" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M3 9h18l-2-5H5L3 9ZM4 9v11h16V9M9 20v-7h6v7"/><path d="M3 9c0 1.7 1.4 3 3 3s3-1.3 3-3c0 1.7 1.4 3 3 3s3-1.3 3-3c0 1.7 1.4 3 3 3s3-1.3 3-3"/></svg></span>Redes e lojas</a>
         <a href="#financeiro" id="nav-financeiro"><span class="nav-icon" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M20 8V6a2 2 0 0 0-2-2H6a3 3 0 0 0-3 3v10a3 3 0 0 0 3 3h14V8H6a3 3 0 0 1-3-3"/><path d="M20 11h-6a3 3 0 0 0 0 6h6M16 14h.01"/></svg></span>Financeiro</a>
         <a href="#configuracoes" id="nav-configuracoes"><span class="nav-icon" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 6h16M4 12h16M4 18h16"/><circle cx="9" cy="6" r="2" fill="currentColor" stroke="none"/><circle cx="15" cy="12" r="2" fill="currentColor" stroke="none"/><circle cx="10" cy="18" r="2" fill="currentColor" stroke="none"/></svg></span>Configurações</a>
@@ -83,6 +86,27 @@
         <div id="empty-state" class="empty-state" hidden><div class="empty-illustration" aria-hidden="true">◫</div><h3>Nenhuma diarista cadastrada</h3><p>Comece adicionando as informações da primeira profissional.</p><button class="button button-outline" id="empty-new-button" type="button">Cadastrar diarista</button></div>
         <div id="no-results" class="empty-state compact" hidden><h3>Nenhum resultado encontrado</h3><p>Tente buscar por outro nome, CPF ou setor.</p></div>
         <div class="table-scroll" id="table-wrap" hidden><table><thead><tr><th>DIARISTA</th><th>EXPERIÊNCIA</th><th>BAIRRO</th><th>SITUAÇÃO</th><th><span class="sr-only">Ver ficha</span></th></tr></thead><tbody id="rows"></tbody></table></div>
+      </section>
+    </main>
+    <main class="main-content" id="leitura-page" hidden>
+      <header class="page-header">
+        <div><div class="eyebrow">OPERAÇÃO <span>/</span> LEITURA IA</div><h1>Leitura inteligente</h1><p>Cole uma mensagem ou envie uma foto ou PDF de um cadastro ou pedido.</p></div>
+      </header>
+      <section class="list-card reading-card" aria-labelledby="reading-title">
+        <div class="reading-heading"><div class="reading-icon" aria-hidden="true">✦</div><div><h2 id="reading-title">Identificar informações</h2><p>Os dados são enviados à OpenAI para leitura. Revise o resultado antes de salvar.</p></div></div>
+        <form id="reading-form" class="reading-form">
+          <fieldset class="reading-kind"><legend>O que deseja registrar?</legend><div class="reading-options"><label><input type="radio" name="reading-kind" value="automatico" checked> Identificar automaticamente</label><label><input type="radio" name="reading-kind" value="diarista"> Diarista</label><label><input type="radio" name="reading-kind" value="pedido"> Pedido</label></div></fieldset>
+          <label for="reading-text">Texto da mensagem<textarea id="reading-text" maxlength="12000" rows="8" placeholder="Cole aqui os dados recebidos por WhatsApp ou outro canal..."></textarea></label>
+          <div class="reading-upload-row"><label for="reading-file" class="reading-upload"><span aria-hidden="true">⌁</span> Anexar foto ou PDF<input id="reading-file" type="file" accept="image/*,application/pdf" hidden></label><span id="reading-file-name">Nenhum arquivo selecionado · PDF até 3 MB; fotos ajustadas automaticamente</span><button id="reading-remove-file" class="button button-quiet" type="button" hidden>Remover</button></div>
+          <div id="reading-feedback" class="feedback" role="status" aria-live="polite" hidden></div>
+          <div class="reading-actions"><button id="reading-submit" class="button button-primary" type="submit">✦ Ler dados</button></div>
+        </form>
+      </section>
+      <section id="reading-result" class="list-card reading-result" aria-labelledby="reading-result-title" hidden>
+        <div class="reading-result-heading"><div><span class="eyebrow">PRÉVIA PARA CONFERÊNCIA</span><h2 id="reading-result-title">Dados encontrados</h2><p id="reading-result-summary"></p></div><span id="reading-result-type" class="reading-type"></span></div>
+        <div id="reading-result-fields" class="reading-result-fields"></div>
+        <div id="reading-result-warnings" class="reading-warnings" hidden></div>
+        <div class="reading-result-actions"><button id="reading-review" class="button button-outline" type="button">Revisar e editar</button><button id="reading-register" class="button button-primary" type="button" hidden>Confirmar e registrar</button></div>
       </section>
     </main>
     <main class="main-content" id="financeiro-page" hidden>

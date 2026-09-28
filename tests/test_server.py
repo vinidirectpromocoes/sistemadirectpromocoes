@@ -98,6 +98,8 @@ class CadastroTest(unittest.TestCase):
             ("/stores.css", "text/css; charset=utf-8"),
             ("/settings.js", "text/javascript; charset=utf-8"),
             ("/settings.css", "text/css; charset=utf-8"),
+            ("/reading.js", "text/javascript; charset=utf-8"),
+            ("/reading.css", "text/css; charset=utf-8"),
             ("/logo-direct-promocoes.jpg", "image/jpeg"),
             ("/favicon.svg", "image/svg+xml"),
         ]:
