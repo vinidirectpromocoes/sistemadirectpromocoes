@@ -10,6 +10,19 @@ const orderStatusLabels = {
   concluido: 'Concluído', cancelado: 'Cancelado',
 };
 const orderPlural = (count, one, many) => `${count} ${count === 1 ? one : many}`;
+const orderWeekdays = ['domingo', 'segunda', 'terca', 'quarta', 'quinta', 'sexta', 'sabado'];
+
+function workerAvailableForShift(worker, shift) {
+  const weekday = orderWeekdays[new Date(`${shift.data}T12:00:00`).getDay()];
+  return Array.isArray(worker.disponibilidade) && worker.disponibilidade.some(slot =>
+    slot.dia === weekday && slot.inicio <= shift.inicio && slot.fim >= shift.fim
+  );
+}
+
+function orderToday() {
+  const parts = Object.fromEntries(new Intl.DateTimeFormat('en-US', { timeZone: 'America/Fortaleza', year: 'numeric', month: '2-digit', day: '2-digit' }).formatToParts(new Date()).map(part => [part.type, part.value]));
+  return `${parts.year}-${parts.month}-${parts.day}`;
+}
 
 function showOrderFeedback(message, isError = false) {
   const box = $('#orders-feedback');
@@ -204,6 +217,7 @@ async function addOrderWorker(data, select) {
 
 async function changeOrderAttendance(scale, status) {
   if (orderDetailBusy || scale.status === status) return;
+  if (['presente', 'falta'].includes(status) && scale.data > orderToday()) return orderDetailError('Presença ou falta só pode ser registrada a partir da data da diária.');
   if (scale.status === 'presente' && status === 'falta' && scale.diaria?.data_pagamento) {
     return orderDetailError('Essa diária já foi paga. Abra Pagamento, retire a data do pagamento e depois corrija para falta.');
   }
@@ -260,7 +274,8 @@ function renderOrderShifts() {
       for (const [status, label] of [['presente', 'Presença'], ['falta', 'Falta']]) {
         const button = document.createElement('button'); button.type = 'button';
         button.className = `order-attendance-button ${status}${scale.status === status ? ' selected' : ''}`;
-        button.textContent = label; button.disabled = scale.status === status;
+        button.textContent = label; button.disabled = scale.status === status || shift.data > orderToday();
+        if (shift.data > orderToday()) button.title = 'Registro disponível a partir da data da diária.';
         button.setAttribute('aria-label', `${label} de ${scale.diarista_nome} em ${dateLabel(shift.data)}`);
         button.addEventListener('click', () => changeOrderAttendance(scale, status)); actions.append(button);
       }
@@ -291,7 +306,7 @@ function renderOrderShifts() {
       const picker = document.createElement('div'); picker.className = 'order-worker-picker';
       const select = document.createElement('select'); select.setAttribute('aria-label', `Escolher diarista para ${dateLabel(shift.data)}`);
       const placeholder = document.createElement('option'); placeholder.value = ''; placeholder.textContent = 'Selecione uma diarista'; select.append(placeholder);
-      orderWorkers.filter(worker => !worker.bloqueada && !scales.some(scale => scale.diarista_id === worker.id)).forEach(worker => {
+      orderWorkers.filter(worker => !worker.bloqueada && workerAvailableForShift(worker, shift) && !scales.some(scale => scale.diarista_id === worker.id)).forEach(worker => {
         const option = document.createElement('option'); option.value = String(worker.id); option.textContent = worker.nome; select.append(option);
       });
       const add = document.createElement('button'); add.type = 'button'; add.className = 'button button-outline'; add.textContent = 'Escalar';

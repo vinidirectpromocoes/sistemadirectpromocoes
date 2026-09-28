@@ -12,6 +12,7 @@ from http import HTTPStatus
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from urllib.parse import urlparse
+from zoneinfo import ZoneInfo
 
 from catalogo_lojas import LOJAS
 
@@ -22,6 +23,8 @@ DB_PATH = Path(os.environ.get("DIARISTAS_DB_PATH", ROOT / "data" / "diaristas.db
 PORT = int(os.environ.get("DIARISTAS_PORT", "8000"))
 DAYS = {"segunda", "terca", "quarta", "quinta", "sexta", "sabado", "domingo"}
 ORDER_STATUSES = {"novo", "em_selecao", "confirmado", "concluido", "cancelado"}
+FORTALEZA = ZoneInfo("America/Fortaleza")
+WEEKDAYS = ("segunda", "terca", "quarta", "quinta", "sexta", "sabado", "domingo")
 
 
 def connect():
@@ -71,6 +74,7 @@ def init_db():
             valor_centavos INTEGER,
             vencimento_pagamento TEXT,
             forma_pagamento TEXT NOT NULL DEFAULT '',
+            motivo_ajuste TEXT NOT NULL DEFAULT '',
             criado_em TEXT NOT NULL
         )""")
         daily_columns = {row["name"] for row in db.execute("PRAGMA table_info(diarias)")}
@@ -79,6 +83,7 @@ def init_db():
             "valor_centavos": "INTEGER",
             "vencimento_pagamento": "TEXT",
             "forma_pagamento": "TEXT NOT NULL DEFAULT ''",
+            "motivo_ajuste": "TEXT NOT NULL DEFAULT ''",
             "pedido_escala_id": "INTEGER",
         }.items():
             if column not in daily_columns:
@@ -95,10 +100,14 @@ def init_db():
             data_pagamento TEXT,
             forma_pagamento TEXT NOT NULL DEFAULT '',
             observacoes TEXT NOT NULL DEFAULT '',
+            motivo_ajuste TEXT NOT NULL DEFAULT '',
             criado_em TEXT NOT NULL,
             atualizado_em TEXT NOT NULL
         )""")
         db.execute("CREATE INDEX IF NOT EXISTS idx_financeiro_vencimento ON financeiro_lancamentos(vencimento)")
+        finance_columns = {row["name"] for row in db.execute("PRAGMA table_info(financeiro_lancamentos)")}
+        if "motivo_ajuste" not in finance_columns:
+            db.execute("ALTER TABLE financeiro_lancamentos ADD COLUMN motivo_ajuste TEXT NOT NULL DEFAULT ''")
         db.execute("""CREATE TABLE IF NOT EXISTS pedidos (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             supermercado TEXT NOT NULL,
@@ -141,6 +150,25 @@ def init_db():
             UNIQUE(rede, nome)
         )""")
         db.execute("CREATE INDEX IF NOT EXISTS idx_lojas_rede_cidade ON lojas(rede, cidade)")
+        db.execute("""CREATE TABLE IF NOT EXISTS direct_auditoria (
+            id INTEGER PRIMARY KEY AUTOINCREMENT, tabela TEXT NOT NULL, registro_id INTEGER NOT NULL,
+            operacao TEXT NOT NULL, antes TEXT, depois TEXT, email_autor TEXT NOT NULL DEFAULT 'Servidor local',
+            alterado_em TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+        )""")
+        for table, fields in {
+            "diarias": ("id", "diarista_id", "data", "local", "setor", "valor_centavos", "vencimento_pagamento", "data_pagamento", "forma_pagamento", "motivo_ajuste"),
+            "financeiro_lancamentos": ("id", "tipo", "descricao", "contraparte", "valor_centavos", "vencimento", "data_pagamento", "forma_pagamento", "motivo_ajuste"),
+            "pedido_escalas": ("id", "pedido_id", "diarista_id", "data", "status"),
+        }.items():
+            for event in ("INSERT", "UPDATE", "DELETE"):
+                old_json = "json_object(" + ", ".join(f"'{field}', OLD.{field}" for field in fields) + ")" if event != "INSERT" else "NULL"
+                new_json = "json_object(" + ", ".join(f"'{field}', NEW.{field}" for field in fields) + ")" if event != "DELETE" else "NULL"
+                row_id = "OLD.id" if event == "DELETE" else "NEW.id"
+                db.execute(f"""CREATE TRIGGER IF NOT EXISTS audit_{table}_{event.lower()}
+                    AFTER {event} ON {table} BEGIN
+                    INSERT INTO direct_auditoria (tabela, registro_id, operacao, antes, depois)
+                    VALUES ('{table}', {row_id}, '{event}', {old_json}, {new_json});
+                    END""")
         now = datetime.now(timezone.utc).isoformat()
         db.executemany("""INSERT OR IGNORE INTO lojas
             (rede, nome, endereco, bairro, cidade, fonte_url, situacao, observacao, criado_em, atualizado_em)
@@ -264,12 +292,21 @@ def money_cents(value, required=False):
 
 
 def validate_daily_finance(payload):
-    return {
+    result = {
         "data_pagamento": validate_date(payload.get("data_pagamento"), "o pagamento", False),
         "valor_centavos": money_cents(payload.get("valor")),
         "vencimento_pagamento": validate_date(payload.get("vencimento_pagamento"), "o vencimento", False),
         "forma_pagamento": clean_text(payload.get("forma_pagamento", ""), "a forma de pagamento", 80, False),
     }
+    validate_payment_consistency(result["data_pagamento"], result["valor_centavos"], result["vencimento_pagamento"])
+    return result
+
+
+def validate_payment_consistency(paid, amount, due):
+    if paid and amount is None:
+        raise ValueError("Informe o valor da diária paga.")
+    if amount is not None and not paid and not due:
+        raise ValueError("Informe o vencimento da diária pendente com valor.")
 
 
 def validate_diaria(payload):
@@ -300,6 +337,7 @@ def validate_finance_entry(payload):
         "data_pagamento": validate_date(payload.get("data_pagamento"), "o pagamento", False),
         "forma_pagamento": clean_text(payload.get("forma_pagamento", ""), "a forma de pagamento", 80, False),
         "observacoes": clean_text(payload.get("observacoes", ""), "as observações", 500, False),
+        "motivo_ajuste": clean_text(payload.get("motivo_ajuste", ""), "o motivo da correção", 300, False),
     }
 
 
@@ -378,6 +416,27 @@ def public_scale(row):
     if item["diaria"]:
         item["diaria"]["id"] = item["diaria"].pop("diaria_id")
     return item
+
+
+def order_shift(order, day):
+    return next((shift for shift in json.loads(order["turnos"]) if shift["data"] == day), None)
+
+
+def validate_worker_shift(db, worker, order, day):
+    shift = order_shift(order, day)
+    if shift is None:
+        raise ValueError("A data escolhida não consta no pedido.")
+    weekday = WEEKDAYS[date.fromisoformat(day).weekday()]
+    slots = json.loads(worker["disponibilidade"])
+    if not any(slot["dia"] == weekday and slot["inicio"] <= shift["inicio"] and slot["fim"] >= shift["fim"] for slot in slots):
+        raise ValueError("A diarista não está disponível nesse dia e horário.")
+    other_scales = db.execute("""SELECT e.data, p.turnos FROM pedido_escalas e
+        JOIN pedidos p ON p.id = e.pedido_id
+        WHERE e.diarista_id = ? AND e.data = ? AND e.status != 'falta'""", (worker["id"], day))
+    for other in other_scales:
+        existing = order_shift(other, day)
+        if existing and shift["inicio"] < existing["fim"] and existing["inicio"] < shift["fim"]:
+            raise ValueError("A diarista já está escalada em outro pedido nesse horário.")
 
 
 def order_scale_rows(db, order_id):
@@ -467,6 +526,14 @@ class Handler(BaseHTTPRequestHandler):
             return self.respond(HTTPStatus.OK, [public_row(row) for row in rows])
         if path == "/api/financeiro":
             return self.respond(HTTPStatus.OK, finance_rows())
+        if path == "/api/auditoria":
+            with connect() as db:
+                rows = db.execute("SELECT * FROM direct_auditoria ORDER BY id DESC LIMIT 100").fetchall()
+            return self.respond(HTTPStatus.OK, [
+                {**dict(row), "antes": json.loads(row["antes"]) if row["antes"] else None,
+                 "depois": json.loads(row["depois"]) if row["depois"] else None}
+                for row in rows
+            ])
         if path == "/api/pedidos":
             with connect() as db:
                 rows = db.execute("SELECT * FROM pedidos ORDER BY id DESC").fetchall()
@@ -514,6 +581,7 @@ class Handler(BaseHTTPRequestHandler):
                         raise ValueError("A data escolhida não consta no pedido.")
                     if not person or person["bloqueada"]:
                         raise ValueError("Escolha uma diarista cadastrada e não bloqueada.")
+                    validate_worker_shift(db, person, order, day)
                     count = db.execute("SELECT count(*) FROM pedido_escalas WHERE pedido_id = ? AND data = ? AND status != 'falta'", (scale_route[0], day)).fetchone()[0]
                     if count >= order["quantidade_diaristas"]:
                         raise ValueError("A quantidade de diaristas deste dia já foi preenchida.")
@@ -570,6 +638,8 @@ class Handler(BaseHTTPRequestHandler):
                 with connect() as db:
                     if not db.execute("SELECT 1 FROM diaristas WHERE id = ?", (daily_route[0],)).fetchone():
                         return self.respond(HTTPStatus.NOT_FOUND, {"erro": "Cadastro não encontrado."})
+                    if db.execute("SELECT bloqueada FROM diaristas WHERE id = ?", (daily_route[0],)).fetchone()["bloqueada"]:
+                        return self.respond(HTTPStatus.CONFLICT, {"erro": "Desbloqueie a diarista antes de registrar uma nova diária."})
                     cur = db.execute("INSERT INTO diarias (diarista_id, data, local, setor, observacoes, data_pagamento, valor_centavos, vencimento_pagamento, forma_pagamento, criado_em) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)", (daily_route[0], *data.values(), datetime.now(timezone.utc).isoformat()))
                     row = db.execute("SELECT * FROM diarias WHERE id = ?", (cur.lastrowid,)).fetchone()
                 return self.respond(HTTPStatus.CREATED, dict(row))
@@ -635,6 +705,10 @@ class Handler(BaseHTTPRequestHandler):
                 data = validate_finance_entry(self.read_json())
                 entry_id = int(finance_match.group(1))
                 with connect() as db:
+                    old = db.execute("SELECT * FROM financeiro_lancamentos WHERE id = ?", (entry_id,)).fetchone()
+                    if old and old["data_pagamento"] and any(old[key] != value for key, value in data.items() if key != "motivo_ajuste"):
+                        if len(data["motivo_ajuste"].strip()) < 8 or data["motivo_ajuste"] == old["motivo_ajuste"]:
+                            raise ValueError("Explique a correção do lançamento já liquidado (mínimo de 8 caracteres).")
                     fields = ", ".join(f"{key} = ?" for key in data)
                     cur = db.execute(f"UPDATE financeiro_lancamentos SET {fields}, atualizado_em = ? WHERE id = ?", (*data.values(), datetime.now(timezone.utc).isoformat(), entry_id))
                     if not cur.rowcount:
@@ -677,6 +751,8 @@ class Handler(BaseHTTPRequestHandler):
                         return self.respond(HTTPStatus.NOT_FOUND, {"erro": "Escala não encontrada."})
                     order = db.execute("SELECT * FROM pedidos WHERE id = ?", (scale_route[0],)).fetchone()
                     if status != scale["status"]:
+                        if status in {"presente", "falta"} and scale["data"] > datetime.now(FORTALEZA).date().isoformat():
+                            raise ValueError("Presença ou falta só pode ser registrada a partir da data da diária.")
                         if scale["status"] == "presente":
                             daily = db.execute("SELECT data_pagamento FROM diarias WHERE pedido_escala_id = ?", (scale["id"],)).fetchone()
                             if daily and daily["data_pagamento"]:
@@ -709,7 +785,18 @@ class Handler(BaseHTTPRequestHandler):
                     updates["vencimento_pagamento"] = validate_date(payload["vencimento_pagamento"], "o vencimento", False)
                 if "forma_pagamento" in payload:
                     updates["forma_pagamento"] = clean_text(payload["forma_pagamento"], "a forma de pagamento", 80, False)
+                if "motivo_ajuste" in payload:
+                    updates["motivo_ajuste"] = clean_text(payload["motivo_ajuste"], "o motivo da correção", 300, False)
                 with connect() as db:
+                    old = db.execute("SELECT * FROM diarias WHERE id = ? AND diarista_id = ?", (int(payment_match.group(2)), int(payment_match.group(1)))).fetchone()
+                    if not old:
+                        return self.respond(HTTPStatus.NOT_FOUND, {"erro": "Diária não encontrada."})
+                    effective = {key: updates.get(key, old[key]) for key in ("data_pagamento", "valor_centavos", "vencimento_pagamento")}
+                    validate_payment_consistency(effective["data_pagamento"], effective["valor_centavos"], effective["vencimento_pagamento"])
+                    if old["data_pagamento"] and any(old[key] != value for key, value in updates.items() if key != "motivo_ajuste"):
+                        reason = updates.get("motivo_ajuste", "")
+                        if len(reason.strip()) < 8 or reason == old["motivo_ajuste"]:
+                            raise ValueError("Explique a correção da diária já paga (mínimo de 8 caracteres).")
                     fields = ", ".join(f"{key} = ?" for key in updates)
                     cur = db.execute(f"UPDATE diarias SET {fields} WHERE id = ? AND diarista_id = ?", (*updates.values(), int(payment_match.group(2)), int(payment_match.group(1))))
                     if not cur.rowcount:
@@ -757,6 +844,9 @@ class Handler(BaseHTTPRequestHandler):
         finance_match = re.fullmatch(r"/api/financeiro/(\d+)", urlparse(self.path).path)
         if finance_match:
             with connect() as db:
+                old = db.execute("SELECT data_pagamento FROM financeiro_lancamentos WHERE id = ?", (int(finance_match.group(1)),)).fetchone()
+                if old and old["data_pagamento"]:
+                    return self.respond(HTTPStatus.CONFLICT, {"erro": "Este lançamento já foi liquidado. Registre uma correção com motivo."})
                 cur = db.execute("DELETE FROM financeiro_lancamentos WHERE id = ?", (int(finance_match.group(1)),))
             return self.respond(HTTPStatus.OK if cur.rowcount else HTTPStatus.NOT_FOUND, {"ok": bool(cur.rowcount)})
         daily_route = self.route_diarias()

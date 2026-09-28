@@ -9,6 +9,7 @@ let detailId = null;
 let paymentDailyId = null;
 let paymentDiaristaId = null;
 let paymentOrigin = 'detail';
+let paymentWasPaid = false;
 let financeRecords = [];
 let financeEditingId = null;
 
@@ -277,6 +278,8 @@ function renderDetail(record) {
   explanation.textContent = record.bloqueada ? 'Cadastro bloqueado para novas diárias.' : 'Cadastro ativo para novas diárias.';
   status.replaceChildren(badge, explanation);
   $('#block-button').textContent = record.bloqueada ? 'Desbloquear' : 'Bloquear';
+  $('#add-daily-button').disabled = record.bloqueada;
+  $('#add-daily-button').title = record.bloqueada ? 'Desbloqueie a diarista para registrar uma nova diária.' : '';
   const schedule = record.disponibilidade.map(slot => {
     const label = days.find(([key]) => key === slot.dia)?.[1] || slot.dia;
     return `${label}: ${slot.inicio} às ${slot.fim}`;
@@ -363,6 +366,10 @@ async function toggleBlock() {
 
 function startDaily() {
   if (!detailId) return;
+  if (records.find(item => item.id === detailId)?.bloqueada) {
+    showFeedback('Desbloqueie a diarista antes de registrar uma nova diária.', true);
+    return;
+  }
   $('#detail-dialog').close();
   $('#daily-form').reset();
   $('#daily-error').hidden = true;
@@ -383,6 +390,7 @@ async function saveDaily(event) {
   event.preventDefault();
   const data = { data: $('#daily-date').value, setor: $('#daily-sector').value.trim(), local: $('#daily-place').value.trim(), data_pagamento: $('#daily-payment-date').value || null, valor: $('#daily-value').value || null, vencimento_pagamento: $('#daily-due').value || null, forma_pagamento: $('#daily-method').value.trim(), observacoes: $('#daily-notes').value.trim() };
   if (!data.data || !data.setor || !data.local) { $('#daily-error').textContent = 'Preencha data, setor e local da diária.'; $('#daily-error').hidden = false; return; }
+  if ((data.data_pagamento && !data.valor) || (data.valor && !data.data_pagamento && !data.vencimento_pagamento)) { $('#daily-error').textContent = 'Informe valor para uma diária paga e vencimento para uma diária pendente com valor.'; $('#daily-error').hidden = false; return; }
   const button = $('#daily-save-button'); button.disabled = true;
   try {
     await request(`/api/diaristas/${detailId}/diarias`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(data) });
@@ -398,6 +406,7 @@ function startPayment(item, origin = 'detail') {
   paymentDailyId = item.id;
   paymentDiaristaId = item.diarista_id || detailId;
   paymentOrigin = origin;
+  paymentWasPaid = Boolean(item.data_pagamento);
   if ($('#detail-dialog').open) $('#detail-dialog').close();
   $('#payment-form').reset();
   $('#payment-error').hidden = true;
@@ -406,6 +415,9 @@ function startPayment(item, origin = 'detail') {
   $('#payment-due').value = item.vencimento_pagamento || '';
   $('#payment-date').value = item.data_pagamento || '';
   $('#payment-method').value = item.forma_pagamento || '';
+  $('#payment-reason').value = '';
+  $('#payment-reason-wrap').hidden = !paymentWasPaid;
+  $('#payment-reason').required = paymentWasPaid;
   $('#payment-dialog').showModal();
   (item.valor_centavos == null ? $('#payment-value') : $('#payment-date')).focus();
 }
@@ -419,11 +431,17 @@ function cancelPayment() {
 
 async function savePayment(event) {
   event.preventDefault();
+  if ($('#payment-date').value && !$('#payment-value').value || $('#payment-value').value && !$('#payment-date').value && !$('#payment-due').value) {
+    $('#payment-error').textContent = 'Informe valor para um pagamento feito e vencimento para uma diária pendente com valor.'; $('#payment-error').hidden = false; return;
+  }
+  if (paymentWasPaid && $('#payment-reason').value.trim().length < 8) {
+    $('#payment-error').textContent = 'Explique a correção do pagamento já registrado com pelo menos 8 caracteres.'; $('#payment-error').hidden = false; return;
+  }
   const button = $('#payment-save-button'); button.disabled = true;
   try {
     await request(`/api/diaristas/${paymentDiaristaId}/diarias/${paymentDailyId}/pagamento`, {
       method: 'PATCH', headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ data_pagamento: $('#payment-date').value || null, valor: $('#payment-value').value || null, vencimento_pagamento: $('#payment-due').value || null, forma_pagamento: $('#payment-method').value.trim() }),
+      body: JSON.stringify({ data_pagamento: $('#payment-date').value || null, valor: $('#payment-value').value || null, vencimento_pagamento: $('#payment-due').value || null, forma_pagamento: $('#payment-method').value.trim(), motivo_ajuste: $('#payment-reason').value.trim() }),
     });
     $('#payment-dialog').close();
     if (paymentOrigin === 'detail') await openDetail(detailId);

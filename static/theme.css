@@ -65,6 +65,7 @@ html[data-theme="dark"] {
   color: var(--dark-text);
   background: var(--dark-bg);
 }
+html[data-theme="dark"] .finance-audit-item pre { background: #101c2e; color: #edf4ff; }
 html[data-theme="dark"] body { background: var(--dark-bg); color: var(--dark-text); }
 html[data-theme="dark"] .sidebar {
   background: linear-gradient(160deg, #070f24 0%, #0d1d3f 68%, #123a72 100%);

@@ -2,6 +2,7 @@ import json
 import tempfile
 import threading
 import unittest
+from datetime import datetime, timedelta
 from http.server import ThreadingHTTPServer
 from pathlib import Path
 from urllib.error import HTTPError
@@ -114,6 +115,8 @@ class CadastroTest(unittest.TestCase):
         invalid = {"data": "2026-02-30", "local": "Evento", "setor": "Promoção", "observacoes": ""}
         self.assertEqual(self.call("POST", f"/api/diaristas/{record_id}/diarias", invalid)[0], 400)
         daily = {"data": "2026-09-20", "local": "Centro de eventos", "setor": "Promoção", "observacoes": "Turno da manhã", "valor": "150.50", "vencimento_pagamento": "2026-09-25", "forma_pagamento": "Pix"}
+        self.assertEqual(self.call("POST", f"/api/diaristas/{record_id}/diarias", daily)[0], 409)
+        self.assertFalse(self.call("PATCH", f"/api/diaristas/{record_id}/bloqueio", {"bloqueada": False})[1]["bloqueada"])
         status, created_daily = self.call("POST", f"/api/diaristas/{record_id}/diarias", daily)
         self.assertEqual(status, 201)
         self.assertEqual(created_daily["local"], "Centro de eventos")
@@ -136,10 +139,10 @@ class CadastroTest(unittest.TestCase):
         self.assertEqual(self.call("DELETE", f"/api/diaristas/{record_id}")[0], 409)
         self.assertEqual(self.call("DELETE", f"/api/diaristas/{record_id}/diarias/{created_daily['id']}")[0], 409)
         self.assertEqual(len(self.call("GET", "/api/financeiro")[1]), 1)
-        self.assertIsNone(self.call("PATCH", payment_path, {"data_pagamento": None})[1]["data_pagamento"])
+        self.assertEqual(self.call("PATCH", payment_path, {"data_pagamento": None})[0], 400)
+        self.assertIsNone(self.call("PATCH", payment_path, {"data_pagamento": None, "motivo_ajuste": "Correção do teste"})[1]["data_pagamento"])
         self.assertEqual(self.call("DELETE", f"/api/diaristas/{record_id}/diarias/{created_daily['id']}")[0], 200)
         self.assertEqual(self.call("GET", f"/api/diaristas/{record_id}/diarias")[1], [])
-        self.assertFalse(self.call("PATCH", f"/api/diaristas/{record_id}/bloqueio", {"bloqueada": False})[1]["bloqueada"])
 
     def test_payment_date_migration_keeps_existing_history(self):
         _, person = self.call("POST", "/api/diaristas", SAMPLE)
@@ -163,6 +166,18 @@ class CadastroTest(unittest.TestCase):
         self.assertIsNone(history[0]["data_pagamento"])
         self.assertIsNone(history[0]["valor_centavos"])
 
+    def test_daily_payment_requires_amount_and_pending_due_date(self):
+        _, person = self.call("POST", "/api/diaristas", SAMPLE)
+        path = f"/api/diaristas/{person['id']}/diarias"
+        daily = {"data": "2026-09-20", "local": "Loja teste", "setor": "Eventos"}
+        self.assertEqual(self.call("POST", path, {**daily, "valor": "90.00"})[0], 400)
+        self.assertEqual(self.call("POST", path, {**daily, "data_pagamento": "2026-09-21"})[0], 400)
+        status, created = self.call("POST", path, {**daily, "valor": "90.00", "vencimento_pagamento": "2026-09-25"})
+        self.assertEqual(status, 201)
+        payment = f"{path}/{created['id']}/pagamento"
+        self.assertEqual(self.call("PATCH", payment, {"vencimento_pagamento": None})[0], 400)
+        self.assertEqual(self.call("PATCH", payment, {"valor": None, "data_pagamento": "2026-09-21"})[0], 400)
+
     def test_manual_finance_create_edit_and_delete(self):
         entry = {
             "tipo": "receita", "descricao": "Serviço de evento", "categoria": "Serviços",
@@ -181,8 +196,12 @@ class CadastroTest(unittest.TestCase):
         status, updated = self.call("PUT", f"/api/financeiro/{created['id']}", paid)
         self.assertEqual(status, 200)
         self.assertEqual(updated["data_pagamento"], "2026-09-29")
+        self.assertEqual(self.call("DELETE", f"/api/financeiro/{created['id']}")[0], 409)
+        self.assertEqual(self.call("PUT", f"/api/financeiro/{created['id']}", {**entry, "motivo_ajuste": "Correção do teste"})[0], 200)
         self.assertEqual(self.call("DELETE", f"/api/financeiro/{created['id']}")[0], 200)
         self.assertEqual(self.call("GET", "/api/financeiro")[1], [])
+        audit = self.call("GET", "/api/auditoria")[1]
+        self.assertEqual([row["operacao"] for row in audit[:4]], ["DELETE", "UPDATE", "UPDATE", "INSERT"])
 
     def test_supermarket_order_with_multiple_days(self):
         order = {
@@ -212,6 +231,32 @@ class CadastroTest(unittest.TestCase):
         self.assertEqual(updated["total_diarias"], 8)
         self.assertEqual(self.call("DELETE", f"/api/pedidos/{created['id']}")[0], 200)
         self.assertEqual(self.call("GET", "/api/pedidos")[1], [])
+
+    def test_scale_respects_availability_conflicts_and_attendance_date(self):
+        _, worker = self.call("POST", "/api/diaristas", SAMPLE)
+        today = datetime.now(server.FORTALEZA).date()
+        next_monday = today + timedelta(days=(7 - today.weekday()))
+        next_tuesday = next_monday + timedelta(days=1)
+
+        def create_order(day, start, end):
+            data = {
+                "supermercado": "Mercado de teste", "unidade": "Centro", "contato": "",
+                "setor": "Eventos", "quantidade_diaristas": 1, "situacao": "novo", "observacoes": "",
+                "turnos": [{"data": day.isoformat(), "inicio": start, "fim": end}],
+            }
+            return self.call("POST", "/api/pedidos", data)[1]
+
+        first = create_order(next_monday, "08:00", "12:00")
+        overlapping = create_order(next_monday, "11:00", "16:00")
+        unavailable = create_order(next_tuesday, "08:00", "12:00")
+        assignment = {"diarista_id": worker["id"], "data": next_monday.isoformat()}
+        status, scale = self.call("POST", f"/api/pedidos/{first['id']}/escalas", assignment)
+        self.assertEqual(status, 201)
+        self.assertEqual(self.call("POST", f"/api/pedidos/{overlapping['id']}/escalas", assignment)[0], 400)
+        self.assertEqual(self.call("POST", f"/api/pedidos/{unavailable['id']}/escalas", {**assignment, "data": next_tuesday.isoformat()})[0], 400)
+        path = f"/api/pedidos/{first['id']}/escalas/{scale['id']}"
+        self.assertEqual(self.call("PATCH", path, {"status": "presente"})[0], 400)
+        self.assertEqual(self.call("PATCH", path, {"status": "falta"})[0], 400)
 
     def test_store_catalog_seed_edit_and_persistence(self):
         status, stores = self.call("GET", "/api/lojas")

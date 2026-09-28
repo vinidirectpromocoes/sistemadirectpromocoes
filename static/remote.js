@@ -112,7 +112,7 @@
       tipo: p.tipo, descricao: p.descricao, categoria: p.categoria, contraparte: p.contraparte,
       valor_centavos: money(p.valor), vencimento: p.vencimento,
       data_pagamento: p.data_pagamento || null, forma_pagamento: p.forma_pagamento || '',
-      observacoes: p.observacoes || ''
+      observacoes: p.observacoes || '', motivo_ajuste: p.motivo_ajuste || ''
     };
   }
   function orderPayload(p) {
@@ -164,7 +164,8 @@
         if (method === 'PATCH' && parts[5] === 'pagamento') {
           return unwrap(await sb.from('diarias').update({
             data_pagamento: p.data_pagamento || null, valor_centavos: money(p.valor),
-            vencimento_pagamento: p.vencimento_pagamento || null, forma_pagamento: p.forma_pagamento || ''
+            vencimento_pagamento: p.vencimento_pagamento || null, forma_pagamento: p.forma_pagamento || '',
+            motivo_ajuste: p.motivo_ajuste || ''
           }).eq('id', dailyId).eq('diarista_id', id).select().single());
         }
         if (method === 'DELETE') {
@@ -189,7 +190,14 @@
       if (method === 'GET') return financeRows();
       if (method === 'POST') return unwrap(await sb.from('financeiro_lancamentos').insert(financePayload(p)).select().single());
       if (method === 'PUT') return unwrap(await sb.from('financeiro_lancamentos').update({ ...financePayload(p), atualizado_em: new Date().toISOString() }).eq('id', id).select().single());
-      if (method === 'DELETE') { unwrap(await sb.from('financeiro_lancamentos').delete().eq('id', id)); return { ok: true }; }
+      if (method === 'DELETE') {
+        const current = unwrap(await sb.from('financeiro_lancamentos').select('data_pagamento').eq('id', id).single());
+        if (current.data_pagamento) throw new Error('Este lançamento já foi liquidado. Registre uma correção com motivo.');
+        unwrap(await sb.from('financeiro_lancamentos').delete().eq('id', id)); return { ok: true };
+      }
+    }
+    if (entity === 'auditoria' && method === 'GET') {
+      return unwrap(await sb.from('direct_auditoria').select('id,tabela,registro_id,operacao,antes,depois,email_autor,alterado_em').order('id', { ascending: false }).limit(100));
     }
     if (entity === 'pedidos') {
       if (child === 'escalas') {

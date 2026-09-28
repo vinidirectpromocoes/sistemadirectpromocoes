@@ -17,6 +17,7 @@ function showFinanceFeedback(message, isError = false) {
 function financeStatus(item) {
   if (item.valor_centavos == null) return { label: 'Sem valor', style: 'incomplete' };
   if (item.data_pagamento) return { label: item.tipo === 'receita' ? 'Recebido' : 'Pago', style: 'settled' };
+  if (item.origem === 'diaria' && !item.vencimento) return { label: 'Sem vencimento', style: 'incomplete' };
   if (item.vencimento && item.vencimento < financeToday()) return { label: 'Atrasado', style: 'overdue' };
   return { label: item.tipo === 'receita' ? 'A receber' : 'A pagar', style: 'open' };
 }
@@ -37,6 +38,7 @@ function filteredFinanceRows() {
     if (status === 'pago' && !item.data_pagamento) return false;
     if (status === 'pendente' && item.data_pagamento) return false;
     if (status === 'sem-valor' && item.valor_centavos != null) return false;
+    if (status === 'sem-vencimento' && !(item.origem === 'diaria' && !item.data_pagamento && item.valor_centavos != null && !item.vencimento)) return false;
     if (query && !`${item.descricao} ${item.contraparte} ${item.categoria}`.toLocaleLowerCase('pt-BR').includes(query)) return false;
     return true;
   }).sort((a, b) => financePeriodDate(b).localeCompare(financePeriodDate(a)) || b.id - a.id);
@@ -74,6 +76,7 @@ function financeGroupTotals(items) {
 function financeGroupStatus(items, totals) {
   if (totals.missing) return { label: 'Incompleto', style: 'incomplete' };
   if (totals.paidCount === items.length) return { label: 'Pago', style: 'settled' };
+  if (items.some(item => !item.data_pagamento && item.valor_centavos != null && !item.vencimento)) return { label: 'Sem vencimento', style: 'incomplete' };
   if (totals.paidCount) return { label: 'Parcial', style: 'partial' };
   if (items.some(item => item.vencimento && item.vencimento < financeToday())) return { label: 'Atrasado', style: 'overdue' };
   return { label: 'A pagar', style: 'open' };
@@ -153,15 +156,20 @@ function renderFinance() {
   $('#finance-receivable').textContent = moneyLabel(total('receita', false));
   $('#finance-payable').textContent = moneyLabel(total('despesa', false));
   const missing = financeRecords.filter(item => item.origem === 'diaria' && item.valor_centavos == null).length;
+  const missingDue = financeRecords.filter(item => item.origem === 'diaria' && item.valor_centavos != null && !item.data_pagamento && !item.vencimento).length;
   const warning = $('#finance-warning');
-  warning.hidden = missing === 0;
-  if (missing) {
-    const text = document.createElement('span');
-    text.textContent = `${missing} diária${missing === 1 ? '' : 's'} sem valor informado. Complete esse dado para que os totais reflitam todos os pagamentos.`;
-    const button = document.createElement('button');
-    button.type = 'button'; button.className = 'text-button'; button.textContent = 'Ver diárias';
-    button.addEventListener('click', () => { $('#finance-all-months').checked = true; $('#finance-status-filter').value = 'sem-valor'; renderFinance(); });
-    warning.replaceChildren(text, button);
+  warning.hidden = missing === 0 && missingDue === 0;
+  warning.replaceChildren();
+  for (const [count, label, filter] of [
+    [missing, 'sem valor informado; complete para calcular os totais', 'sem-valor'],
+    [missingDue, 'sem vencimento; informe a data para acompanhar atrasos', 'sem-vencimento'],
+  ]) {
+    if (!count) continue;
+    const note = document.createElement('div');
+    const text = document.createElement('span'); text.textContent = `${count} diária${count === 1 ? '' : 's'} ${label}. `;
+    const button = document.createElement('button'); button.type = 'button'; button.className = 'text-button'; button.textContent = 'Ver diárias';
+    button.addEventListener('click', () => { $('#finance-all-months').checked = true; $('#finance-status-filter').value = filter; renderFinance(); });
+    note.append(text, button); warning.append(note);
   }
 
   visibleFinanceRows = filteredFinanceRows();
@@ -226,10 +234,12 @@ function renderFinance() {
         settle.addEventListener('click', () => openFinanceForm(item, true));
         actions.append(settle);
       }
-      const remove = document.createElement('button'); remove.type = 'button'; remove.className = 'text-button finance-remove';
-      remove.textContent = 'Excluir'; remove.setAttribute('aria-label', `Excluir ${item.descricao}`);
-      remove.addEventListener('click', () => deleteFinanceEntry(item));
-      actions.append(remove);
+      if (!item.data_pagamento) {
+        const remove = document.createElement('button'); remove.type = 'button'; remove.className = 'text-button finance-remove';
+        remove.textContent = 'Excluir'; remove.setAttribute('aria-label', `Excluir ${item.descricao}`);
+        remove.addEventListener('click', () => deleteFinanceEntry(item));
+        actions.append(remove);
+      }
     }
     row.append(actions); body.append(row);
   });
@@ -264,10 +274,13 @@ function openFinanceForm(item = null, markPaid = false) {
     $('#finance-paid').value = item.data_pagamento || (markPaid ? financeToday() : '');
     $('#finance-method').value = item.forma_pagamento || '';
     $('#finance-notes').value = item.observacoes || '';
+    $('#finance-reason').value = '';
   } else {
     $('#finance-due').value = financeToday();
   }
   updateFinanceType();
+  $('#finance-reason-wrap').hidden = !item?.data_pagamento;
+  $('#finance-reason').required = Boolean(item?.data_pagamento);
   $('#finance-dialog').showModal();
   (markPaid ? $('#finance-paid') : $('#finance-value')).focus();
 }
@@ -283,6 +296,7 @@ function financeFormData() {
     data_pagamento: $('#finance-paid').value || null,
     forma_pagamento: $('#finance-method').value,
     observacoes: $('#finance-notes').value,
+    motivo_ajuste: $('#finance-reason').value.trim(),
   };
 }
 
@@ -291,6 +305,11 @@ async function saveFinanceEntry(event) {
   const data = financeFormData();
   if (!data.descricao.trim() || !data.categoria.trim() || !data.contraparte.trim() || !data.valor || !data.vencimento) {
     $('#finance-form-error').textContent = 'Preencha descrição, cliente ou favorecido, categoria, valor e vencimento.';
+    $('#finance-form-error').hidden = false;
+    return;
+  }
+  if ($('#finance-reason').required && data.motivo_ajuste.length < 8) {
+    $('#finance-form-error').textContent = 'Explique a correção deste lançamento já liquidado com pelo menos 8 caracteres.';
     $('#finance-form-error').hidden = false;
     return;
   }
@@ -323,7 +342,7 @@ function exportFinanceCsv() {
   ]);
   const escape = value => {
     let text = String(value ?? '');
-    if (/^[=+@\-]/.test(text)) text = `'${text}`;
+    if (/^[\s\u200b]*[=+@\-]/u.test(text)) text = `\t${text}`;
     return `"${text.replaceAll('"', '""')}"`;
   };
   const csv = '\ufeff' + [headers, ...rows].map(row => row.map(escape).join(';')).join('\r\n');
@@ -331,6 +350,28 @@ function exportFinanceCsv() {
   const link = document.createElement('a'); link.href = url; link.download = `financeiro-direct-${$('#finance-all-months').checked ? 'todos' : $('#finance-month').value}.csv`;
   document.body.append(link); link.click(); link.remove();
   window.setTimeout(() => URL.revokeObjectURL(url), 1000);
+}
+
+async function openFinanceAudit() {
+  const dialog = $('#finance-audit-dialog');
+  const list = $('#finance-audit-list');
+  list.textContent = 'Carregando alterações...';
+  dialog.showModal();
+  try {
+    const rows = await request('/api/auditoria');
+    list.replaceChildren();
+    if (!rows.length) { list.textContent = 'Nenhuma alteração registrada após a ativação da auditoria.'; return; }
+    rows.forEach(item => {
+      const details = document.createElement('details'); details.className = 'finance-audit-item';
+      const summary = document.createElement('summary');
+      const action = { INSERT: 'Cadastro', UPDATE: 'Alteração', DELETE: 'Exclusão' }[item.operacao] || item.operacao;
+      const entity = { diarias: 'Diária', financeiro_lancamentos: 'Lançamento', pedido_escalas: 'Escala' }[item.tabela] || item.tabela;
+      summary.textContent = `${action} · ${entity} #${item.registro_id} · ${new Date(item.alterado_em).toLocaleString('pt-BR')}`;
+      const actor = document.createElement('small'); actor.textContent = `Responsável: ${item.email_autor || 'Processo administrativo'}`;
+      const data = document.createElement('pre'); data.textContent = JSON.stringify({ antes: item.antes, depois: item.depois }, null, 2);
+      details.append(summary, actor, data); list.append(details);
+    });
+  } catch (error) { list.textContent = `Não foi possível carregar o histórico: ${error.message}`; }
 }
 
 function showPage() {
@@ -366,6 +407,9 @@ $('#finance-search').addEventListener('input', renderFinance);
 $('#finance-type-filter').addEventListener('change', renderFinance);
 $('#finance-status-filter').addEventListener('change', renderFinance);
 $('#finance-export-button').addEventListener('click', exportFinanceCsv);
+$('#finance-audit-button').addEventListener('click', openFinanceAudit);
+$('#finance-audit-close').addEventListener('click', () => $('#finance-audit-dialog').close());
+$('#finance-audit-close-bottom').addEventListener('click', () => $('#finance-audit-dialog').close());
 $('#finance-group-close').addEventListener('click', () => $('#finance-group-dialog').close());
 $('#finance-group-close-bottom').addEventListener('click', () => $('#finance-group-dialog').close());
 $('#finance-group-dialog').addEventListener('click', event => {
