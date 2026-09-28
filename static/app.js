@@ -57,12 +57,30 @@ function showFormError(message) {
   box.scrollIntoView({ block: 'nearest' });
 }
 
+let activeRequests = 0;
+let loadingTimer;
 async function request(url, options = {}) {
-  if (window.directRemote) return window.directRemote.request(url, options);
-  const response = await fetch(url, options);
-  const data = await response.json();
-  if (!response.ok) throw new Error(data.erro || 'Não foi possível concluir a operação.');
-  return data;
+  activeRequests += 1;
+  if (activeRequests === 1) {
+    loadingTimer = window.setTimeout(() => {
+      $('#global-loading').hidden = false;
+      $('.app-shell').setAttribute('aria-busy', 'true');
+    }, 140);
+  }
+  try {
+    if (window.directRemote) return await window.directRemote.request(url, options);
+    const response = await fetch(url, options);
+    const data = await response.json();
+    if (!response.ok) throw new Error(data.erro || 'Não foi possível concluir a operação.');
+    return data;
+  } finally {
+    activeRequests -= 1;
+    if (activeRequests === 0) {
+      window.clearTimeout(loadingTimer);
+      $('#global-loading').hidden = true;
+      $('.app-shell').removeAttribute('aria-busy');
+    }
+  }
 }
 
 function createAvailability() {

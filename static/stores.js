@@ -71,8 +71,17 @@ function renderStores() {
       const source = storeElement('a', 'store-source', 'Ver fonte ↗');
       if (item.fonte_url) { source.href = item.fonte_url; source.target = '_blank'; source.rel = 'noopener noreferrer'; info.append(source); }
       const actions = storeElement('div', 'store-actions');
-      const copy = storeElement('button', 'button button-outline store-copy', 'Copiar dados');
+      const copy = storeElement('button', 'button button-outline store-copy');
       copy.type = 'button'; copy.setAttribute('aria-label', `Copiar dados da loja ${item.nome}, ${item.rede}`);
+      copy.title = 'Copiar dados';
+      const copyIcon = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+      copyIcon.setAttribute('viewBox', '0 0 24 24'); copyIcon.setAttribute('fill', 'none'); copyIcon.setAttribute('stroke', 'currentColor');
+      copyIcon.setAttribute('stroke-width', '1.8'); copyIcon.setAttribute('stroke-linecap', 'round'); copyIcon.setAttribute('stroke-linejoin', 'round');
+      copyIcon.setAttribute('aria-hidden', 'true');
+      const copyPath = document.createElementNS('http://www.w3.org/2000/svg', 'path');
+      copyPath.setAttribute('d', 'M8 4h10a2 2 0 0 1 2 2v12a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2Zm-4 4H3v12a2 2 0 0 0 2 2h11');
+      copyIcon.append(copyPath);
+      copy.append(copyIcon, storeElement('span', 'button-label', 'Copiar dados'));
       copy.addEventListener('click', () => copyStore(item));
       const edit = storeElement('button', 'text-button', 'Editar');
       edit.type = 'button'; edit.setAttribute('aria-label', `Editar loja ${item.nome}, ${item.rede}`);

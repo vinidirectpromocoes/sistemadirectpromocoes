@@ -16,6 +16,7 @@
   <link rel="stylesheet" href="/theme.css">
   <link rel="stylesheet" href="/mobile.css">
   <link rel="stylesheet" href="/reading.css">
+  <link rel="stylesheet" href="/motion.css">
   <script src="/vendor/supabase-2.117.2.js" defer></script>
   <script src="/remote.js" defer></script>
   <script src="/app.js" defer></script>
@@ -27,6 +28,7 @@
   <script src="/reading.js" defer></script>
 </head>
 <body>
+  <div id="global-loading" class="global-loading" role="progressbar" aria-label="Carregando dados" hidden><span></span></div>
   <section id="login-screen" class="login-screen" hidden aria-labelledby="login-title">
     <div class="login-card">
       <button id="login-theme-toggle" class="login-theme-toggle" type="button" aria-label="Ativar tema escuro" title="Ativar tema escuro" aria-pressed="false">
@@ -50,12 +52,12 @@
       <div class="brand"><img class="brand-logo" src="/logo-direct-promocoes-transparente.png" alt="Logo da Direct Promoções"><span class="brand-name"><strong>DIRECT</strong><small>PROMOÇÕES</small></span></div>
       <div class="nav-label">GESTÃO</div>
       <nav>
-        <a href="#diaristas" id="nav-diaristas" class="nav-active" aria-current="page"><span class="nav-icon" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="9" cy="8" r="3"/><path d="M3.5 20v-2a5.5 5.5 0 0 1 11 0v2H3.5Z"/><path d="M16.5 5.5a3 3 0 0 1 0 5.8M17 14a5 5 0 0 1 3.5 4.8V20h-3"/></svg></span>Diaristas</a>
-        <a href="#pedidos" id="nav-pedidos"><span class="nav-icon" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="5" y="4" width="14" height="17" rx="2"/><path d="M9 4.5V3h6v1.5M9 10h6M9 14h6M9 18h4"/></svg></span>Pedidos</a>
-        <a href="#leitura" id="nav-leitura"><span class="nav-icon" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M5 3h9l5 5v13H5V3Z"/><path d="M14 3v5h5M8 13h8M8 17h5"/><path d="m17 14 1 2 2 1-2 1-1 2-1-2-2-1 2-1 1-2Z"/></svg></span>Leitura IA</a>
-        <a href="#redes" id="nav-redes"><span class="nav-icon" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M3 9h18l-2-5H5L3 9ZM4 9v11h16V9M9 20v-7h6v7"/><path d="M3 9c0 1.7 1.4 3 3 3s3-1.3 3-3c0 1.7 1.4 3 3 3s3-1.3 3-3c0 1.7 1.4 3 3 3s3-1.3 3-3"/></svg></span>Redes e lojas</a>
-        <a href="#financeiro" id="nav-financeiro"><span class="nav-icon" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M20 8V6a2 2 0 0 0-2-2H6a3 3 0 0 0-3 3v10a3 3 0 0 0 3 3h14V8H6a3 3 0 0 1-3-3"/><path d="M20 11h-6a3 3 0 0 0 0 6h6M16 14h.01"/></svg></span>Financeiro</a>
-        <a href="#configuracoes" id="nav-configuracoes"><span class="nav-icon" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 6h16M4 12h16M4 18h16"/><circle cx="9" cy="6" r="2" fill="currentColor" stroke="none"/><circle cx="15" cy="12" r="2" fill="currentColor" stroke="none"/><circle cx="10" cy="18" r="2" fill="currentColor" stroke="none"/></svg></span>Configurações</a>
+        <a href="#diaristas" id="nav-diaristas" aria-label="Diaristas" data-mobile-label="Equipe" class="nav-active" aria-current="page"><span class="nav-icon" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="9" cy="8" r="3"/><path d="M3.5 20v-2a5.5 5.5 0 0 1 11 0v2H3.5Z"/><path d="M16.5 5.5a3 3 0 0 1 0 5.8M17 14a5 5 0 0 1 3.5 4.8V20h-3"/></svg></span>Diaristas</a>
+        <a href="#pedidos" id="nav-pedidos" aria-label="Pedidos" data-mobile-label="Pedidos"><span class="nav-icon" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="5" y="4" width="14" height="17" rx="2"/><path d="M9 4.5V3h6v1.5M9 10h6M9 14h6M9 18h4"/></svg></span>Pedidos</a>
+        <a href="#leitura" id="nav-leitura" aria-label="Leitura IA" data-mobile-label="Leitura"><span class="nav-icon" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M5 3h9l5 5v13H5V3Z"/><path d="M14 3v5h5M8 13h8M8 17h5"/><path d="m17 14 1 2 2 1-2 1-1 2-1-2-2-1 2-1 1-2Z"/></svg></span>Leitura IA</a>
+        <a href="#redes" id="nav-redes" aria-label="Redes e lojas" data-mobile-label="Lojas"><span class="nav-icon" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M3 9h18l-2-5H5L3 9ZM4 9v11h16V9M9 20v-7h6v7"/><path d="M3 9c0 1.7 1.4 3 3 3s3-1.3 3-3c0 1.7 1.4 3 3 3s3-1.3 3-3c0 1.7 1.4 3 3 3s3-1.3 3-3"/></svg></span>Redes e lojas</a>
+        <a href="#financeiro" id="nav-financeiro" aria-label="Financeiro" data-mobile-label="Finanças"><span class="nav-icon" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M20 8V6a2 2 0 0 0-2-2H6a3 3 0 0 0-3 3v10a3 3 0 0 0 3 3h14V8H6a3 3 0 0 1-3-3"/><path d="M20 11h-6a3 3 0 0 0 0 6h6M16 14h.01"/></svg></span>Financeiro</a>
+        <a href="#configuracoes" id="nav-configuracoes" aria-label="Configurações" data-mobile-label="Ajustes"><span class="nav-icon" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 6h16M4 12h16M4 18h16"/><circle cx="9" cy="6" r="2" fill="currentColor" stroke="none"/><circle cx="15" cy="12" r="2" fill="currentColor" stroke="none"/><circle cx="10" cy="18" r="2" fill="currentColor" stroke="none"/></svg></span>Configurações</a>
       </nav>
       <div class="sidebar-foot">
         <div class="sidebar-status"><span class="status-dot" aria-hidden="true"></span><span id="storage-status">Dados salvos neste computador</span></div>
@@ -74,7 +76,7 @@
     <main class="main-content" id="diaristas-page">
       <header class="page-header">
         <div><div class="eyebrow">CADASTROS <span>/</span> DIARISTAS</div><h1>Diaristas</h1><p>Organize as informações e a disponibilidade da sua equipe.</p></div>
-        <button class="button button-primary" id="new-button" type="button"><span aria-hidden="true">＋</span> Nova diarista</button>
+        <button class="button button-primary" id="new-button" type="button" aria-label="Nova diarista" title="Nova diarista"><span aria-hidden="true">＋</span><span class="button-label">Nova diarista</span></button>
       </header>
       <section class="stats" aria-label="Resumo">
         <div class="stat-card"><span class="stat-icon blue" aria-hidden="true">◫</span><div><span class="stat-label">Total cadastrados</span><strong id="total-count">0</strong></div></div>
@@ -114,7 +116,7 @@
     <main class="main-content" id="financeiro-page" hidden>
       <header class="page-header">
         <div><div class="eyebrow">GESTÃO <span>/</span> FINANCEIRO</div><h1>Financeiro</h1><p>Acompanhe entradas, pagamentos e pendências da empresa.</p></div>
-        <div class="finance-header-actions"><button class="button button-outline" id="finance-audit-button" type="button">Histórico de alterações</button><button class="button button-primary" id="new-finance-button" type="button"><span aria-hidden="true">＋</span> Novo lançamento</button></div>
+        <div class="finance-header-actions"><button class="button button-outline" id="finance-audit-button" type="button" aria-label="Histórico de alterações" title="Histórico de alterações"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 12a9 9 0 1 0 2.6-6.4M3 4v4h4M12 7v5l3 2"/></svg><span class="button-label">Histórico de alterações</span></button><button class="button button-primary" id="new-finance-button" type="button" aria-label="Novo lançamento" title="Novo lançamento"><span aria-hidden="true">＋</span><span class="button-label">Novo lançamento</span></button></div>
       </header>
       <div class="finance-period-bar"><label for="finance-month">Mês de referência</label><input id="finance-month" type="month"><label class="finance-all-months"><input id="finance-all-months" type="checkbox"> Ver todos os meses</label></div>
       <section class="finance-stats" aria-label="Resumo financeiro">
@@ -124,10 +126,17 @@
         <div class="finance-stat"><span>A receber · total</span><strong id="finance-receivable">R$ 0,00</strong></div>
         <div class="finance-stat"><span>A pagar · total</span><strong id="finance-payable">R$ 0,00</strong></div>
       </section>
+      <section class="finance-dashboard" aria-labelledby="finance-dashboard-title">
+        <div class="finance-dashboard-heading"><div><span class="eyebrow">VISÃO GERAL</span><h2 id="finance-dashboard-title">Dashboard financeira</h2><p>Toque em uma fatia ou legenda para filtrar os lançamentos.</p></div><button id="finance-clear-filters" class="button button-quiet" type="button" hidden>Limpar filtros</button></div>
+        <div class="finance-chart-grid">
+          <article class="finance-chart-card"><div><h3>Entradas e saídas</h3><p>Valores conhecidos no período</p></div><div class="finance-chart-body"><div id="finance-type-chart" class="finance-donut" aria-label="Distribuição de entradas e saídas"></div><div id="finance-type-legend" class="finance-chart-legend"></div></div></article>
+          <article class="finance-chart-card"><div><h3>Pagamentos</h3><p>Quantidade de lançamentos</p></div><div class="finance-chart-body"><div id="finance-status-chart" class="finance-donut" aria-label="Distribuição de pagamentos"></div><div id="finance-status-legend" class="finance-chart-legend"></div></div></article>
+        </div>
+      </section>
       <div id="finance-warning" class="finance-warning" hidden></div>
       <section class="list-card finance-list" aria-labelledby="finance-list-title">
         <div class="list-top finance-list-top"><div><h2 id="finance-list-title">Lançamentos</h2><p>Diárias da mesma pessoa aparecem somadas no período selecionado. Abra o grupo para conferir cada pagamento.</p></div></div>
-        <div class="finance-filters"><div class="search-wrap"><span aria-hidden="true">⌕</span><input id="finance-search" type="search" placeholder="Buscar descrição ou pessoa" aria-label="Buscar lançamentos"></div><select id="finance-type-filter" aria-label="Filtrar por tipo"><option value="todos">Entradas e saídas</option><option value="receita">Somente entradas</option><option value="despesa">Somente saídas</option></select><select id="finance-status-filter" aria-label="Filtrar por situação"><option value="todos">Todas as situações</option><option value="pendente">Pendentes</option><option value="pago">Pagos ou recebidos</option><option value="sem-valor">Sem valor informado</option><option value="sem-vencimento">Sem vencimento</option></select><button class="button button-outline" id="finance-export-button" type="button">Exportar CSV</button></div>
+        <div class="finance-filters"><div class="search-wrap"><span aria-hidden="true">⌕</span><input id="finance-search" type="search" placeholder="Buscar descrição ou pessoa" aria-label="Buscar lançamentos"></div><select id="finance-type-filter" aria-label="Filtrar por tipo"><option value="todos">Entradas e saídas</option><option value="receita">Somente entradas</option><option value="despesa">Somente saídas</option></select><select id="finance-status-filter" aria-label="Filtrar por situação"><option value="todos">Todas as situações</option><option value="pendente">Pendentes</option><option value="pago">Pagos ou recebidos</option><option value="sem-valor">Sem valor informado</option><option value="sem-vencimento">Sem vencimento</option></select><button class="button button-outline" id="finance-export-button" type="button" aria-label="Exportar CSV" title="Exportar CSV"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3v12m0 0 4-4m-4 4-4-4M4 17v3h16v-3"/></svg><span class="button-label">Exportar CSV</span></button></div>
         <div id="finance-feedback" class="feedback" role="status" aria-live="polite" hidden></div>
         <div id="finance-empty" class="empty-state compact" hidden><h3>Nenhum lançamento encontrado</h3><p>Altere os filtros ou registre a primeira entrada ou saída.</p></div>
         <div id="finance-table-wrap" class="table-scroll" hidden><table class="finance-table"><thead><tr><th>DESCRIÇÃO</th><th>PESSOA / CLIENTE</th><th>REFERÊNCIA</th><th>TIPO</th><th>VALOR</th><th>SITUAÇÃO</th><th><span class="sr-only">Ações</span></th></tr></thead><tbody id="finance-rows"></tbody></table></div>
@@ -136,7 +145,7 @@
     <main class="main-content" id="pedidos-page" hidden>
       <header class="page-header">
         <div><div class="eyebrow">OPERAÇÃO <span>/</span> PEDIDOS</div><h1>Pedidos dos supermercados</h1><p>Registre a demanda de diaristas por setor, data e horário.</p></div>
-        <button class="button button-primary" id="new-order-button" type="button"><span aria-hidden="true">＋</span> Novo pedido</button>
+        <button class="button button-primary" id="new-order-button" type="button" aria-label="Novo pedido" title="Novo pedido"><span aria-hidden="true">＋</span><span class="button-label">Novo pedido</span></button>
       </header>
       <section class="order-stats" aria-label="Resumo dos pedidos">
         <div class="finance-stat"><span>Pedidos em aberto</span><strong id="orders-open-count">0</strong></div>
@@ -156,7 +165,7 @@
     <main class="main-content" id="redes-page" hidden>
       <header class="page-header">
         <div><div class="eyebrow">CADASTROS <span>/</span> REDES E LOJAS</div><h1>Redes e lojas</h1><p>Consulte as unidades da Grande Fortaleza e copie o local da diária em um clique.</p></div>
-        <button class="button button-primary" id="new-store-button" type="button"><span aria-hidden="true">＋</span> Nova loja</button>
+        <button class="button button-primary" id="new-store-button" type="button" aria-label="Nova loja" title="Nova loja"><span aria-hidden="true">＋</span><span class="button-label">Nova loja</span></button>
       </header>
       <section class="store-overview" aria-label="Resumo de lojas"><div class="finance-stat"><span>Redes cadastradas</span><strong id="store-network-count">6</strong></div><div class="finance-stat"><span>Lojas localizadas</span><strong id="store-total-count">0</strong></div><div class="finance-stat"><span>Endereços para conferir</span><strong id="store-review-count">0</strong></div></section>
       <section class="list-card" aria-labelledby="stores-list-title">

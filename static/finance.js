@@ -28,7 +28,7 @@ function financePeriodDate(item) {
   return item.data_pagamento || item.vencimento || item.referencia;
 }
 
-function filteredFinanceRows() {
+function filteredFinanceRows({ ignoreType = false, ignoreStatus = false } = {}) {
   const month = $('#finance-month').value;
   const allMonths = $('#finance-all-months').checked;
   const type = $('#finance-type-filter').value;
@@ -36,14 +36,91 @@ function filteredFinanceRows() {
   const query = $('#finance-search').value.trim().toLocaleLowerCase('pt-BR');
   return financeRecords.filter(item => {
     if (!allMonths && month && !financePeriodDate(item)?.startsWith(month)) return false;
-    if (type !== 'todos' && item.tipo !== type) return false;
-    if (status === 'pago' && !item.data_pagamento) return false;
-    if (status === 'pendente' && item.data_pagamento) return false;
-    if (status === 'sem-valor' && item.valor_centavos != null) return false;
-    if (status === 'sem-vencimento' && !(item.origem === 'diaria' && !item.data_pagamento && item.valor_centavos != null && !item.vencimento)) return false;
+    if (!ignoreType && type !== 'todos' && item.tipo !== type) return false;
+    if (!ignoreStatus && status === 'pago' && !item.data_pagamento) return false;
+    if (!ignoreStatus && status === 'pendente' && item.data_pagamento) return false;
+    if (!ignoreStatus && status === 'sem-valor' && item.valor_centavos != null) return false;
+    if (!ignoreStatus && status === 'sem-vencimento' && !(item.origem === 'diaria' && !item.data_pagamento && item.valor_centavos != null && !item.vencimento)) return false;
     if (query && !`${item.descricao} ${item.contraparte} ${item.categoria}`.toLocaleLowerCase('pt-BR').includes(query)) return false;
     return true;
-  }).sort((a, b) => financePeriodDate(b).localeCompare(financePeriodDate(a)) || b.id - a.id);
+  }).sort((a, b) => String(financePeriodDate(b) || '').localeCompare(String(financePeriodDate(a) || '')) || b.id - a.id);
+}
+
+function renderFinanceChart(chartId, legendId, segments, centerValue, centerLabel, filterId) {
+  const chart = $(`#${chartId}`);
+  const legend = $(`#${legendId}`);
+  chart.replaceChildren();
+  legend.replaceChildren();
+  const total = segments.reduce((sum, segment) => sum + segment.value, 0);
+  const selected = $(`#${filterId}`).value;
+  const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+  svg.setAttribute('viewBox', '0 0 120 120');
+  svg.setAttribute('role', 'group');
+  svg.setAttribute('aria-label', chart.getAttribute('aria-label'));
+  const circle = (className, color) => {
+    const node = document.createElementNS('http://www.w3.org/2000/svg', 'circle');
+    node.setAttribute('class', className);
+    node.setAttribute('cx', '60'); node.setAttribute('cy', '60'); node.setAttribute('r', '43');
+    node.setAttribute('fill', 'none'); node.setAttribute('stroke', color); node.setAttribute('stroke-width', '15');
+    return node;
+  };
+  svg.append(circle('finance-donut-track', 'currentColor'));
+  const circumference = 2 * Math.PI * 43;
+  let offset = 0;
+  segments.forEach(segment => {
+    const active = selected === segment.filter;
+    if (total && segment.value) {
+      const slice = circle(`finance-donut-slice${active ? ' is-active' : ''}`, segment.color);
+      slice.setAttribute('stroke-dasharray', `${Math.max(0, segment.value / total * circumference - 1)} ${circumference}`);
+      slice.setAttribute('stroke-dashoffset', String(-offset));
+      slice.setAttribute('transform', 'rotate(-90 60 60)');
+      slice.setAttribute('tabindex', '0');
+      slice.setAttribute('role', 'button');
+      slice.setAttribute('aria-label', `${segment.label}: ${segment.display}. ${active ? 'Remover filtro' : 'Filtrar lançamentos'}`);
+      slice.addEventListener('click', () => { $(`#${filterId}`).value = active ? 'todos' : segment.filter; renderFinance(); });
+      slice.addEventListener('keydown', event => {
+        if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); slice.dispatchEvent(new Event('click')); }
+      });
+      svg.append(slice);
+      offset += segment.value / total * circumference;
+    }
+    const button = document.createElement('button');
+    button.type = 'button'; button.className = `finance-legend-button${active ? ' is-active' : ''}`;
+    button.disabled = segment.value === 0;
+    button.setAttribute('aria-pressed', String(active));
+    button.setAttribute('aria-label', `${segment.label}: ${segment.display}. ${active ? 'Remover filtro' : 'Filtrar lançamentos'}`);
+    const dot = document.createElement('span'); dot.className = `finance-legend-dot ${segment.colorClass}`; dot.setAttribute('aria-hidden', 'true');
+    const name = document.createElement('span'); name.textContent = segment.label;
+    const value = document.createElement('strong'); value.textContent = segment.display;
+    button.append(dot, name, value);
+    button.addEventListener('click', () => { $(`#${filterId}`).value = active ? 'todos' : segment.filter; renderFinance(); });
+    legend.append(button);
+  });
+  const center = document.createElement('div'); center.className = 'finance-donut-center';
+  const value = document.createElement('strong'); value.textContent = centerValue;
+  const label = document.createElement('span'); label.textContent = centerLabel;
+  center.append(value, label); chart.append(svg, center);
+}
+
+function renderFinanceCharts() {
+  const typeRows = filteredFinanceRows({ ignoreType: true });
+  const typeAmount = kind => typeRows.reduce((sum, item) => sum + (item.tipo === kind ? item.valor_centavos || 0 : 0), 0);
+  const income = typeAmount('receita');
+  const expense = typeAmount('despesa');
+  const compactMoney = value => `R$ ${new Intl.NumberFormat('pt-BR', { notation: 'compact', maximumFractionDigits: 1 }).format(value / 100)}`;
+  renderFinanceChart('finance-type-chart', 'finance-type-legend', [
+    { label: 'Entradas', value: income, display: moneyLabel(income), color: '#2378eb', colorClass: 'income', filter: 'receita' },
+    { label: 'Saídas', value: expense, display: moneyLabel(expense), color: '#f0a04d', colorClass: 'expense', filter: 'despesa' },
+  ], compactMoney(income + expense), 'valor conhecido', 'finance-type-filter');
+  const statusRows = filteredFinanceRows({ ignoreStatus: true });
+  const settled = statusRows.filter(item => item.data_pagamento).length;
+  const pending = statusRows.length - settled;
+  renderFinanceChart('finance-status-chart', 'finance-status-legend', [
+    { label: 'Liquidados', value: settled, display: String(settled), color: '#22aa84', colorClass: 'settled', filter: 'pago' },
+    { label: 'Pendentes', value: pending, display: String(pending), color: '#e9984b', colorClass: 'pending', filter: 'pendente' },
+  ], String(statusRows.length), statusRows.length === 1 ? 'lançamento' : 'lançamentos', 'finance-status-filter');
+  const anyFilter = $('#finance-all-months').checked || $('#finance-month').value !== financeToday().slice(0, 7) || $('#finance-search').value || $('#finance-type-filter').value !== 'todos' || $('#finance-status-filter').value !== 'todos';
+  $('#finance-clear-filters').hidden = !anyFilter;
 }
 
 function groupedFinanceRows(items) {
@@ -144,9 +221,10 @@ function openFinanceGroup(diaristaId) {
 
 function renderFinance() {
   const month = $('#finance-month').value;
+  const allMonths = $('#finance-all-months').checked;
   const total = (type, paid) => financeRecords.reduce((sum, item) => {
     if (item.tipo !== type || item.valor_centavos == null) return sum;
-    if (paid && item.data_pagamento?.startsWith(month)) return sum + item.valor_centavos;
+    if (paid && item.data_pagamento && (allMonths || item.data_pagamento.startsWith(month))) return sum + item.valor_centavos;
     if (!paid && !item.data_pagamento) return sum + item.valor_centavos;
     return sum;
   }, 0);
@@ -154,6 +232,8 @@ function renderFinance() {
   const outgoing = total('despesa', true);
   $('#finance-in').textContent = moneyLabel(incoming);
   $('#finance-out').textContent = moneyLabel(outgoing);
+  $('#finance-in').previousElementSibling.textContent = allMonths ? 'Entradas realizadas' : 'Entradas no mês';
+  $('#finance-out').previousElementSibling.textContent = allMonths ? 'Saídas realizadas' : 'Saídas no mês';
   $('#finance-balance').textContent = moneyLabel(incoming - outgoing);
   $('#finance-receivable').textContent = moneyLabel(total('receita', false));
   $('#finance-payable').textContent = moneyLabel(total('despesa', false));
@@ -175,6 +255,7 @@ function renderFinance() {
   }
 
   visibleFinanceRows = filteredFinanceRows();
+  renderFinanceCharts();
   $('#finance-empty').hidden = visibleFinanceRows.length !== 0;
   $('#finance-table-wrap').hidden = visibleFinanceRows.length === 0;
   const body = $('#finance-rows'); body.replaceChildren();
@@ -409,6 +490,14 @@ $('#finance-all-months').addEventListener('change', renderFinance);
 $('#finance-search').addEventListener('input', renderFinance);
 $('#finance-type-filter').addEventListener('change', renderFinance);
 $('#finance-status-filter').addEventListener('change', renderFinance);
+$('#finance-clear-filters').addEventListener('click', () => {
+  $('#finance-month').value = financeToday().slice(0, 7);
+  $('#finance-all-months').checked = false;
+  $('#finance-search').value = '';
+  $('#finance-type-filter').value = 'todos';
+  $('#finance-status-filter').value = 'todos';
+  renderFinance();
+});
 $('#finance-export-button').addEventListener('click', exportFinanceCsv);
 $('#finance-audit-button').addEventListener('click', openFinanceAudit);
 $('#finance-audit-close').addEventListener('click', () => $('#finance-audit-dialog').close());
