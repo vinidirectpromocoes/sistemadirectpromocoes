@@ -79,6 +79,7 @@ def init_db():
             "valor_centavos": "INTEGER",
             "vencimento_pagamento": "TEXT",
             "forma_pagamento": "TEXT NOT NULL DEFAULT ''",
+            "pedido_escala_id": "INTEGER",
         }.items():
             if column not in daily_columns:
                 db.execute(f"ALTER TABLE diarias ADD COLUMN {column} {definition}")
@@ -112,6 +113,18 @@ def init_db():
             atualizado_em TEXT NOT NULL
         )""")
         db.execute("CREATE INDEX IF NOT EXISTS idx_pedidos_situacao ON pedidos(situacao)")
+        db.execute("""CREATE TABLE IF NOT EXISTS pedido_escalas (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            pedido_id INTEGER NOT NULL REFERENCES pedidos(id) ON DELETE RESTRICT,
+            diarista_id INTEGER NOT NULL REFERENCES diaristas(id) ON DELETE RESTRICT,
+            data TEXT NOT NULL,
+            status TEXT NOT NULL DEFAULT 'escalada' CHECK (status IN ('escalada', 'presente', 'falta')),
+            criado_em TEXT NOT NULL,
+            atualizado_em TEXT NOT NULL,
+            UNIQUE(pedido_id, data, diarista_id)
+        )""")
+        db.execute("CREATE INDEX IF NOT EXISTS idx_pedido_escalas_pedido_data ON pedido_escalas(pedido_id, data)")
+        db.execute("CREATE UNIQUE INDEX IF NOT EXISTS idx_diarias_pedido_escala ON diarias(pedido_escala_id)")
         db.execute("""CREATE TABLE IF NOT EXISTS lojas (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             rede TEXT NOT NULL,
@@ -357,6 +370,24 @@ def public_order(row):
     return item
 
 
+def public_scale(row):
+    item = dict(row)
+    item["diaria"] = None if item.get("diaria_id") is None else {
+        key: item[key] for key in ("diaria_id", "data_pagamento", "valor_centavos", "vencimento_pagamento", "forma_pagamento")
+    }
+    if item["diaria"]:
+        item["diaria"]["id"] = item["diaria"].pop("diaria_id")
+    return item
+
+
+def order_scale_rows(db, order_id):
+    return [public_scale(row) for row in db.execute("""SELECT e.*, p.nome AS diarista_nome,
+        d.id AS diaria_id, d.data_pagamento, d.valor_centavos, d.vencimento_pagamento, d.forma_pagamento
+        FROM pedido_escalas e JOIN diaristas p ON p.id = e.diarista_id
+        LEFT JOIN diarias d ON d.pedido_escala_id = e.id
+        WHERE e.pedido_id = ? ORDER BY e.data, e.id""", (order_id,))]
+
+
 REDES = ("Super do Povo", "Super Lagoa", "Fazendinha", "Hipermarket", "Pinheiro", "Variedades")
 
 
@@ -414,6 +445,10 @@ class Handler(BaseHTTPRequestHandler):
         match = re.fullmatch(r"/api/diaristas/(\d+)/diarias(?:/(\d+))?", urlparse(self.path).path)
         return (int(match.group(1)), int(match.group(2)) if match.group(2) else None) if match else None
 
+    def route_escalas(self):
+        match = re.fullmatch(r"/api/pedidos/(\d+)/escalas(?:/(\d+))?", urlparse(self.path).path)
+        return (int(match.group(1)), int(match.group(2)) if match.group(2) else None) if match else None
+
     def read_json(self):
         if self.headers.get("Content-Type", "").split(";")[0].strip() != "application/json":
             raise ValueError("Envie os dados em JSON.")
@@ -436,6 +471,13 @@ class Handler(BaseHTTPRequestHandler):
             with connect() as db:
                 rows = db.execute("SELECT * FROM pedidos ORDER BY id DESC").fetchall()
             return self.respond(HTTPStatus.OK, [public_order(row) for row in rows])
+        scale_route = self.route_escalas()
+        if scale_route and scale_route[1] is None:
+            with connect() as db:
+                if not db.execute("SELECT 1 FROM pedidos WHERE id = ?", (scale_route[0],)).fetchone():
+                    return self.respond(HTTPStatus.NOT_FOUND, {"erro": "Pedido não encontrado."})
+                scales = order_scale_rows(db, scale_route[0])
+            return self.respond(HTTPStatus.OK, scales)
         if path == "/api/lojas":
             with connect() as db:
                 rows = db.execute("SELECT * FROM lojas ORDER BY rede COLLATE NOCASE, cidade COLLATE NOCASE, nome COLLATE NOCASE").fetchall()
@@ -457,6 +499,32 @@ class Handler(BaseHTTPRequestHandler):
     def do_POST(self):
         if not self._allowed_origin():
             return self.respond(HTTPStatus.FORBIDDEN, {"erro": "Acesso não permitido."})
+        scale_route = self.route_escalas()
+        if scale_route and scale_route[1] is None:
+            try:
+                payload = self.read_json()
+                if not isinstance(payload, dict) or isinstance(payload.get("diarista_id"), bool) or not isinstance(payload.get("diarista_id"), int):
+                    raise ValueError("Escolha uma diarista cadastrada.")
+                day = validate_date(payload.get("data"), "a escala")
+                with connect() as db:
+                    db.execute("BEGIN IMMEDIATE")
+                    order = db.execute("SELECT * FROM pedidos WHERE id = ?", (scale_route[0],)).fetchone()
+                    person = db.execute("SELECT * FROM diaristas WHERE id = ?", (payload["diarista_id"],)).fetchone()
+                    if not order or day not in {shift["data"] for shift in json.loads(order["turnos"])}:
+                        raise ValueError("A data escolhida não consta no pedido.")
+                    if not person or person["bloqueada"]:
+                        raise ValueError("Escolha uma diarista cadastrada e não bloqueada.")
+                    count = db.execute("SELECT count(*) FROM pedido_escalas WHERE pedido_id = ? AND data = ? AND status != 'falta'", (scale_route[0], day)).fetchone()[0]
+                    if count >= order["quantidade_diaristas"]:
+                        raise ValueError("A quantidade de diaristas deste dia já foi preenchida.")
+                    now = datetime.now(timezone.utc).isoformat()
+                    cur = db.execute("INSERT INTO pedido_escalas (pedido_id, diarista_id, data, status, criado_em, atualizado_em) VALUES (?, ?, ?, 'escalada', ?, ?)", (scale_route[0], payload["diarista_id"], day, now, now))
+                    row = next(row for row in order_scale_rows(db, scale_route[0]) if row["id"] == cur.lastrowid)
+                return self.respond(HTTPStatus.CREATED, row)
+            except (ValueError, json.JSONDecodeError, TypeError) as exc:
+                return self.respond(HTTPStatus.BAD_REQUEST, {"erro": str(exc)})
+            except sqlite3.IntegrityError:
+                return self.respond(HTTPStatus.CONFLICT, {"erro": "Esta diarista já está escalada para esse dia."})
         if urlparse(self.path).path == "/api/lojas":
             try:
                 data = validate_store(self.read_json())
@@ -548,6 +616,11 @@ class Handler(BaseHTTPRequestHandler):
                 data = validate_order(self.read_json())
                 order_id = int(order_match.group(1))
                 with connect() as db:
+                    old = db.execute("SELECT * FROM pedidos WHERE id = ?", (order_id,)).fetchone()
+                    if old and db.execute("SELECT 1 FROM pedido_escalas WHERE pedido_id = ? LIMIT 1", (order_id,)).fetchone():
+                        fixed = ("supermercado", "unidade", "setor", "quantidade_diaristas", "turnos")
+                        if any(old[key] != data[key] for key in fixed):
+                            raise ValueError("Este pedido já possui escalas. Preserve a equipe e as datas registradas.")
                     fields = ", ".join(f"{key} = ?" for key in data)
                     cur = db.execute(f"UPDATE pedidos SET {fields}, atualizado_em = ? WHERE id = ?", (*data.values(), datetime.now(timezone.utc).isoformat(), order_id))
                     if not cur.rowcount:
@@ -590,6 +663,37 @@ class Handler(BaseHTTPRequestHandler):
     def do_PATCH(self):
         if not self._allowed_origin():
             return self.respond(HTTPStatus.FORBIDDEN, {"erro": "Acesso não permitido."})
+        scale_route = self.route_escalas()
+        if scale_route and scale_route[1] is not None:
+            try:
+                payload = self.read_json()
+                status = payload.get("status") if isinstance(payload, dict) else None
+                if status not in {"escalada", "presente", "falta"}:
+                    raise ValueError("Selecione presença ou falta.")
+                with connect() as db:
+                    db.execute("BEGIN IMMEDIATE")
+                    scale = db.execute("SELECT * FROM pedido_escalas WHERE id = ? AND pedido_id = ?", (scale_route[1], scale_route[0])).fetchone()
+                    if not scale:
+                        return self.respond(HTTPStatus.NOT_FOUND, {"erro": "Escala não encontrada."})
+                    order = db.execute("SELECT * FROM pedidos WHERE id = ?", (scale_route[0],)).fetchone()
+                    if status != scale["status"]:
+                        if scale["status"] == "presente":
+                            daily = db.execute("SELECT data_pagamento FROM diarias WHERE pedido_escala_id = ?", (scale["id"],)).fetchone()
+                            if daily and daily["data_pagamento"]:
+                                raise ValueError("A diária já foi paga. Corrija o pagamento antes de alterar a presença.")
+                            db.execute("DELETE FROM diarias WHERE pedido_escala_id = ?", (scale["id"],))
+                        if scale["status"] == "falta" and status != "falta":
+                            count = db.execute("SELECT count(*) FROM pedido_escalas WHERE pedido_id = ? AND data = ? AND status != 'falta'", (scale_route[0], scale["data"])).fetchone()[0]
+                            if count >= order["quantidade_diaristas"]:
+                                raise ValueError("A quantidade de diaristas deste dia já foi preenchida.")
+                        if status == "presente":
+                            local = order["supermercado"] + (f" · {order['unidade']}" if order["unidade"] else "")
+                            db.execute("INSERT INTO diarias (diarista_id, data, local, setor, observacoes, pedido_escala_id, criado_em) VALUES (?, ?, ?, ?, ?, ?, ?)", (scale["diarista_id"], scale["data"], local, order["setor"], f"Presença no pedido #{scale_route[0]}", scale["id"], datetime.now(timezone.utc).isoformat()))
+                        db.execute("UPDATE pedido_escalas SET status = ?, atualizado_em = ? WHERE id = ?", (status, datetime.now(timezone.utc).isoformat(), scale["id"]))
+                    row = next(row for row in order_scale_rows(db, scale_route[0]) if row["id"] == scale["id"])
+                return self.respond(HTTPStatus.OK, row)
+            except (ValueError, json.JSONDecodeError, TypeError) as exc:
+                return self.respond(HTTPStatus.BAD_REQUEST, {"erro": str(exc)})
         payment_match = re.fullmatch(r"/api/diaristas/(\d+)/diarias/(\d+)/pagamento", urlparse(self.path).path)
         if payment_match:
             try:
@@ -633,9 +737,21 @@ class Handler(BaseHTTPRequestHandler):
     def do_DELETE(self):
         if not self._allowed_origin():
             return self.respond(HTTPStatus.FORBIDDEN, {"erro": "Acesso não permitido."})
+        scale_route = self.route_escalas()
+        if scale_route and scale_route[1] is not None:
+            with connect() as db:
+                scale = db.execute("SELECT status FROM pedido_escalas WHERE id = ? AND pedido_id = ?", (scale_route[1], scale_route[0])).fetchone()
+                if not scale:
+                    return self.respond(HTTPStatus.NOT_FOUND, {"erro": "Escala não encontrada."})
+                if scale["status"] != "escalada":
+                    return self.respond(HTTPStatus.CONFLICT, {"erro": "Presenças e faltas registradas não podem ser excluídas."})
+                db.execute("DELETE FROM pedido_escalas WHERE id = ?", (scale_route[1],))
+            return self.respond(HTTPStatus.OK, {"ok": True})
         order_match = re.fullmatch(r"/api/pedidos/(\d+)", urlparse(self.path).path)
         if order_match:
             with connect() as db:
+                if db.execute("SELECT 1 FROM pedido_escalas WHERE pedido_id = ? LIMIT 1", (int(order_match.group(1)),)).fetchone():
+                    return self.respond(HTTPStatus.CONFLICT, {"erro": "Este pedido tem escalas registradas e deve ser preservado."})
                 cur = db.execute("DELETE FROM pedidos WHERE id = ?", (int(order_match.group(1)),))
             return self.respond(HTTPStatus.OK if cur.rowcount else HTTPStatus.NOT_FOUND, {"ok": bool(cur.rowcount)})
         finance_match = re.fullmatch(r"/api/financeiro/(\d+)", urlparse(self.path).path)
@@ -646,7 +762,9 @@ class Handler(BaseHTTPRequestHandler):
         daily_route = self.route_diarias()
         if daily_route and daily_route[1] is not None:
             with connect() as db:
-                daily = db.execute("SELECT data_pagamento FROM diarias WHERE id = ? AND diarista_id = ?", (daily_route[1], daily_route[0])).fetchone()
+                daily = db.execute("SELECT data_pagamento, pedido_escala_id FROM diarias WHERE id = ? AND diarista_id = ?", (daily_route[1], daily_route[0])).fetchone()
+                if daily and daily["pedido_escala_id"] is not None:
+                    return self.respond(HTTPStatus.CONFLICT, {"erro": "Esta diária está vinculada a uma presença. Corrija a presença no pedido."})
                 if daily and daily["data_pagamento"]:
                     return self.respond(HTTPStatus.CONFLICT, {"erro": "Esta diária já foi paga e faz parte do histórico financeiro. Corrija os dados do pagamento em vez de excluí-la."})
                 cur = db.execute("DELETE FROM diarias WHERE id = ? AND diarista_id = ?", (daily_route[1], daily_route[0]))
@@ -655,6 +773,8 @@ class Handler(BaseHTTPRequestHandler):
         if record_id is None:
             return self.respond(HTTPStatus.NOT_FOUND, {"erro": "Rota não encontrada."})
         with connect() as db:
+            if db.execute("SELECT 1 FROM pedido_escalas WHERE diarista_id = ? LIMIT 1", (record_id,)).fetchone():
+                return self.respond(HTTPStatus.CONFLICT, {"erro": "Esta diarista possui escalas registradas. Bloqueie o cadastro para preservar o histórico."})
             if db.execute("SELECT 1 FROM diarias WHERE diarista_id = ? LIMIT 1", (record_id,)).fetchone():
                 return self.respond(HTTPStatus.CONFLICT, {"erro": "Este cadastro tem diárias registradas. Mantenha a ficha para preservar o histórico; se necessário, bloqueie a diarista para novas diárias."})
             cur = db.execute("DELETE FROM diaristas WHERE id = ?", (record_id,))

@@ -242,6 +242,25 @@ label small, .section-help { color: #7081a2; }
 .order-detail-shift { display: flex; align-items: center; gap: 14px; flex-wrap: wrap; padding: 12px 14px; border: 1px solid #e0e8f5; border-radius: 9px; background: #f9fbff; color: #415a88; font-size: 13px; }
 .order-detail-shift strong { min-width: 90px; color: #172c65; }
 .order-detail-shift small { margin-left: auto; color: #6c7da1; font-size: 12px; }
+.order-day-card { border: 1px solid #dfe8f4; border-radius: 11px; overflow: hidden; background: #fff; }
+.order-day-card .order-detail-shift { margin: 0; border: 0; border-radius: 0; }
+.order-day-body { display: grid; gap: 9px; padding: 10px 13px 13px; }
+.order-day-empty { margin: 2px 0; color: #6c7da1; font-size: 12px; }
+.order-worker-row { display: flex; align-items: center; gap: 8px 12px; flex-wrap: wrap; padding: 9px 10px; border: 1px solid #e0e8f5; border-radius: 8px; }
+.order-worker-identity { display: flex; align-items: center; gap: 8px; flex: 1 1 160px; min-width: 0; }
+.order-worker-identity strong { color: #172c65; font-size: 13px; overflow-wrap: anywhere; }
+.order-attendance-status { padding: 3px 7px; border-radius: 999px; background: #edf2f9; color: #526785; font-size: 11px; white-space: nowrap; }
+.order-attendance-status.presente { background: #e0f5e9; color: #176740; }
+.order-attendance-status.falta { background: #fff0ee; color: #a13f39; }
+.order-worker-actions { display: flex; align-items: center; gap: 5px; flex-wrap: wrap; }
+.order-attendance-button { min-height: 32px; padding: 5px 9px; border: 1px solid #cbd9ed; border-radius: 7px; background: #fff; color: #214476; font-size: 12px; font-weight: 700; cursor: pointer; }
+.order-attendance-button.presente:hover, .order-attendance-button.presente.selected { background: #e0f5e9; border-color: #87cfaa; color: #176740; }
+.order-attendance-button.falta:hover, .order-attendance-button.falta.selected { background: #fff0ee; border-color: #e5aaa5; color: #a13f39; }
+.order-attendance-button:disabled { cursor: default; opacity: 1; }
+.order-payment-line { display: flex; align-items: center; justify-content: space-between; gap: 10px; flex: 1 0 100%; color: #536a8b; font-size: 12px; }
+.order-worker-picker { display: flex; gap: 8px; align-items: center; }
+.order-worker-picker select { flex: 1; min-width: 0; min-height: 36px; }
+.order-worker-picker .button { min-height: 36px; padding: 6px 12px; font-size: 12px; }
 
 @media (max-width: 1200px) {
   .finance-stats { grid-template-columns: repeat(3, minmax(0, 1fr)); }
@@ -291,6 +310,10 @@ label small, .section-help { color: #7081a2; }
   .order-shift-row label:first-child { grid-column: 1 / -1; }
   .order-shift-remove { grid-column: 3; grid-row: 2; }
   .order-detail-shift small { margin-left: 0; }
+  .order-worker-row { align-items: stretch; }
+  .order-worker-identity, .order-worker-actions { flex-basis: 100%; }
+  .order-worker-picker { flex-wrap: wrap; }
+  .order-worker-picker select { flex-basis: 100%; }
   .detail-section dl { grid-template-columns: 1fr; gap: 12px; }
   .history-heading { align-items: flex-start; flex-direction: column; }
   .history-item { align-items: flex-start; flex-direction: column; }

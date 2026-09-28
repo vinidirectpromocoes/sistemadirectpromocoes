@@ -1,6 +1,9 @@
 let orderRecords = [];
 let orderEditingId = null;
 let orderDetailId = null;
+let orderScales = [];
+let orderWorkers = [];
+let orderDetailBusy = false;
 
 const orderStatusLabels = {
   novo: 'Novo', em_selecao: 'Em seleção', confirmado: 'Confirmado',
@@ -172,7 +175,134 @@ async function saveOrder(event) {
   finally { save.disabled = false; }
 }
 
-function openOrderDetail(id) {
+function orderDetailError(message) {
+  const box = $('#order-detail-error');
+  box.textContent = message;
+  box.hidden = false;
+  box.scrollIntoView({ block: 'nearest' });
+}
+
+async function refreshOrderScales() {
+  if (!orderDetailId) return;
+  orderScales = await request(`/api/pedidos/${orderDetailId}/escalas`);
+  renderOrderShifts();
+}
+
+async function addOrderWorker(data, select) {
+  if (!select.value || orderDetailBusy) return;
+  orderDetailBusy = true;
+  $('#order-detail-error').hidden = true;
+  try {
+    await request(`/api/pedidos/${orderDetailId}/escalas`, {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ data, diarista_id: Number(select.value) }),
+    });
+    await refreshOrderScales();
+  } catch (err) { orderDetailError(err.message); }
+  finally { orderDetailBusy = false; }
+}
+
+async function changeOrderAttendance(scale, status) {
+  if (orderDetailBusy || scale.status === status) return;
+  if (scale.status === 'presente' && status === 'falta' && scale.diaria?.data_pagamento) {
+    return orderDetailError('Essa diária já foi paga. Abra Pagamento, retire a data do pagamento e depois corrija para falta.');
+  }
+  if (scale.status === 'presente' && status === 'falta' && !window.confirm(`Corrigir a presença de ${scale.diarista_nome} para falta? A diária pendente será retirada do Financeiro.`)) return;
+  orderDetailBusy = true;
+  $('#order-detail-error').hidden = true;
+  try {
+    await request(`/api/pedidos/${orderDetailId}/escalas/${scale.id}`, {
+      method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ status }),
+    });
+    await refreshOrderScales();
+    if (status === 'presente') $('#finance-month').value = scale.data.slice(0, 7);
+    await loadFinance();
+  } catch (err) { orderDetailError(err.message); }
+  finally { orderDetailBusy = false; }
+}
+
+async function removeOrderWorker(scale) {
+  if (orderDetailBusy) return;
+  orderDetailBusy = true;
+  $('#order-detail-error').hidden = true;
+  try {
+    await request(`/api/pedidos/${orderDetailId}/escalas/${scale.id}`, { method: 'DELETE' });
+    await refreshOrderScales();
+  } catch (err) { orderDetailError(err.message); }
+  finally { orderDetailBusy = false; }
+}
+
+function renderOrderShifts() {
+  const item = orderRecords.find(row => row.id === orderDetailId);
+  if (!item) return;
+  const list = $('#order-detail-shifts'); list.replaceChildren();
+  item.turnos.forEach(shift => {
+    const scales = orderScales.filter(scale => scale.data === shift.data);
+    const active = scales.filter(scale => scale.status !== 'falta').length;
+    const card = document.createElement('div'); card.className = 'order-day-card';
+    const header = document.createElement('div'); header.className = 'order-detail-shift';
+    const date = document.createElement('strong'); date.textContent = dateLabel(shift.data);
+    const time = document.createElement('span'); time.textContent = `${shift.inicio} às ${shift.fim}`;
+    const quantity = document.createElement('small'); quantity.textContent = `${active}/${item.quantidade_diaristas} escalada${item.quantidade_diaristas === 1 ? '' : 's'}`;
+    header.append(date, time, quantity); card.append(header);
+    const body = document.createElement('div'); body.className = 'order-day-body';
+    if (!scales.length) {
+      const empty = document.createElement('p'); empty.className = 'order-day-empty'; empty.textContent = 'Nenhuma diarista escalada para este dia.'; body.append(empty);
+    }
+    scales.forEach(scale => {
+      const row = document.createElement('div'); row.className = 'order-worker-row';
+      const identity = document.createElement('div'); identity.className = 'order-worker-identity';
+      const name = document.createElement('strong'); name.textContent = scale.diarista_nome;
+      const state = document.createElement('span'); state.className = `order-attendance-status ${scale.status}`;
+      state.textContent = { escalada: 'Aguardando', presente: 'Presença', falta: 'Falta' }[scale.status];
+      identity.append(name, state); row.append(identity);
+      const actions = document.createElement('div'); actions.className = 'order-worker-actions';
+      for (const [status, label] of [['presente', 'Presença'], ['falta', 'Falta']]) {
+        const button = document.createElement('button'); button.type = 'button';
+        button.className = `order-attendance-button ${status}${scale.status === status ? ' selected' : ''}`;
+        button.textContent = label; button.disabled = scale.status === status;
+        button.setAttribute('aria-label', `${label} de ${scale.diarista_nome} em ${dateLabel(shift.data)}`);
+        button.addEventListener('click', () => changeOrderAttendance(scale, status)); actions.append(button);
+      }
+      if (scale.status === 'escalada') {
+        const remove = document.createElement('button'); remove.type = 'button'; remove.className = 'text-button'; remove.textContent = 'Retirar';
+        remove.setAttribute('aria-label', `Retirar ${scale.diarista_nome} da escala`);
+        remove.addEventListener('click', () => removeOrderWorker(scale)); actions.append(remove);
+      }
+      row.append(actions);
+      if (scale.status === 'presente') {
+        const payment = document.createElement('div'); payment.className = 'order-payment-line';
+        const label = document.createElement('span');
+        label.textContent = scale.diaria?.data_pagamento ? `Pago em ${dateLabel(scale.diaria.data_pagamento)}` : scale.diaria?.valor_centavos != null ? 'Pagamento pendente' : 'Pagamento pendente · valor não informado';
+        payment.append(label);
+        if (scale.diaria) {
+          const edit = document.createElement('button'); edit.type = 'button'; edit.className = 'text-button'; edit.textContent = 'Pagamento';
+          edit.addEventListener('click', () => {
+            $('#order-detail-dialog').close();
+            startPayment({ ...scale.diaria, diarista_id: scale.diarista_id, data: scale.data, setor: item.setor, local: `${item.supermercado}${item.unidade ? ` · ${item.unidade}` : ''}` }, 'order');
+          });
+          payment.append(edit);
+        }
+        row.append(payment);
+      }
+      body.append(row);
+    });
+    if (active < item.quantidade_diaristas) {
+      const picker = document.createElement('div'); picker.className = 'order-worker-picker';
+      const select = document.createElement('select'); select.setAttribute('aria-label', `Escolher diarista para ${dateLabel(shift.data)}`);
+      const placeholder = document.createElement('option'); placeholder.value = ''; placeholder.textContent = 'Selecione uma diarista'; select.append(placeholder);
+      orderWorkers.filter(worker => !worker.bloqueada && !scales.some(scale => scale.diarista_id === worker.id)).forEach(worker => {
+        const option = document.createElement('option'); option.value = String(worker.id); option.textContent = worker.nome; select.append(option);
+      });
+      const add = document.createElement('button'); add.type = 'button'; add.className = 'button button-outline'; add.textContent = 'Escalar';
+      add.addEventListener('click', () => addOrderWorker(shift.data, select));
+      picker.append(select, add); body.append(picker);
+    }
+    card.append(body); list.append(card);
+  });
+}
+
+async function openOrderDetail(id) {
   const item = orderRecords.find(row => row.id === id);
   if (!item) return showOrderFeedback('Pedido não encontrado.', true);
   orderDetailId = id;
@@ -194,15 +324,12 @@ function openOrderDetail(id) {
       ['Pedido registrado em', new Date(item.criado_em).toLocaleString('pt-BR')],
     ]),
   );
-  const list = $('#order-detail-shifts'); list.replaceChildren();
-  item.turnos.forEach(shift => {
-    const row = document.createElement('div'); row.className = 'order-detail-shift';
-    const date = document.createElement('strong'); date.textContent = dateLabel(shift.data);
-    const time = document.createElement('span'); time.textContent = `${shift.inicio} às ${shift.fim}`;
-    const quantity = document.createElement('small'); quantity.textContent = orderPlural(item.quantidade_diaristas, 'diarista', 'diaristas');
-    row.append(date, time, quantity); list.append(row);
-  });
+  $('#order-detail-shifts').textContent = 'Carregando escalas...';
   $('#order-detail-dialog').showModal();
+  try {
+    [orderWorkers, orderScales] = await Promise.all([request('/api/diaristas'), request(`/api/pedidos/${id}/escalas`)]);
+    if (orderDetailId === id && $('#order-detail-dialog').open) renderOrderShifts();
+  } catch (err) { orderDetailError(`Não foi possível carregar as escalas: ${err.message}`); }
 }
 
 async function deleteOrder() {

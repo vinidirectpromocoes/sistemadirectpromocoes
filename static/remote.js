@@ -192,6 +192,19 @@
       if (method === 'DELETE') { unwrap(await sb.from('financeiro_lancamentos').delete().eq('id', id)); return { ok: true }; }
     }
     if (entity === 'pedidos') {
+      if (child === 'escalas') {
+        const scaleId = parts[4] ? Number(parts[4]) : null;
+        if (method === 'GET') {
+          const assignments = unwrap(await sb.from('pedido_escalas').select('*, diaristas(nome)').eq('pedido_id', id).order('data').order('id'));
+          if (!assignments.length) return [];
+          const daily = unwrap(await sb.from('diarias').select('id,pedido_escala_id,data_pagamento,valor_centavos,vencimento_pagamento,forma_pagamento').in('pedido_escala_id', assignments.map(item => item.id)));
+          const byScale = new Map(daily.map(item => [item.pedido_escala_id, item]));
+          return assignments.map(item => ({ ...item, diarista_nome: item.diaristas?.nome || '', diaria: byScale.get(item.id) || null }));
+        }
+        if (method === 'POST') return unwrap(await sb.from('pedido_escalas').insert({ pedido_id: id, diarista_id: Number(p.diarista_id), data: p.data }).select().single());
+        if (method === 'PATCH') return unwrap(await sb.from('pedido_escalas').update({ status: p.status }).eq('pedido_id', id).eq('id', scaleId).select().single());
+        if (method === 'DELETE') { unwrap(await sb.from('pedido_escalas').delete().eq('pedido_id', id).eq('id', scaleId)); return { ok: true }; }
+      }
       if (method === 'GET') return (await rows('pedidos')).sort((a,b) => b.id - a.id).map(orderView);
       if (method === 'POST') return orderView(unwrap(await sb.from('pedidos').insert(orderPayload(p)).select().single()));
       if (method === 'PUT') return orderView(unwrap(await sb.from('pedidos').update({ ...orderPayload(p), atualizado_em: new Date().toISOString() }).eq('id', id).select().single()));
