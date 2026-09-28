@@ -24,7 +24,7 @@ function storeAddress(item) {
 
 async function copyStore(item) {
   if (item.situacao === 'revisar' && !window.confirm(`O endereço da loja ${item.nome} precisa de conferência. Deseja copiá-lo mesmo assim?`)) return;
-  const content = `Rede: ${item.rede}\nLoja: ${item.nome}\nEndereço: ${[item.endereco, item.bairro, `${item.cidade}/${item.uf}`].filter(Boolean).join(', ')}`;
+  const content = `*Rede:* ${item.rede}\n*Loja:* ${item.nome}\n*Endereço:* ${[item.endereco, item.bairro, `${item.cidade}/${item.uf}`].filter(Boolean).join(', ')}`;
   try {
     if (navigator.clipboard?.writeText) await navigator.clipboard.writeText(content);
     else {
