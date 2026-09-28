@@ -73,6 +73,11 @@ html[data-theme="dark"] .sidebar {
 html[data-theme="dark"] .sidebar nav a { color: #d6e5fa; }
 html[data-theme="dark"] .sidebar nav a:hover,
 html[data-theme="dark"] .sidebar nav a.nav-active { background: #8bb8ff2a; color: #fff; }
+html[data-theme="dark"] .sidebar nav a.nav-active,
+html[data-theme="dark"] .sidebar nav a.nav-active:hover {
+  background: linear-gradient(105deg, #2a70f0, #1455df);
+  box-shadow: 0 7px 18px #020b2099;
+}
 html[data-theme="dark"] .sidebar-foot { border-color: #9bbbe444; color: #c3d7f2; }
 html[data-theme="dark"] .nav-label { color: #aac9f7; }
 html[data-theme="dark"] .eyebrow { color: #98bbf9; }
@@ -128,6 +133,7 @@ html[data-theme="dark"] .store-group-heading { background: var(--dark-raised); c
 html[data-theme="dark"] td,
 html[data-theme="dark"] .store-item,
 html[data-theme="dark"] .history-item { border-color: var(--dark-border); color: #d3e1f3; }
+html[data-theme="dark"] tbody tr:hover { background: #20324c; }
 html[data-theme="dark"] .empty-state,
 html[data-theme="dark"] .detail-section,
 html[data-theme="dark"] .history-section { border-color: var(--dark-border); }
