@@ -213,9 +213,27 @@ label small, .section-help { color: #7081a2; }
 .finance-badge.open { background: #e7efff; color: #2259ae; }
 .finance-badge.overdue { background: #fff0e5; color: #9a5626; }
 .finance-badge.incomplete { background: #fff5dc; color: #835e12; }
+.finance-badge.partial { background: #eeeaff; color: #5a42a0; }
 .finance-actions { text-align: right; }
 .finance-actions .text-button { display: inline-block; }
 .finance-remove { color: #a43d4e; }
+.finance-group-row { background: #f8fbff; }
+.finance-group-row .finance-value-cell strong { margin: 0; }
+.finance-group-row .finance-value-cell small { margin-top: 3px; color: #8a5b1e; font-weight: 600; }
+.finance-group-help { margin: 0 0 16px; color: #667a9f; font-size: 13px; line-height: 1.45; }
+.finance-group-summary { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 9px; margin-bottom: 18px; }
+.finance-group-stat { border: 1px solid #dfe8f5; border-radius: 10px; padding: 12px 14px; background: #f8fbff; }
+.finance-group-stat span { display: block; margin-bottom: 5px; color: #64799d; font-size: 12px; }
+.finance-group-stat strong { display: block; color: #102f69; font-size: 18px; overflow-wrap: anywhere; }
+.finance-group-notice { margin: -5px 0 17px; color: #8a5b1e; font-size: 13px; }
+.finance-group-items { display: grid; gap: 10px; }
+.finance-daily-item { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 8px 16px; padding: 14px 15px; border: 1px solid #dfe8f5; border-radius: 10px; background: #fff; }
+.finance-daily-main { display: grid; gap: 4px; min-width: 0; }
+.finance-daily-main strong { color: #173467; font-size: 14px; }
+.finance-daily-main span { color: #536b91; font-size: 13px; overflow-wrap: anywhere; }
+.finance-daily-value { color: #102f69; font-size: 16px; white-space: nowrap; }
+.finance-daily-meta { grid-column: 1 / -1; display: flex; align-items: center; flex-wrap: wrap; gap: 6px 10px; color: #667a9f; font-size: 12px; }
+.finance-daily-meta .text-button { margin-left: auto; }
 
 .order-stats { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 12px; margin-bottom: 19px; }
 .order-list-top { padding-bottom: 17px; }

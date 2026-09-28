@@ -414,6 +414,7 @@ function cancelPayment() {
   $('#payment-dialog').close();
   if (paymentOrigin === 'detail') openDetail(detailId);
   if (paymentOrigin === 'order' && orderDetailId) openOrderDetail(orderDetailId);
+  if (paymentOrigin === 'finance-group') openFinanceGroup(financeOpenGroupId);
 }
 
 async function savePayment(event) {
@@ -428,6 +429,7 @@ async function savePayment(event) {
     if (paymentOrigin === 'detail') await openDetail(detailId);
     await loadFinance();
     if (paymentOrigin === 'finance') showFinanceFeedback('Pagamento da diária atualizado.');
+    else if (paymentOrigin === 'finance-group') { showFinanceFeedback('Pagamento da diária atualizado.'); openFinanceGroup(financeOpenGroupId); }
     else if (paymentOrigin === 'order' && orderDetailId) await openOrderDetail(orderDetailId);
     else showFeedback('Informação de pagamento atualizada.');
   } catch (err) { $('#payment-error').textContent = err.message; $('#payment-error').hidden = false; }

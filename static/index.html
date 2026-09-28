@@ -97,7 +97,7 @@
       </section>
       <div id="finance-warning" class="finance-warning" hidden></div>
       <section class="list-card finance-list" aria-labelledby="finance-list-title">
-        <div class="list-top finance-list-top"><div><h2 id="finance-list-title">Lançamentos</h2><p>Pagamentos de diárias entram aqui automaticamente. Registre as demais entradas e saídas pelo botão acima.</p></div></div>
+        <div class="list-top finance-list-top"><div><h2 id="finance-list-title">Lançamentos</h2><p>Diárias da mesma pessoa aparecem somadas no período selecionado. Abra o grupo para conferir cada pagamento.</p></div></div>
         <div class="finance-filters"><div class="search-wrap"><span aria-hidden="true">⌕</span><input id="finance-search" type="search" placeholder="Buscar descrição ou pessoa" aria-label="Buscar lançamentos"></div><select id="finance-type-filter" aria-label="Filtrar por tipo"><option value="todos">Entradas e saídas</option><option value="receita">Somente entradas</option><option value="despesa">Somente saídas</option></select><select id="finance-status-filter" aria-label="Filtrar por situação"><option value="todos">Todas as situações</option><option value="pendente">Pendentes</option><option value="pago">Pagos ou recebidos</option><option value="sem-valor">Sem valor informado</option></select><button class="button button-outline" id="finance-export-button" type="button">Exportar CSV</button></div>
         <div id="finance-feedback" class="feedback" role="status" aria-live="polite" hidden></div>
         <div id="finance-empty" class="empty-state compact" hidden><h3>Nenhum lançamento encontrado</h3><p>Altere os filtros ou registre a primeira entrada ou saída.</p></div>
@@ -197,6 +197,11 @@
     </form>
   </dialog>
 
+  <dialog id="finance-group-dialog" aria-labelledby="finance-group-title">
+    <div class="dialog-header"><div><span class="eyebrow">DIÁRIAS AGRUPADAS</span><h2 id="finance-group-title"></h2></div><button class="icon-button" id="finance-group-close" type="button" aria-label="Fechar">×</button></div>
+    <div class="dialog-body"><p class="finance-group-help">Os valores abaixo seguem os filtros aplicados na lista do Financeiro.</p><div id="finance-group-summary" class="finance-group-summary"></div><div id="finance-group-items" class="finance-group-items"></div></div>
+    <div class="dialog-footer"><button class="button button-quiet" id="finance-group-close-bottom" type="button">Fechar</button></div>
+  </dialog>
   <dialog id="finance-dialog" aria-labelledby="finance-form-title">
     <form id="finance-form" novalidate>
       <div class="dialog-header"><div><span class="eyebrow">CONTROLE FINANCEIRO</span><h2 id="finance-form-title">Novo lançamento</h2></div><button class="icon-button" type="button" id="finance-close-button" aria-label="Fechar">×</button></div>

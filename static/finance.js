@@ -3,6 +3,7 @@ const financeToday = () => {
   return `${value.getFullYear()}-${String(value.getMonth() + 1).padStart(2, '0')}-${String(value.getDate()).padStart(2, '0')}`;
 };
 let visibleFinanceRows = [];
+let financeOpenGroupId = null;
 
 function showFinanceFeedback(message, isError = false) {
   const box = $('#finance-feedback');
@@ -41,6 +42,101 @@ function filteredFinanceRows() {
   }).sort((a, b) => financePeriodDate(b).localeCompare(financePeriodDate(a)) || b.id - a.id);
 }
 
+function groupedFinanceRows(items) {
+  const byDiarista = new Map();
+  items.forEach(item => {
+    if (item.origem === 'diaria' && item.diarista_id != null) {
+      const list = byDiarista.get(item.diarista_id) || [];
+      list.push(item);
+      byDiarista.set(item.diarista_id, list);
+    }
+  });
+  const shown = new Set();
+  return items.flatMap(item => {
+    if (item.origem !== 'diaria' || item.diarista_id == null) return [item];
+    if (shown.has(item.diarista_id)) return [];
+    shown.add(item.diarista_id);
+    const days = byDiarista.get(item.diarista_id);
+    return days.length > 1 ? [{ kind: 'daily-group', diarista_id: item.diarista_id, items: days }] : [item];
+  });
+}
+
+function financeGroupTotals(items) {
+  return {
+    known: items.reduce((sum, item) => sum + (item.valor_centavos || 0), 0),
+    pending: items.reduce((sum, item) => sum + (item.data_pagamento ? 0 : item.valor_centavos || 0), 0),
+    paid: items.reduce((sum, item) => sum + (item.data_pagamento ? item.valor_centavos || 0 : 0), 0),
+    missing: items.filter(item => item.valor_centavos == null).length,
+    paidCount: items.filter(item => item.data_pagamento).length,
+  };
+}
+
+function financeGroupStatus(items, totals) {
+  if (totals.missing) return { label: 'Incompleto', style: 'incomplete' };
+  if (totals.paidCount === items.length) return { label: 'Pago', style: 'settled' };
+  if (totals.paidCount) return { label: 'Parcial', style: 'partial' };
+  if (items.some(item => item.vencimento && item.vencimento < financeToday())) return { label: 'Atrasado', style: 'overdue' };
+  return { label: 'A pagar', style: 'open' };
+}
+
+function financeGroupDates(items) {
+  const dates = items.map(item => item.data).sort();
+  return dates[0] === dates.at(-1) ? `Diárias de ${dateLabel(dates[0])}` : `Diárias de ${dateLabel(dates[0])} a ${dateLabel(dates.at(-1))}`;
+}
+
+function financeGroupSummaryStat(label, value) {
+  const card = document.createElement('div'); card.className = 'finance-group-stat';
+  const caption = document.createElement('span'); caption.textContent = label;
+  const amount = document.createElement('strong'); amount.textContent = value;
+  card.append(caption, amount);
+  return card;
+}
+
+function renderFinanceGroup() {
+  const items = visibleFinanceRows.filter(item => item.origem === 'diaria' && item.diarista_id === financeOpenGroupId);
+  if (!items.length) { if ($('#finance-group-dialog').open) $('#finance-group-dialog').close(); return false; }
+  $('#finance-group-dialog').querySelector('.finance-group-notice')?.remove();
+  $('#finance-group-title').textContent = items[0].contraparte;
+  const totals = financeGroupTotals(items);
+  const summary = $('#finance-group-summary');
+  summary.replaceChildren(
+    financeGroupSummaryStat('Diárias', String(items.length)),
+    financeGroupSummaryStat(totals.missing ? 'Subtotal com valor' : 'Total das diárias', totals.missing === items.length ? 'A definir' : moneyLabel(totals.known)),
+    financeGroupSummaryStat('Pendente conhecido', moneyLabel(totals.pending)),
+    financeGroupSummaryStat('Já pago', moneyLabel(totals.paid)),
+  );
+  const list = $('#finance-group-items'); list.replaceChildren();
+  items.slice().sort((a, b) => a.data.localeCompare(b.data) || a.id - b.id).forEach(item => {
+    const row = document.createElement('article'); row.className = 'finance-daily-item';
+    const main = document.createElement('div'); main.className = 'finance-daily-main';
+    const when = document.createElement('strong'); when.textContent = dateLabel(item.data);
+    const place = document.createElement('span'); place.textContent = `${item.setor} · ${item.local}`;
+    main.append(when, place);
+    const amount = document.createElement('strong'); amount.className = 'finance-daily-value'; amount.textContent = moneyLabel(item.valor_centavos);
+    const meta = document.createElement('div'); meta.className = 'finance-daily-meta';
+    const state = financeStatus(item);
+    const badge = document.createElement('span'); badge.className = `finance-badge ${state.style}`; badge.textContent = state.label;
+    const detail = document.createElement('span');
+    detail.textContent = item.data_pagamento ? `Pago em ${dateLabel(item.data_pagamento)}${item.forma_pagamento ? ` · ${item.forma_pagamento}` : ''}` : item.vencimento ? `Vence em ${dateLabel(item.vencimento)}` : 'Vencimento não informado';
+    const edit = document.createElement('button'); edit.type = 'button'; edit.className = 'text-button'; edit.textContent = item.valor_centavos == null ? 'Completar pagamento' : 'Editar pagamento';
+    edit.setAttribute('aria-label', `${edit.textContent} da diária de ${dateLabel(item.data)}`);
+    edit.addEventListener('click', () => { $('#finance-group-dialog').close(); startPayment(item, 'finance-group'); });
+    meta.append(badge, detail, edit);
+    row.append(main, amount, meta); list.append(row);
+  });
+  if (totals.missing) {
+    const notice = document.createElement('p'); notice.className = 'finance-group-notice';
+    notice.textContent = `${totals.missing} diária${totals.missing === 1 ? '' : 's'} sem valor. Complete para calcular o total definitivo.`;
+    summary.after(notice);
+  }
+  return true;
+}
+
+function openFinanceGroup(diaristaId) {
+  financeOpenGroupId = diaristaId;
+  if (renderFinanceGroup() && !$('#finance-group-dialog').open) $('#finance-group-dialog').showModal();
+}
+
 function renderFinance() {
   const month = $('#finance-month').value;
   const total = (type, paid) => financeRecords.reduce((sum, item) => {
@@ -72,7 +168,34 @@ function renderFinance() {
   $('#finance-empty').hidden = visibleFinanceRows.length !== 0;
   $('#finance-table-wrap').hidden = visibleFinanceRows.length === 0;
   const body = $('#finance-rows'); body.replaceChildren();
-  visibleFinanceRows.forEach(item => {
+  groupedFinanceRows(visibleFinanceRows).forEach(item => {
+    if (item.kind === 'daily-group') {
+      const days = item.items;
+      const totals = financeGroupTotals(days);
+      const row = document.createElement('tr'); row.className = 'finance-group-row';
+      const description = document.createElement('td');
+      const title = document.createElement('strong'); title.textContent = `${days.length} diárias agrupadas`;
+      const category = document.createElement('small'); category.textContent = 'Pagamento de diarista';
+      description.append(title, category); row.append(description);
+      row.append(cell(days[0].contraparte));
+      row.append(cell(financeGroupDates(days)));
+      const type = document.createElement('td');
+      const typeBadge = document.createElement('span'); typeBadge.className = 'finance-type despesa'; typeBadge.textContent = 'Saída'; type.append(typeBadge); row.append(type);
+      const value = document.createElement('td'); value.className = 'finance-value-cell';
+      const valueMain = document.createElement('strong'); valueMain.textContent = totals.missing === days.length ? 'Sem valor' : moneyLabel(totals.known);
+      value.append(valueMain);
+      if (totals.missing) { const hint = document.createElement('small'); hint.textContent = `${totals.missing} diária${totals.missing === 1 ? '' : 's'} sem valor`; value.append(hint); }
+      row.append(value);
+      const status = document.createElement('td'); const state = financeGroupStatus(days, totals);
+      const badge = document.createElement('span'); badge.className = `finance-badge ${state.style}`; badge.textContent = state.label;
+      status.append(badge); row.append(status);
+      const actions = document.createElement('td'); actions.className = 'finance-actions';
+      const view = document.createElement('button'); view.type = 'button'; view.className = 'text-button'; view.textContent = 'Ver diárias';
+      view.setAttribute('aria-label', `Ver ${days.length} diárias de ${days[0].contraparte}`);
+      view.addEventListener('click', () => openFinanceGroup(item.diarista_id));
+      actions.append(view); row.append(actions); body.append(row);
+      return;
+    }
     const row = document.createElement('tr');
     const description = document.createElement('td');
     const title = document.createElement('strong'); title.textContent = item.descricao;
@@ -110,6 +233,7 @@ function renderFinance() {
     }
     row.append(actions); body.append(row);
   });
+  if ($('#finance-group-dialog').open) renderFinanceGroup();
 }
 
 async function loadFinance() {
@@ -242,5 +366,12 @@ $('#finance-search').addEventListener('input', renderFinance);
 $('#finance-type-filter').addEventListener('change', renderFinance);
 $('#finance-status-filter').addEventListener('change', renderFinance);
 $('#finance-export-button').addEventListener('click', exportFinanceCsv);
+$('#finance-group-close').addEventListener('click', () => $('#finance-group-dialog').close());
+$('#finance-group-close-bottom').addEventListener('click', () => $('#finance-group-dialog').close());
+$('#finance-group-dialog').addEventListener('click', event => {
+  const dialog = $('#finance-group-dialog');
+  const rect = dialog.getBoundingClientRect();
+  if (event.target === dialog && (event.clientX < rect.left || event.clientX > rect.right || event.clientY < rect.top || event.clientY > rect.bottom)) dialog.close();
+});
 window.addEventListener('hashchange', showPage);
 showPage();
