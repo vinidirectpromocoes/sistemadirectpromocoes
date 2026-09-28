@@ -411,6 +411,7 @@ function startPayment(item, origin = 'detail') {
   $('#payment-form').reset();
   $('#payment-error').hidden = true;
   $('#payment-context').textContent = `Diária de ${dateLabel(item.data)} · ${item.setor} · ${item.local}`;
+  $('#payment-rate-hint').hidden = true;
   $('#payment-value').value = moneyInput(item.valor_centavos);
   $('#payment-due').value = item.vencimento_pagamento || '';
   $('#payment-date').value = item.data_pagamento || '';
@@ -420,6 +421,15 @@ function startPayment(item, origin = 'detail') {
   $('#payment-reason').required = paymentWasPaid;
   $('#payment-dialog').showModal();
   (item.valor_centavos == null ? $('#payment-value') : $('#payment-date')).focus();
+  if (item.valor_centavos == null && typeof suggestedDailyPayout === 'function') {
+    suggestedDailyPayout(item).then(rate => {
+      if (!rate || !$('#payment-dialog').open || paymentDailyId !== item.id) return;
+      if (!$('#payment-value').value) $('#payment-value').value = moneyInput(rate.cents);
+      const hint = $('#payment-rate-hint');
+      hint.textContent = `Valor sugerido: ${moneyLabel(rate.cents)} (${rate.specific ? `setor ${item.setor}` : `padrão ${rate.network}`}). Confirme o valor e o vencimento antes de salvar.`;
+      hint.hidden = false;
+    }).catch(() => {});
+  }
 }
 
 function cancelPayment() {

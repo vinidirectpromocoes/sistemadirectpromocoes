@@ -25,6 +25,11 @@ DAYS = {"segunda", "terca", "quarta", "quinta", "sexta", "sabado", "domingo"}
 ORDER_STATUSES = {"novo", "em_selecao", "confirmado", "concluido", "cancelado"}
 FORTALEZA = ZoneInfo("America/Fortaleza")
 WEEKDAYS = ("segunda", "terca", "quarta", "quinta", "sexta", "sabado", "domingo")
+TARIFAS_INICIAIS = (
+    ("Hipermarket", 12400, 8500), ("Super do Povo", 13400, 9000),
+    ("Super Lagoa", 13400, 9000), ("Fazendinha", 12900, 8500),
+    ("Pinheiro", 13400, 9000), ("Variedades", 13400, 9000),
+)
 
 
 def connect():
@@ -150,6 +155,21 @@ def init_db():
             UNIQUE(rede, nome)
         )""")
         db.execute("CREATE INDEX IF NOT EXISTS idx_lojas_rede_cidade ON lojas(rede, cidade)")
+        db.execute("""CREATE TABLE IF NOT EXISTS tarifas_redes (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            rede TEXT NOT NULL UNIQUE,
+            valor_recebido_centavos INTEGER NOT NULL CHECK (valor_recebido_centavos > 0),
+            valor_padrao_centavos INTEGER NOT NULL CHECK (valor_padrao_centavos > 0),
+            atualizado_em TEXT NOT NULL
+        )""")
+        db.execute("""CREATE TABLE IF NOT EXISTS tarifas_setores (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            rede TEXT NOT NULL REFERENCES tarifas_redes(rede) ON UPDATE CASCADE,
+            setor TEXT NOT NULL CHECK (length(trim(setor)) BETWEEN 1 AND 80 AND setor = trim(setor)),
+            valor_pago_centavos INTEGER NOT NULL CHECK (valor_pago_centavos > 0),
+            atualizado_em TEXT NOT NULL
+        )""")
+        db.execute("CREATE UNIQUE INDEX IF NOT EXISTS tarifas_setores_rede_setor_ci ON tarifas_setores(rede, lower(setor))")
         db.execute("""CREATE TABLE IF NOT EXISTS direct_auditoria (
             id INTEGER PRIMARY KEY AUTOINCREMENT, tabela TEXT NOT NULL, registro_id INTEGER NOT NULL,
             operacao TEXT NOT NULL, antes TEXT, depois TEXT, email_autor TEXT NOT NULL DEFAULT 'Servidor local',
@@ -159,8 +179,10 @@ def init_db():
             "diarias": ("id", "diarista_id", "data", "local", "setor", "valor_centavos", "vencimento_pagamento", "data_pagamento", "forma_pagamento", "motivo_ajuste"),
             "financeiro_lancamentos": ("id", "tipo", "descricao", "contraparte", "valor_centavos", "vencimento", "data_pagamento", "forma_pagamento", "motivo_ajuste"),
             "pedido_escalas": ("id", "pedido_id", "diarista_id", "data", "status"),
+            "tarifas_redes": ("id", "rede", "valor_recebido_centavos", "valor_padrao_centavos"),
+            "tarifas_setores": ("id", "rede", "setor", "valor_pago_centavos"),
         }.items():
-            for event in ("INSERT", "UPDATE", "DELETE"):
+            for event in (("UPDATE",) if table == "tarifas_redes" else ("INSERT", "UPDATE", "DELETE")):
                 old_json = "json_object(" + ", ".join(f"'{field}', OLD.{field}" for field in fields) + ")" if event != "INSERT" else "NULL"
                 new_json = "json_object(" + ", ".join(f"'{field}', NEW.{field}" for field in fields) + ")" if event != "DELETE" else "NULL"
                 row_id = "OLD.id" if event == "DELETE" else "NEW.id"
@@ -173,6 +195,9 @@ def init_db():
         db.executemany("""INSERT OR IGNORE INTO lojas
             (rede, nome, endereco, bairro, cidade, fonte_url, situacao, observacao, criado_em, atualizado_em)
             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""", (item + (now, now) for item in LOJAS))
+        db.executemany("""INSERT OR IGNORE INTO tarifas_redes
+            (rede, valor_recebido_centavos, valor_padrao_centavos, atualizado_em)
+            VALUES (?, ?, ?, ?)""", (item + (now,) for item in TARIFAS_INICIAIS))
 
 
 def valid_cpf(cpf):
@@ -450,6 +475,28 @@ def order_scale_rows(db, order_id):
 REDES = ("Super do Povo", "Super Lagoa", "Fazendinha", "Hipermarket", "Pinheiro", "Variedades")
 
 
+def validate_network_tariff(payload):
+    if not isinstance(payload, dict):
+        raise ValueError("Dados da tarifa inválidos.")
+    return {
+        "valor_recebido_centavos": money_cents(payload.get("valor_recebido"), True),
+        "valor_padrao_centavos": money_cents(payload.get("valor_padrao"), True),
+    }
+
+
+def validate_sector_tariff(payload):
+    if not isinstance(payload, dict):
+        raise ValueError("Dados do setor inválidos.")
+    rede = payload.get("rede")
+    if rede not in REDES:
+        raise ValueError("Selecione uma rede cadastrada.")
+    return {
+        "rede": rede,
+        "setor": clean_text(payload.get("setor"), "o setor", 80),
+        "valor_pago_centavos": money_cents(payload.get("valor_pago"), True),
+    }
+
+
 def validate_store(payload):
     if not isinstance(payload, dict):
         raise ValueError("Dados da loja inválidos.")
@@ -549,6 +596,11 @@ class Handler(BaseHTTPRequestHandler):
             with connect() as db:
                 rows = db.execute("SELECT * FROM lojas ORDER BY rede COLLATE NOCASE, cidade COLLATE NOCASE, nome COLLATE NOCASE").fetchall()
             return self.respond(HTTPStatus.OK, [dict(row) for row in rows])
+        if path == "/api/tarifas":
+            with connect() as db:
+                redes = db.execute("SELECT * FROM tarifas_redes ORDER BY rede COLLATE NOCASE").fetchall()
+                setores = db.execute("SELECT * FROM tarifas_setores ORDER BY rede COLLATE NOCASE, setor COLLATE NOCASE").fetchall()
+            return self.respond(HTTPStatus.OK, {"redes": [dict(row) for row in redes], "setores": [dict(row) for row in setores]})
         daily_route = self.route_diarias()
         if daily_route and daily_route[1] is None:
             with connect() as db:
@@ -558,7 +610,7 @@ class Handler(BaseHTTPRequestHandler):
             return self.respond(HTTPStatus.OK, [dict(row) for row in rows])
         if path == "/":
             path = "/index.html"
-        assets = {"/index.html": "text/html; charset=utf-8", "/style.css": "text/css; charset=utf-8", "/brand.css": "text/css; charset=utf-8", "/theme.css": "text/css; charset=utf-8", "/mobile.css": "text/css; charset=utf-8", "/app.js": "text/javascript; charset=utf-8", "/theme.js": "text/javascript; charset=utf-8", "/finance.js": "text/javascript; charset=utf-8", "/orders.js": "text/javascript; charset=utf-8", "/stores.js": "text/javascript; charset=utf-8", "/remote.js": "text/javascript; charset=utf-8", "/vendor/supabase-2.117.2.js": "text/javascript; charset=utf-8", "/stores.css": "text/css; charset=utf-8", "/login.css": "text/css; charset=utf-8", "/favicon.svg": "image/svg+xml", "/logo-direct-promocoes.jpg": "image/jpeg", "/logo-direct-promocoes-transparente.png": "image/png"}
+        assets = {"/index.html": "text/html; charset=utf-8", "/style.css": "text/css; charset=utf-8", "/brand.css": "text/css; charset=utf-8", "/theme.css": "text/css; charset=utf-8", "/mobile.css": "text/css; charset=utf-8", "/app.js": "text/javascript; charset=utf-8", "/theme.js": "text/javascript; charset=utf-8", "/finance.js": "text/javascript; charset=utf-8", "/orders.js": "text/javascript; charset=utf-8", "/stores.js": "text/javascript; charset=utf-8", "/settings.js": "text/javascript; charset=utf-8", "/remote.js": "text/javascript; charset=utf-8", "/vendor/supabase-2.117.2.js": "text/javascript; charset=utf-8", "/stores.css": "text/css; charset=utf-8", "/settings.css": "text/css; charset=utf-8", "/login.css": "text/css; charset=utf-8", "/favicon.svg": "image/svg+xml", "/logo-direct-promocoes.jpg": "image/jpeg", "/logo-direct-promocoes-transparente.png": "image/png"}
         if path in assets:
             return self.respond(HTTPStatus.OK, (STATIC / path[1:]).read_bytes(), assets[path])
         return self.respond(HTTPStatus.NOT_FOUND, {"erro": "Página não encontrada."})
@@ -566,6 +618,17 @@ class Handler(BaseHTTPRequestHandler):
     def do_POST(self):
         if not self._allowed_origin():
             return self.respond(HTTPStatus.FORBIDDEN, {"erro": "Acesso não permitido."})
+        if urlparse(self.path).path == "/api/tarifas/setores":
+            try:
+                data = validate_sector_tariff(self.read_json())
+                with connect() as db:
+                    cur = db.execute("INSERT INTO tarifas_setores (rede, setor, valor_pago_centavos, atualizado_em) VALUES (?, ?, ?, ?)", (*data.values(), datetime.now(timezone.utc).isoformat()))
+                    row = db.execute("SELECT * FROM tarifas_setores WHERE id = ?", (cur.lastrowid,)).fetchone()
+                return self.respond(HTTPStatus.CREATED, dict(row))
+            except (ValueError, json.JSONDecodeError, TypeError) as exc:
+                return self.respond(HTTPStatus.BAD_REQUEST, {"erro": str(exc)})
+            except sqlite3.IntegrityError:
+                return self.respond(HTTPStatus.CONFLICT, {"erro": "Este setor já tem um valor configurado nessa rede."})
         scale_route = self.route_escalas()
         if scale_route and scale_route[1] is None:
             try:
@@ -664,6 +727,32 @@ class Handler(BaseHTTPRequestHandler):
     def do_PUT(self):
         if not self._allowed_origin():
             return self.respond(HTTPStatus.FORBIDDEN, {"erro": "Acesso não permitido."})
+        network_match = re.fullmatch(r"/api/tarifas/redes/(\d+)", urlparse(self.path).path)
+        if network_match:
+            try:
+                data = validate_network_tariff(self.read_json())
+                with connect() as db:
+                    cur = db.execute("UPDATE tarifas_redes SET valor_recebido_centavos = ?, valor_padrao_centavos = ?, atualizado_em = ? WHERE id = ?", (*data.values(), datetime.now(timezone.utc).isoformat(), int(network_match.group(1))))
+                    if not cur.rowcount:
+                        return self.respond(HTTPStatus.NOT_FOUND, {"erro": "Rede não encontrada."})
+                    row = db.execute("SELECT * FROM tarifas_redes WHERE id = ?", (int(network_match.group(1)),)).fetchone()
+                return self.respond(HTTPStatus.OK, dict(row))
+            except (ValueError, json.JSONDecodeError, TypeError) as exc:
+                return self.respond(HTTPStatus.BAD_REQUEST, {"erro": str(exc)})
+        sector_match = re.fullmatch(r"/api/tarifas/setores/(\d+)", urlparse(self.path).path)
+        if sector_match:
+            try:
+                data = validate_sector_tariff(self.read_json())
+                with connect() as db:
+                    cur = db.execute("UPDATE tarifas_setores SET rede = ?, setor = ?, valor_pago_centavos = ?, atualizado_em = ? WHERE id = ?", (*data.values(), datetime.now(timezone.utc).isoformat(), int(sector_match.group(1))))
+                    if not cur.rowcount:
+                        return self.respond(HTTPStatus.NOT_FOUND, {"erro": "Setor não encontrado."})
+                    row = db.execute("SELECT * FROM tarifas_setores WHERE id = ?", (int(sector_match.group(1)),)).fetchone()
+                return self.respond(HTTPStatus.OK, dict(row))
+            except (ValueError, json.JSONDecodeError, TypeError) as exc:
+                return self.respond(HTTPStatus.BAD_REQUEST, {"erro": str(exc)})
+            except sqlite3.IntegrityError:
+                return self.respond(HTTPStatus.CONFLICT, {"erro": "Este setor já tem um valor configurado nessa rede."})
         store_match = re.fullmatch(r"/api/lojas/(\d+)", urlparse(self.path).path)
         if store_match:
             try:
@@ -824,6 +913,11 @@ class Handler(BaseHTTPRequestHandler):
     def do_DELETE(self):
         if not self._allowed_origin():
             return self.respond(HTTPStatus.FORBIDDEN, {"erro": "Acesso não permitido."})
+        sector_match = re.fullmatch(r"/api/tarifas/setores/(\d+)", urlparse(self.path).path)
+        if sector_match:
+            with connect() as db:
+                cur = db.execute("DELETE FROM tarifas_setores WHERE id = ?", (int(sector_match.group(1)),))
+            return self.respond(HTTPStatus.OK if cur.rowcount else HTTPStatus.NOT_FOUND, {"ok": bool(cur.rowcount)})
         scale_route = self.route_escalas()
         if scale_route and scale_route[1] is not None:
             with connect() as db:

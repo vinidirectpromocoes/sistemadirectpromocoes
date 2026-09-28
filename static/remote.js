@@ -48,6 +48,7 @@
       if (typeof loadStores === 'function') await loadStores();
       if (typeof loadFinance === 'function') await loadFinance();
       if (typeof loadOrders === 'function') await loadOrders();
+      if (typeof loadSettings === 'function') await loadSettings().catch(() => {});
     }
     return true;
   }
@@ -222,6 +223,25 @@
       if (method === 'GET') return (await rows('lojas')).sort((a,b) => a.rede.localeCompare(b.rede, 'pt-BR') || a.cidade.localeCompare(b.cidade, 'pt-BR') || a.nome.localeCompare(b.nome, 'pt-BR'));
       if (method === 'POST') return unwrap(await sb.from('lojas').insert(storePayload(p)).select().single());
       if (method === 'PUT') return unwrap(await sb.from('lojas').update({ ...storePayload(p), atualizado_em: new Date().toISOString() }).eq('id', id).select().single());
+    }
+    if (entity === 'tarifas') {
+      if (!parts[2] && method === 'GET') {
+        const [redes, setores] = await Promise.all([rows('tarifas_redes'), rows('tarifas_setores')]);
+        return {
+          redes: redes.sort((a, b) => a.rede.localeCompare(b.rede, 'pt-BR')),
+          setores: setores.sort((a, b) => a.rede.localeCompare(b.rede, 'pt-BR') || a.setor.localeCompare(b.setor, 'pt-BR'))
+        };
+      }
+      const table = parts[2] === 'redes' ? 'tarifas_redes' : parts[2] === 'setores' ? 'tarifas_setores' : null;
+      const rateId = parts[3] ? Number(parts[3]) : null;
+      if (table === 'tarifas_redes' && method === 'PUT' && rateId) {
+        return unwrap(await sb.from(table).update({ valor_recebido_centavos: money(p.valor_recebido), valor_padrao_centavos: money(p.valor_padrao), atualizado_em: new Date().toISOString() }).eq('id', rateId).select().single());
+      }
+      if (table === 'tarifas_setores') {
+        if (method === 'POST' && !rateId) return unwrap(await sb.from(table).insert({ rede: p.rede, setor: p.setor, valor_pago_centavos: money(p.valor_pago) }).select().single());
+        if (method === 'PUT' && rateId) return unwrap(await sb.from(table).update({ rede: p.rede, setor: p.setor, valor_pago_centavos: money(p.valor_pago), atualizado_em: new Date().toISOString() }).eq('id', rateId).select().single());
+        if (method === 'DELETE' && rateId) { unwrap(await sb.from(table).delete().eq('id', rateId)); return { ok: true }; }
+      }
     }
     throw new Error('Operação não disponível.');
   }

@@ -367,7 +367,7 @@ async function openFinanceAudit() {
       const details = document.createElement('details'); details.className = 'finance-audit-item';
       const summary = document.createElement('summary');
       const action = { INSERT: 'Cadastro', UPDATE: 'Alteração', DELETE: 'Exclusão' }[item.operacao] || item.operacao;
-      const entity = { diarias: 'Diária', financeiro_lancamentos: 'Lançamento', pedido_escalas: 'Escala' }[item.tabela] || item.tabela;
+      const entity = { diarias: 'Diária', financeiro_lancamentos: 'Lançamento', pedido_escalas: 'Escala', tarifas_redes: 'Tarifa da rede', tarifas_setores: 'Tarifa do setor' }[item.tabela] || item.tabela;
       summary.textContent = `${action} · ${entity} #${item.registro_id} · ${new Date(item.alterado_em).toLocaleString('pt-BR')}`;
       const actor = document.createElement('small'); actor.textContent = `Responsável: ${item.email_autor || 'Processo administrativo'}`;
       const data = document.createElement('pre'); data.textContent = JSON.stringify({ antes: item.antes, depois: item.depois }, null, 2);
@@ -377,8 +377,8 @@ async function openFinanceAudit() {
 }
 
 function showPage() {
-  const page = ['financeiro', 'pedidos', 'redes'].includes(window.location.hash.slice(1)) ? window.location.hash.slice(1) : 'diaristas';
-  for (const name of ['diaristas', 'pedidos', 'redes', 'financeiro']) {
+  const page = ['financeiro', 'pedidos', 'redes', 'configuracoes'].includes(window.location.hash.slice(1)) ? window.location.hash.slice(1) : 'diaristas';
+  for (const name of ['diaristas', 'pedidos', 'redes', 'financeiro', 'configuracoes']) {
     const active = name === page;
     $(`#${name}-page`).hidden = !active;
     const link = $(`#nav-${name}`);
@@ -386,10 +386,11 @@ function showPage() {
     if (active) link.setAttribute('aria-current', 'page');
     else link.removeAttribute('aria-current');
   }
-  document.title = `${{ diaristas: 'Diaristas', pedidos: 'Pedidos', redes: 'Redes e lojas', financeiro: 'Financeiro' }[page]} | Direct Promoções`;
+  document.title = `${{ diaristas: 'Diaristas', pedidos: 'Pedidos', redes: 'Redes e lojas', financeiro: 'Financeiro', configuracoes: 'Configurações' }[page]} | Direct Promoções`;
   if (page === 'financeiro') loadFinance();
   if (page === 'pedidos' && typeof loadOrders === 'function') loadOrders();
   if (page === 'redes' && typeof loadStores === 'function') loadStores();
+  if (page === 'configuracoes' && typeof loadSettings === 'function') loadSettings().catch(() => {});
 }
 
 $('#finance-month').value = financeToday().slice(0, 7);

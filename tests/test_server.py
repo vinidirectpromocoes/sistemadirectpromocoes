@@ -96,6 +96,8 @@ class CadastroTest(unittest.TestCase):
             ("/orders.js", "text/javascript; charset=utf-8"),
             ("/stores.js", "text/javascript; charset=utf-8"),
             ("/stores.css", "text/css; charset=utf-8"),
+            ("/settings.js", "text/javascript; charset=utf-8"),
+            ("/settings.css", "text/css; charset=utf-8"),
             ("/logo-direct-promocoes.jpg", "image/jpeg"),
             ("/favicon.svg", "image/svg+xml"),
         ]:
@@ -103,6 +105,36 @@ class CadastroTest(unittest.TestCase):
                 self.assertEqual(response.status, 200)
                 self.assertEqual(response.headers["Content-Type"], content_type)
                 self.assertTrue(response.read())
+
+    def test_network_and_sector_rates(self):
+        status, data = self.call("GET", "/api/tarifas")
+        self.assertEqual(status, 200)
+        self.assertEqual(len(data["redes"]), 6)
+        rates = {row["rede"]: row for row in data["redes"]}
+        self.assertEqual((rates["Hipermarket"]["valor_recebido_centavos"], rates["Hipermarket"]["valor_padrao_centavos"]), (12400, 8500))
+        self.assertEqual((rates["Fazendinha"]["valor_recebido_centavos"], rates["Fazendinha"]["valor_padrao_centavos"]), (12900, 8500))
+        self.assertEqual((rates["Super do Povo"]["valor_recebido_centavos"], rates["Super do Povo"]["valor_padrao_centavos"]), (13400, 9000))
+        self.assertEqual(data["setores"], [])
+        path = f"/api/tarifas/redes/{rates['Super do Povo']['id']}"
+        self.assertEqual(self.call("PUT", path, {"valor_recebido": "0", "valor_padrao": "90"})[0], 400)
+        status, updated = self.call("PUT", path, {"valor_recebido": "135.50", "valor_padrao": "92.00"})
+        self.assertEqual(status, 200)
+        self.assertEqual((updated["valor_recebido_centavos"], updated["valor_padrao_centavos"]), (13550, 9200))
+        sector = {"rede": "Super do Povo", "setor": "Operador de caixa", "valor_pago": "96.50"}
+        status, created = self.call("POST", "/api/tarifas/setores", sector)
+        self.assertEqual(status, 201)
+        self.assertEqual(created["valor_pago_centavos"], 9650)
+        self.assertEqual(self.call("POST", "/api/tarifas/setores", {**sector, "setor": "operador de caixa"})[0], 409)
+        self.assertEqual(self.call("POST", "/api/tarifas/setores", {**sector, "rede": "Rede desconhecida"})[0], 400)
+        self.assertEqual(self.call("POST", "/api/tarifas/setores", {**sector, "valor_pago": "-1"})[0], 400)
+        status, changed = self.call("PUT", f"/api/tarifas/setores/{created['id']}", {**sector, "valor_pago": "98.00"})
+        self.assertEqual(status, 200)
+        self.assertEqual(changed["valor_pago_centavos"], 9800)
+        self.assertEqual(len(self.call("GET", "/api/tarifas")[1]["setores"]), 1)
+        self.assertEqual(self.call("DELETE", f"/api/tarifas/setores/{created['id']}")[0], 200)
+        self.assertEqual(self.call("GET", "/api/tarifas")[1]["setores"], [])
+        with server.connect() as db:
+            self.assertEqual(db.execute("SELECT count(*) FROM direct_auditoria WHERE tabela LIKE 'tarifas_%'").fetchone()[0], 4)
 
     def test_blocking_and_daily_history(self):
         _, created = self.call("POST", "/api/diaristas", SAMPLE)
