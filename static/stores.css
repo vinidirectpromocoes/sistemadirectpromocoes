@@ -3,7 +3,7 @@
 .store-filters .search-wrap { flex:1 1 260px; }
 .store-filters select { min-height:42px; max-width:240px; padding:8px 10px; border:1px solid #d8e2f3; border-radius:8px; color:#1c356d; background:#fff; font-size:14px; }
 .store-groups { padding:0 28px 28px; display:grid; gap:25px; }
-.store-group { border:1px solid #e0e8f7; border-radius:12px; overflow:hidden; background:#fff; }
+.store-group { border:1px solid #e7edf6; border-radius:16px; overflow:hidden; background:#fff; box-shadow:0 12px 26px #18396812, 0 2px 7px #18396808; }
 .store-group-heading { display:flex; align-items:center; justify-content:space-between; gap:12px; padding:16px 20px; background:#f4f8ff; border-bottom:1px solid #e0e8f7; }
 .store-group-heading h3 { margin:0; font-size:17px; }
 .store-group-heading span { color:#60749b; font-size:13px; font-weight:700; }

@@ -69,6 +69,8 @@ html[data-theme="dark"] body { background: var(--dark-bg); color: var(--dark-tex
 html[data-theme="dark"] .sidebar {
   background: linear-gradient(160deg, #070f24 0%, #0d1d3f 68%, #123a72 100%);
   color: #e8f1ff;
+  border-color: #4d78aa5c;
+  box-shadow: 0 22px 44px #020814b3, 0 4px 12px #02081480;
 }
 html[data-theme="dark"] .sidebar nav a { color: #d6e5fa; }
 html[data-theme="dark"] .sidebar nav a:hover,
@@ -101,7 +103,7 @@ html[data-theme="dark"] .login-card {
   background: var(--dark-surface);
   border-color: var(--dark-border);
   color: var(--dark-text);
-  box-shadow: 0 10px 30px #03091655;
+  box-shadow: 0 18px 36px #03091685, 0 3px 10px #03091652;
 }
 html[data-theme="dark"] .stat-card strong,
 html[data-theme="dark"] .finance-stat strong,
