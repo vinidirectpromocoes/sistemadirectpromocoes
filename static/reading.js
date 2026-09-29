@@ -9,6 +9,7 @@
   const pdfWorkerUrl = 'https://cdn.jsdelivr.net/npm/pdfjs-dist@4.10.38/build/pdf.worker.min.mjs';
   let ocrWorker, pdfLibrary, pending = [];
   let loadingPending = false;
+  let lastOcrConfidence = 100;
 
   function feedback(message, error = false) {
     const box = pick('#reading-feedback');
@@ -41,6 +42,7 @@
       });
     }
     const result = await ocrWorker.recognize(source);
+    lastOcrConfidence = Math.min(lastOcrConfidence, Number(result.data.confidence ?? 100));
     return result.data.text || '';
   }
   async function pdfText(file) {
@@ -105,7 +107,7 @@
     element.textContent = label;
     return element;
   }
-  function resultCard(item, state, description) {
+  function resultCard(item, state, description, onUndo = null) {
     const card = document.createElement('article'); card.className = `reading-item ${state}`;
     const head = document.createElement('div'); head.className = 'reading-item-head';
     const title = document.createElement('strong');
@@ -115,6 +117,21 @@
     card.append(head, detail);
     if (item.avisos?.length) {
       const note = document.createElement('small'); note.textContent = item.avisos.join(' '); card.append(note);
+    }
+    if (item.tipo !== 'indefinido') {
+      const detail = document.createElement('details'); detail.className = 'reading-identified';
+      const summary = document.createElement('summary'); summary.textContent = 'Dados identificados';
+      const values = document.createElement('pre'); values.textContent = JSON.stringify(item.dados, null, 2);
+      detail.append(summary, values); card.append(detail);
+    }
+    if (onUndo) {
+      const undo = document.createElement('button'); undo.type = 'button'; undo.className = 'text-button'; undo.textContent = 'Desfazer este registro';
+      undo.addEventListener('click', async () => {
+        undo.disabled = true;
+        try { await onUndo(); card.querySelector('.reading-state').textContent = 'Desfeito'; undo.remove(); }
+        catch (error) { const note = document.createElement('small'); note.textContent = `Não foi possível desfazer: ${error.message}`; card.append(note); undo.disabled = false; }
+      });
+      card.append(undo);
     }
     return card;
   }
@@ -133,11 +150,12 @@
       } catch (error) { return { state: 'error', description: `Não foi possível salvar a pendência: ${error.message}` }; }
     }
     try {
+      let saved;
       if (item.tipo === 'diarista') {
-        await request('/api/diaristas', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: body(item.dados) });
+        saved = await request('/api/diaristas', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: body(item.dados) });
         existing.workers.add(cpf);
       } else if (item.tipo === 'pedido') {
-        await request('/api/pedidos', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: body(item.dados) });
+        saved = await request('/api/pedidos', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: body(item.dados) });
         existing.orders.add(item.chave);
       }
       const previous = existing.draftRecords.filter(record => record.status === 'pendente' &&
@@ -146,7 +164,7 @@
         try { await request(`/api/leituras-pendentes/${old.id}`, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: body({ status: 'resolvido' }) }); }
         catch { /* O registro principal foi salvo; a pendência pode ser resolvida pela lista. */ }
       }
-      return { state: 'saved', description: item.tipo === 'pedido' ? `${item.dados.turnos.length} dia(s) · ${item.dados.setor} · ${item.dados.quantidade_diaristas} diarista(s) por dia.` : `CPF ${cpf} · ${item.dados.setores.join(', ')}.` };
+      return { state: 'saved', id: saved.id, entity: item.tipo === 'pedido' ? 'pedidos' : 'diaristas', description: item.tipo === 'pedido' ? `${item.dados.turnos.length} dia(s) · ${item.dados.setor} · ${item.dados.quantidade_diaristas} diarista(s) por dia.` : `CPF ${cpf} · ${item.dados.setores.join(', ')}.` };
     } catch (error) {
       if (!existing.drafts.has(draftKey)) {
         try {
@@ -180,17 +198,25 @@
       const sources = [];
       if (typed) sources.push({ name: 'Texto colado', text: typed });
       for (const file of files) {
-        try { sources.push({ name: file.name, text: await fileText(file) }); }
+        try { lastOcrConfidence = 100; sources.push({ name: file.name, text: await fileText(file), confidence: lastOcrConfidence }); }
         catch (error) { counts.error++; list.append(resultCard({ tipo: 'indefinido', dados: {} }, 'error', error.message)); }
       }
       for (const source of sources) {
         const parts = parser.parse(source.text, { stores: data.stores, sectors: data.sectors, today: orderToday() });
         if (!parts.length) { counts.error++; list.append(resultCard({ tipo: 'indefinido', dados: {} }, 'error', `${source.name}: nenhum texto reconhecido.`)); continue; }
         for (const item of parts) {
+          if (source.confidence < 60) {
+            item.faltando.push('Conferir texto da imagem pouco legível');
+            item.avisos = [...(item.avisos || []), `Confiança do OCR: ${Math.round(source.confidence)}%.`];
+          }
           feedback(`Registrando ${source.name} · ${counts.saved + counts.pending + counts.duplicate + counts.error + 1} registro(s) processado(s)...`);
           const outcome = await processItem(item, existing);
           counts[outcome.state]++;
-          list.append(resultCard(item, outcome.state, outcome.description));
+          const undo = outcome.state === 'saved' && (outcome.entity === 'pedidos' || !window.directRemote || window.directRemote.role === 'admin') ? async () => {
+            await request(`/api/${outcome.entity}/${outcome.id}`, { method: 'DELETE' });
+            await Promise.all([load(), loadOrders(), loadPending()]);
+          } : null;
+          list.append(resultCard(item, outcome.state, outcome.description, undo));
         }
       }
       pick('#reading-result-summary').textContent = `${counts.saved} registrado(s) · ${counts.pending} pendente(s) · ${counts.duplicate} já existente(s) · ${counts.error} erro(s).`;

@@ -93,6 +93,10 @@ class CadastroTest(unittest.TestCase):
         for path, content_type in [
             ("/brand.css", "text/css; charset=utf-8"),
             ("/finance.js", "text/javascript; charset=utf-8"),
+            ("/forecast.js", "text/javascript; charset=utf-8"),
+            ("/operations.js", "text/javascript; charset=utf-8"),
+            ("/backup.js", "text/javascript; charset=utf-8"),
+            ("/operations.css", "text/css; charset=utf-8"),
             ("/orders.js", "text/javascript; charset=utf-8"),
             ("/stores.js", "text/javascript; charset=utf-8"),
             ("/stores.css", "text/css; charset=utf-8"),
@@ -327,6 +331,38 @@ class CadastroTest(unittest.TestCase):
         path = f"/api/pedidos/{first['id']}/escalas/{scale['id']}"
         self.assertEqual(self.call("PATCH", path, {"status": "presente"})[0], 400)
         self.assertEqual(self.call("PATCH", path, {"status": "falta"})[0], 400)
+
+    def test_attendance_freezes_network_rates_and_updates_finance(self):
+        today = datetime.now(server.FORTALEZA).date()
+        worker_data = {**SAMPLE, "disponibilidade": [{
+            "dia": server.WEEKDAYS[today.weekday()], "inicio": "07:00", "fim": "16:00",
+        }]}
+        _, worker = self.call("POST", "/api/diaristas", worker_data)
+        order_data = {
+            "supermercado": "Super do Povo", "unidade": "Meireles", "contato": "",
+            "setor": "Operador de caixa", "quantidade_diaristas": 1,
+            "situacao": "confirmado", "observacoes": "",
+            "turnos": [{"data": today.isoformat(), "inicio": "07:00", "fim": "15:20"}],
+        }
+        _, order = self.call("POST", "/api/pedidos", order_data)
+        _, scale = self.call("POST", f"/api/pedidos/{order['id']}/escalas", {
+            "diarista_id": worker["id"], "data": today.isoformat(),
+        })
+        path = f"/api/pedidos/{order['id']}/escalas/{scale['id']}"
+        status, updated = self.call("PATCH", path, {"status": "presente"})
+        self.assertEqual(status, 200)
+        self.assertEqual(updated["diaria"]["valor_centavos"], 9000)
+        self.assertEqual(updated["diaria"]["valor_recebido_centavos"], 13400)
+        self.assertEqual(updated["diaria"]["vencimento_pagamento"], today.isoformat())
+        self.assertEqual(self.call("GET", "/api/financeiro")[1][0]["valor_centavos"], 9000)
+        network = next(row for row in self.call("GET", "/api/tarifas")[1]["redes"] if row["rede"] == "Super do Povo")
+        self.assertEqual(self.call("PUT", f"/api/tarifas/redes/{network['id']}", {
+            "valor_recebido": "150.00", "valor_padrao": "100.00",
+        })[0], 200)
+        frozen = self.call("GET", f"/api/pedidos/{order['id']}/escalas")[1][0]["diaria"]
+        self.assertEqual((frozen["valor_centavos"], frozen["valor_recebido_centavos"]), (9000, 13400))
+        self.assertEqual(self.call("PATCH", path, {"status": "falta"})[0], 200)
+        self.assertEqual(self.call("GET", "/api/financeiro")[1], [])
 
     def test_store_catalog_seed_edit_and_persistence(self):
         status, stores = self.call("GET", "/api/lojas")

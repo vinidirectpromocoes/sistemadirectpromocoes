@@ -1,16 +1,16 @@
 # Sistema Direct Promoções
 
-Sistema da Direct Promoções com abas de Diaristas, Pedidos, Redes e lojas e Financeiro. O site público é hospedado na Vercel; o acesso aos dados exige login e autorização de administrador no Supabase. A versão local em Python continua disponível para desenvolvimento, usando seu próprio SQLite.
+Sistema da Direct Promoções com abas de Início, Diaristas, Pedidos, Leitura IA, Redes e lojas, Financeiro e Configurações. O site público é hospedado na Vercel; o acesso aos dados exige login e autorização no Supabase. A versão local em Python continua disponível para desenvolvimento, usando seu próprio SQLite.
 
 ## Site publicado e primeiro acesso
 
 Endereço público: **https://sistemadirectpromocoes-zeta.vercel.app/**. A página de login é pública; os dados exigem uma conta administradora autorizada.
 
-O administrador autorizado entra com o e-mail e a senha já cadastrados no Supabase. A tela pública contém apenas o formulário de login. O e-mail precisa estar registrado em `public.direct_admins`; uma conta sem essa autorização não consegue ler ou alterar os dados da operação.
+O administrador autorizado entra com o e-mail e a senha já cadastrados no Supabase. A tela pública contém apenas o formulário de login. O e-mail precisa estar registrado em `public.direct_admins`; uma conta sem essa autorização não consegue ler ou alterar os dados da operação. Funcionários individuais precisam de conta no Supabase Auth **e** autorização de seu e-mail em Configurações → Acesso dos funcionários.
 
 O arquivo `vercel.json` publica `static/`. O JavaScript desta pasta usa a chave publicável do Supabase, e as políticas RLS verificam o administrador em cada tabela. A chave de serviço e o banco SQLite não pertencem ao site ou repositório. Enviar alterações para `main` no GitHub aciona um novo deploy pela integração Git da Vercel.
 
-Para adicionar outro administrador, inclua seu e-mail em `public.direct_admins` usando um acesso seguro ao banco. Não coloque a lista de administradores no código publicado. Os esquemas e políticas estão em `supabase/migrations/`.
+Para adicionar outro administrador, inclua seu e-mail em `public.direct_admins` usando um acesso seguro ao banco. Não coloque a lista de administradores no código publicado. As permissões de funcionários são Operação (cadastros, pedidos, escalas e leituras), Financeiro (lançamentos e tarifas) e Consulta (pedidos e lojas). O administrador autoriza ou desativa o e-mail em Configurações; a conta e a senha devem ser criadas separadamente em Supabase Auth. Os esquemas e políticas estão em `supabase/migrations/`.
 
 ## Como iniciar
 
@@ -46,6 +46,8 @@ Os indicadores contam como **disponíveis** os cadastros não bloqueados e como 
 ## Financeiro
 
 - As diárias aparecem automaticamente como saídas. Informe valor, vencimento, data e forma de pagamento na ficha da diária ou na aba Financeiro.
+- A previsão operacional mostra faturamento, custo das diárias e margem bruta do mês (ou de todos os meses), com gráfico circular e divisão por rede. O cenário ideal considera todas as vagas de todos os dias atendidas; a previsão atual desconta faltas sem substituição e usa os valores congelados das presenças confirmadas. Vagas futuras ainda sem escala permanecem como hipótese de atendimento. Pedidos cancelados não entram. Valores de tarifas ausentes são avisados e não são inventados.
+- Ao confirmar uma presença, a diária registra os valores vigentes de faturamento e pagamento. Alterar uma tarifa depois não reescreve esse histórico. Uma falta sem pagamento retira a diária ligada à escala. O faturamento previsto é uma estimativa de serviço prestado, não equivale a dinheiro já recebido da rede: registre a cobrança e sua liquidação como entrada no financeiro para acompanhar o caixa.
 - Registre outras entradas e saídas com descrição, cliente ou favorecido, categoria, valor, vencimento, data de liquidação e observações.
 - Os cards mostram entradas, saídas e saldo **realizados no mês selecionado**, além do total de valores pendentes de receber e pagar em todos os períodos.
 - O filtro de mês afeta a lista; a opção **Ver todos os meses** mostra todo o histórico. Há busca, filtros por tipo e situação, e exportação CSV do resultado filtrado.
@@ -59,6 +61,7 @@ Os indicadores contam como **disponíveis** os cadastros não bloqueados e como 
 - Acompanhe a situação do pedido: novo, em seleção, confirmado, concluído ou cancelado.
 - A lista oferece busca e filtro por situação; a ficha mostra todos os dias e horários e permite editar ou excluir o pedido.
 - Um pedido corresponde a um setor e a uma quantidade de diaristas por dia. Para demandas diferentes por setor, registre pedidos separados.
+- A escala semanal mostra horários, equipe e vagas abertas. Na ficha do pedido, associe diaristas e confirme presença ou falta por data. A página Início reúne vagas abertas, presenças pendentes, leituras pendentes e lançamentos vencidos.
 
 ## Leitura IA
 
@@ -66,6 +69,11 @@ Os indicadores contam como **disponíveis** os cadastros não bloqueados e como 
 - O sistema separa cadastros e pedidos pelas etiquetas das mensagens, identifica seus campos e registra automaticamente os completos. Verifica CPF, datas, loja e duplicidade antes de salvar. Informações incompletas ficam na lista **Informações pendentes**, preservadas no banco e disponíveis para completar no formulário.
 - Para pedidos, intervalos abreviados como `29 a 05` são interpretados com base no dia atual em Fortaleza. A rede é associada ao nome da loja quando há correspondência única no catálogo. A quantidade de dias nunca é usada como quantidade de diaristas. Se a quantidade de pessoas não vier informada, o padrão da empresa é 1 por dia.
 - A leitura segue formatos com etiquetas como `Nome Completo:`, `CPF:`, `Loja:`, `Função:` e `Horário:`. Texto ilegível, escrita manual ou mensagens ambíguas podem exigir revisão na lista de pendências.
+- Cada resultado da leitura pode ser expandido para conferir os campos identificados. OCR com baixa confiança vai para revisão, e o último pedido salvo pode ser desfeito se ainda não tiver escala associada.
+
+## Cópia de segurança
+
+Em Configurações, o administrador pode baixar uma cópia **criptografada** das tabelas operacionais e verificar se o arquivo abre com sua senha. Guarde arquivo e senha separadamente. A cópia contém dados das tabelas, mas não inclui contas do Supabase Auth nem um restaurador automático do banco. Faça a verificação do arquivo após baixar; perder a senha impede a leitura da cópia.
 
 ## Redes e lojas
 

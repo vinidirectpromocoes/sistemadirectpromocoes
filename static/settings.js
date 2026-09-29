@@ -128,6 +128,8 @@ async function loadSettings() {
     try {
       settingsData = await request('/api/tarifas');
       renderNetworkRates(); renderSectorRates();
+      document.querySelector('#staff-settings').hidden = window.directRemote?.role !== 'admin';
+      if (window.directRemote?.role === 'admin') await loadStaff();
       const select = document.querySelector('#sector-rate-network');
       select.replaceChildren(new Option('Todas as redes', ''));
       settingsData.redes.forEach(item => select.add(new Option(item.rede, item.rede)));
@@ -139,6 +141,40 @@ async function loadSettings() {
   })();
   return settingsLoading;
 }
+
+async function loadStaff() {
+  const items = await request('/api/equipe');
+  const list = document.querySelector('#staff-list'); list.replaceChildren();
+  if (!items.length) { list.textContent = 'Nenhum funcionário autorizado ainda.'; return; }
+  for (const item of items.sort((a, b) => a.email.localeCompare(b.email))) {
+    const row = settingsNode('div', 'staff-row');
+    const identity = settingsNode('div');
+    identity.append(settingsNode('strong', '', item.email), settingsNode('small', '', `${{ operacao: 'Operação', financeiro: 'Financeiro', consulta: 'Consulta' }[item.role]} · ${item.active ? 'Ativo' : 'Bloqueado'}`));
+    const toggle = settingsNode('button', 'button button-outline', item.active ? 'Bloquear' : 'Ativar'); toggle.type = 'button';
+    toggle.addEventListener('click', async () => {
+      toggle.disabled = true;
+      try {
+        await request('/api/equipe', { method: 'POST', headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ email: item.email, role: item.role, active: !item.active }) });
+        await loadStaff(); settingsMessage(`Acesso de ${item.email} ${item.active ? 'bloqueado' : 'ativado'}.`);
+      } catch (error) { settingsMessage(error.message, true); toggle.disabled = false; }
+    });
+    row.append(identity, toggle); list.append(row);
+  }
+}
+
+document.querySelector('#staff-form').addEventListener('submit', async event => {
+  event.preventDefault();
+  const email = document.querySelector('#staff-email').value.trim().toLowerCase();
+  const role = document.querySelector('#staff-role').value;
+  if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) return settingsMessage('Informe um e-mail válido.', true);
+  const button = event.currentTarget.querySelector('button'); button.disabled = true;
+  try {
+    await request('/api/equipe', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ email, role, active: true }) });
+    event.currentTarget.reset(); await loadStaff(); settingsMessage(`E-mail ${email} autorizado. Agora crie a conta em Supabase Authentication → Users.`);
+  } catch (error) { settingsMessage(error.message, true); }
+  finally { button.disabled = false; }
+});
 
 function openSectorRate(item = null) {
   editingSectorRateId = item?.id ?? null;

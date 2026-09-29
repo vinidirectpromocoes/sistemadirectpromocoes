@@ -6,6 +6,42 @@ const financeToday = () => {
 };
 let visibleFinanceRows = [];
 let financeOpenGroupId = null;
+let financeForecastInput = null;
+
+function renderFinanceForecast() {
+  if (!financeForecastInput) return;
+  const period = $('#finance-all-months').checked ? '' : $('#finance-month').value;
+  const data = window.DirectForecast.calculate(financeForecastInput.orders, financeForecastInput.scales, financeForecastInput.tariffs, period);
+  for (const [key, field] of [['revenue', 'revenue'], ['cost', 'cost'], ['margin', 'margin']]) {
+    $(`#forecast-${key}`).textContent = moneyLabel(data.expected[field]);
+    $(`#forecast-${key}-ideal`).textContent = `Cenário ideal: ${moneyLabel(data.ideal[field])}`;
+  }
+  const warning = $('#forecast-warning');
+  warning.hidden = !data.missingRevenue && !data.missingCost;
+  warning.textContent = `Há ${data.missingRevenue} diária(s) sem tarifa de faturamento e ${data.missingCost} sem tarifa de pagamento. Complete os valores em Configurações; os totais acima incluem apenas valores conhecidos.`;
+  const revenue = Math.max(0, data.expected.revenue);
+  const costShare = revenue ? Math.min(100, data.expected.cost / revenue * 100) : 0;
+  const ring = $('#forecast-ring');
+  ring.style.setProperty('--forecast-cost-share', `${costShare}%`);
+  ring.setAttribute('aria-label', `Faturamento ${moneyLabel(data.expected.revenue)}, custo ${moneyLabel(data.expected.cost)}, margem bruta ${moneyLabel(data.expected.margin)}`);
+  $('#forecast-ring-total').textContent = moneyLabel(data.expected.revenue);
+  $('#forecast-presence-note').textContent = `${data.demand} diária(s) solicitada(s) · ${data.expectedDays} prevista(s) · ${data.present} presença(s) · ${data.absent} falta(s)`;
+  const list = $('#forecast-networks'); list.replaceChildren();
+  if (!data.byNetwork.some(item => item.days)) { list.textContent = 'Nenhum pedido neste período.'; return; }
+  const max = Math.max(1, ...data.byNetwork.map(item => item.revenue));
+  data.byNetwork.filter(item => item.days).forEach(item => {
+    const row = document.createElement('div'); row.className = 'forecast-network';
+    const head = document.createElement('div');
+    const name = document.createElement('strong'); name.textContent = item.name;
+    const value = document.createElement('span'); value.textContent = moneyLabel(item.revenue);
+    head.append(name, value);
+    const track = document.createElement('div'); track.className = 'forecast-network-track';
+    const bar = document.createElement('span'); bar.style.width = `${item.revenue / max * 100}%`;
+    track.append(bar);
+    const detail = document.createElement('small'); detail.textContent = `${item.days} diária(s) · custo ${moneyLabel(item.cost)} · margem ${moneyLabel(item.margin)}`;
+    row.append(head, track, detail); list.append(row);
+  });
+}
 
 function showFinanceFeedback(message, isError = false) {
   const box = $('#finance-feedback');
@@ -237,6 +273,7 @@ function renderFinance() {
   $('#finance-balance').textContent = moneyLabel(incoming - outgoing);
   $('#finance-receivable').textContent = moneyLabel(total('receita', false));
   $('#finance-payable').textContent = moneyLabel(total('despesa', false));
+  renderFinanceForecast();
   const missing = financeRecords.filter(item => item.origem === 'diaria' && item.valor_centavos == null).length;
   const missingDue = financeRecords.filter(item => item.origem === 'diaria' && item.valor_centavos != null && !item.data_pagamento && !item.vencimento).length;
   const warning = $('#finance-warning');
@@ -330,7 +367,18 @@ function renderFinance() {
 }
 
 async function loadFinance() {
-  try { financeRecords = await request('/api/financeiro'); renderFinance(); }
+  try {
+    const [records, orders, tariffs] = await Promise.all([
+      request('/api/financeiro'), request('/api/pedidos'), request('/api/tarifas'),
+    ]);
+    financeRecords = records;
+    const scales = {};
+    await Promise.all(orders.filter(order => order.situacao !== 'cancelado').map(async order => {
+      scales[order.id] = await request(`/api/pedidos/${order.id}/escalas`);
+    }));
+    financeForecastInput = { orders, tariffs, scales };
+    renderFinance();
+  }
   catch (err) { showFinanceFeedback(`Não foi possível carregar o financeiro: ${err.message}`, true); }
 }
 
@@ -458,8 +506,13 @@ async function openFinanceAudit() {
 }
 
 function showPage() {
-  const page = ['financeiro', 'pedidos', 'leitura', 'redes', 'configuracoes'].includes(window.location.hash.slice(1)) ? window.location.hash.slice(1) : 'diaristas';
-  for (const name of ['diaristas', 'pedidos', 'leitura', 'redes', 'financeiro', 'configuracoes']) {
+  let page = ['inicio', 'diaristas', 'financeiro', 'pedidos', 'leitura', 'redes', 'configuracoes'].includes(window.location.hash.slice(1)) ? window.location.hash.slice(1) : 'inicio';
+  const role = window.directRemote?.role;
+  if (role && ({ financeiro: ['admin', 'financeiro'], configuracoes: ['admin', 'financeiro'], leitura: ['admin', 'operacao'], diaristas: ['admin', 'financeiro', 'operacao'] }[page] || ['admin', 'financeiro', 'operacao', 'consulta']).includes(role) === false) {
+    page = 'inicio';
+    if (location.hash !== '#inicio') location.hash = '#inicio';
+  }
+  for (const name of ['inicio', 'diaristas', 'pedidos', 'leitura', 'redes', 'financeiro', 'configuracoes']) {
     const active = name === page;
     $(`#${name}-page`).hidden = !active;
     const link = $(`#nav-${name}`);
@@ -467,7 +520,8 @@ function showPage() {
     if (active) link.setAttribute('aria-current', 'page');
     else link.removeAttribute('aria-current');
   }
-  document.title = `${{ diaristas: 'Diaristas', pedidos: 'Pedidos', leitura: 'Leitura IA', redes: 'Redes e lojas', financeiro: 'Financeiro', configuracoes: 'Configurações' }[page]} | Direct Promoções`;
+  document.title = `${{ inicio: 'Início', diaristas: 'Diaristas', pedidos: 'Pedidos', leitura: 'Leitura IA', redes: 'Redes e lojas', financeiro: 'Financeiro', configuracoes: 'Configurações' }[page]} | Direct Promoções`;
+  if (page === 'inicio') loadHome();
   if (page === 'financeiro') loadFinance();
   if (page === 'pedidos' && typeof loadOrders === 'function') loadOrders();
   if (page === 'redes' && typeof loadStores === 'function') loadStores();

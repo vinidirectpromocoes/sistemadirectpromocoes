@@ -12,6 +12,7 @@
   const emailInput = document.querySelector('#login-email');
   const passwordInput = document.querySelector('#login-password');
   let authorized = false;
+  let currentRole = null;
   let booting;
 
   function message(value, error = false) {
@@ -21,34 +22,59 @@
   }
   function showLogin() {
     authorized = false;
+    currentRole = null;
     shell.hidden = true;
     screen.hidden = false;
     document.querySelector('#logout-button').hidden = true;
   }
-  function showApp() {
+  function showApp(role) {
     authorized = true;
+    currentRole = role;
+    document.body.dataset.role = role;
     screen.hidden = true;
     shell.hidden = false;
     document.querySelector('#logout-button').hidden = false;
     document.querySelector('#storage-status').textContent = 'Dados sincronizados';
+    for (const [name, allowed] of Object.entries({
+      financeiro: ['admin', 'financeiro'], configuracoes: ['admin', 'financeiro'],
+      leitura: ['admin', 'operacao'], diaristas: ['admin', 'operacao', 'financeiro'],
+    })) document.querySelector(`#nav-${name}`).hidden = !allowed.includes(role);
+    document.querySelector('#new-button').hidden = !['admin', 'operacao'].includes(role);
+    document.querySelector('#new-order-button').hidden = !['admin', 'operacao'].includes(role);
+    document.querySelector('#new-store-button').hidden = !['admin', 'operacao'].includes(role);
+    document.querySelector('#backup-settings').hidden = role !== 'admin';
+    document.querySelector('#staff-settings').hidden = role !== 'admin';
+    for (const [id, roles] of Object.entries({
+      'delete-button': ['admin'], 'add-daily-button': ['admin', 'financeiro'],
+      'edit-button': ['admin', 'operacao'], 'block-button': ['admin', 'operacao'],
+      'order-edit-button': ['admin', 'operacao'], 'order-delete-button': ['admin', 'operacao'],
+    })) document.getElementById(id).hidden = !roles.includes(role);
+    if (['financeiro', 'configuracoes', 'leitura'].includes(location.hash.slice(1)) &&
+        document.querySelector(`#nav-${location.hash.slice(1)}`)?.hidden) location.hash = '#inicio';
   }
   async function authorize(reload = false) {
     const { data: { session }, error } = await sb.auth.getSession();
-    if (error || !session) { showLogin(); return false; }
+    if (error) { showLogin(); message(`Não foi possível conferir sua sessão: ${error.message}`, true); return false; }
+    if (!session) { showLogin(); return false; }
     const result = await sb.from('direct_admins').select('email').eq('email', session.user.email).maybeSingle();
-    if (result.error || !result.data) {
+    if (result.error) { showLogin(); message(`Não foi possível conferir seu acesso: ${result.error.message}`, true); return false; }
+    const staff = result.data ? null : await sb.from('direct_staff').select('role,active').eq('email', session.user.email).maybeSingle();
+    if (staff?.error) { showLogin(); message(`Não foi possível conferir seu acesso: ${staff.error.message}`, true); return false; }
+    const role = result.data ? 'admin' : staff?.data?.active ? staff.data.role : null;
+    if (!role) {
       await sb.auth.signOut();
       showLogin();
       message('Esta conta não tem permissão para acessar o sistema.', true);
       return false;
     }
-    showApp();
+    showApp(role);
     if (reload) {
       if (typeof load === 'function') await load();
       if (typeof loadStores === 'function') await loadStores();
-      if (typeof loadFinance === 'function') await loadFinance();
+      if (['admin', 'financeiro'].includes(role) && typeof loadFinance === 'function') await loadFinance();
       if (typeof loadOrders === 'function') await loadOrders();
-      if (typeof loadSettings === 'function') await loadSettings().catch(() => {});
+      if (['admin', 'financeiro'].includes(role) && typeof loadSettings === 'function') await loadSettings().catch(() => {});
+      if (typeof loadHome === 'function') await loadHome().catch(() => {});
     }
     return true;
   }
@@ -200,6 +226,12 @@
     if (entity === 'auditoria' && method === 'GET') {
       return unwrap(await sb.from('direct_auditoria').select('id,tabela,registro_id,operacao,antes,depois,email_autor,alterado_em').order('id', { ascending: false }).limit(100));
     }
+    if (entity === 'equipe') {
+      if (method === 'GET') return rows('direct_staff');
+      if (method === 'POST') return unwrap(await sb.from('direct_staff').upsert({
+        email: String(p.email || '').trim().toLowerCase(), role: p.role, active: Boolean(p.active),
+      }, { onConflict: 'email' }).select().single());
+    }
     if (entity === 'leituras-pendentes') {
       if (method === 'GET') return unwrap(await sb.from('leituras_pendentes').select('*').order('id', { ascending: false }).limit(500));
       if (method === 'POST') return unwrap(await sb.from('leituras_pendentes').upsert({
@@ -215,7 +247,8 @@
         if (method === 'GET') {
           const assignments = unwrap(await sb.from('pedido_escalas').select('*, diaristas(nome)').eq('pedido_id', id).order('data').order('id'));
           if (!assignments.length) return [];
-          const daily = unwrap(await sb.from('diarias').select('id,pedido_escala_id,data_pagamento,valor_centavos,vencimento_pagamento,forma_pagamento').in('pedido_escala_id', assignments.map(item => item.id)));
+          const daily = ['admin', 'financeiro'].includes(currentRole)
+            ? unwrap(await sb.from('diarias').select('id,pedido_escala_id,data_pagamento,valor_centavos,valor_recebido_centavos,vencimento_pagamento,forma_pagamento').in('pedido_escala_id', assignments.map(item => item.id))) : [];
           const byScale = new Map(daily.map(item => [item.pedido_escala_id, item]));
           return assignments.map(item => ({ ...item, diarista_nome: item.diaristas?.nome || '', diaria: byScale.get(item.id) || null }));
         }
@@ -254,5 +287,5 @@
     }
     throw new Error('Operação não disponível.');
   }
-  window.directRemote = { request: run, client: sb };
+  window.directRemote = { request: run, client: sb, get role() { return currentRole; } };
 })();

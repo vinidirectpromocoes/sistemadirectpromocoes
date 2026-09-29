@@ -17,13 +17,17 @@
   <link rel="stylesheet" href="/mobile.css">
   <link rel="stylesheet" href="/reading.css">
   <link rel="stylesheet" href="/motion.css">
+  <link rel="stylesheet" href="/operations.css">
   <script src="/vendor/supabase-2.117.2.js" defer></script>
   <script src="/remote.js" defer></script>
   <script src="/app.js" defer></script>
   <script src="/stores.js" defer></script>
+  <script src="/forecast.js" defer></script>
+  <script src="/operations.js" defer></script>
   <script src="/finance.js" defer></script>
   <script src="/orders.js" defer></script>
   <script src="/settings.js" defer></script>
+  <script src="/backup.js" defer></script>
   <script src="/reading-parser.js" defer></script>
   <script src="/reading.js" defer></script>
 </head>
@@ -52,6 +56,7 @@
       <div class="brand"><img class="brand-logo" src="/logo-direct-promocoes-transparente.png" alt="Logo da Direct Promoções"><span class="brand-name"><strong>DIRECT</strong><small>PROMOÇÕES</small></span></div>
       <div class="nav-label">GESTÃO</div>
       <nav>
+        <a href="#inicio" id="nav-inicio" aria-label="Início" data-mobile-label="Início"><span class="nav-icon" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="m3 11 9-8 9 8v10H3V11Z"/><path d="M9 21v-7h6v7"/></svg></span>Início</a>
         <a href="#diaristas" id="nav-diaristas" aria-label="Diaristas" data-mobile-label="Equipe" class="nav-active" aria-current="page"><span class="nav-icon" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="9" cy="8" r="3"/><path d="M3.5 20v-2a5.5 5.5 0 0 1 11 0v2H3.5Z"/><path d="M16.5 5.5a3 3 0 0 1 0 5.8M17 14a5 5 0 0 1 3.5 4.8V20h-3"/></svg></span>Diaristas</a>
         <a href="#pedidos" id="nav-pedidos" aria-label="Pedidos" data-mobile-label="Pedidos"><span class="nav-icon" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="5" y="4" width="14" height="17" rx="2"/><path d="M9 4.5V3h6v1.5M9 10h6M9 14h6M9 18h4"/></svg></span>Pedidos</a>
         <a href="#leitura" id="nav-leitura" aria-label="Leitura IA" data-mobile-label="Leitura"><span class="nav-icon" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M5 3h9l5 5v13H5V3Z"/><path d="M14 3v5h5M8 13h8M8 17h5"/><path d="m17 14 1 2 2 1-2 1-1 2-1-2-2-1 2-1 1-2Z"/></svg></span>Leitura IA</a>
@@ -73,6 +78,12 @@
         </div>
       </div>
     </aside>
+    <main class="main-content" id="inicio-page" hidden>
+      <header class="page-header"><div><div class="eyebrow">DIRECT PROMOÇÕES <span>/</span> OPERAÇÃO</div><h1>Painel de pendências</h1><p>O que a equipe precisa resolver hoje.</p></div></header>
+      <div id="home-feedback" class="feedback" role="status" hidden></div>
+      <section class="home-stats" aria-label="Pendências"><a href="#pedidos" class="finance-stat"><span>Vagas sem diarista</span><strong id="home-open">0</strong></a><a href="#pedidos" class="finance-stat"><span>Presenças por confirmar</span><strong id="home-attendance">0</strong></a><a href="#leitura" class="finance-stat"><span>Leituras para revisar</span><strong id="home-reading">0</strong></a><a href="#financeiro" class="finance-stat"><span>Pagamentos e cobranças atrasados</span><strong id="home-overdue">0</strong></a></section>
+      <section class="list-card home-list"><div class="list-top"><div><h2>Próximas ações</h2><p>Toque em uma pendência para abrir a aba correspondente.</p></div></div><div id="home-actions" class="home-actions"></div></section>
+    </main>
     <main class="main-content" id="diaristas-page">
       <header class="page-header">
         <div><div class="eyebrow">CADASTROS <span>/</span> DIARISTAS</div><h1>Diaristas</h1><p>Organize as informações e a disponibilidade da sua equipe.</p></div>
@@ -126,6 +137,19 @@
         <div class="finance-stat"><span>A receber · total</span><strong id="finance-receivable">R$ 0,00</strong></div>
         <div class="finance-stat"><span>A pagar · total</span><strong id="finance-payable">R$ 0,00</strong></div>
       </section>
+      <section class="forecast-section" aria-labelledby="forecast-title">
+        <div class="finance-dashboard-heading"><div><span class="eyebrow">PEDIDOS E PRESENÇAS</span><h2 id="forecast-title">Previsão operacional</h2><p>O cenário ideal considera todas as vagas de todos os dias atendidas. Faltas sem substituição reduzem a previsão atual. Margem bruta antes de outros custos.</p></div></div>
+        <div class="forecast-cards">
+          <article class="finance-stat forecast-card"><span>Faturamento previsto</span><strong id="forecast-revenue">R$ 0,00</strong><small id="forecast-revenue-ideal">Cenário ideal: R$ 0,00</small></article>
+          <article class="finance-stat forecast-card"><span>Custo previsto com diárias</span><strong id="forecast-cost">R$ 0,00</strong><small id="forecast-cost-ideal">Cenário ideal: R$ 0,00</small></article>
+          <article class="finance-stat forecast-card emphasis"><span>Margem bruta prevista</span><strong id="forecast-margin">R$ 0,00</strong><small id="forecast-margin-ideal">Cenário ideal: R$ 0,00</small></article>
+        </div>
+        <div id="forecast-warning" class="finance-warning" hidden></div>
+        <div class="forecast-visuals">
+          <article class="finance-chart-card"><h3>Composição da previsão</h3><div id="forecast-ring" class="forecast-ring" role="img" aria-label="Custo e margem bruta previstos"><span id="forecast-ring-total">R$ 0,00</span></div><div class="forecast-key"><span>● Custo</span><span>● Margem bruta</span></div><p id="forecast-presence-note">0 presenças · 0 faltas</p></article>
+          <article class="finance-chart-card"><h3>Previsão por rede</h3><div id="forecast-networks" class="forecast-networks"></div></article>
+        </div>
+      </section>
       <section class="finance-dashboard" aria-labelledby="finance-dashboard-title">
         <div class="finance-dashboard-heading"><div><span class="eyebrow">VISÃO GERAL</span><h2 id="finance-dashboard-title">Dashboard financeira</h2><p>Toque em uma fatia ou legenda para filtrar os lançamentos.</p></div><button id="finance-clear-filters" class="button button-quiet" type="button" hidden>Limpar filtros</button></div>
         <div class="finance-chart-grid">
@@ -153,6 +177,8 @@
         <div class="finance-stat"><span>Pedidos confirmados</span><strong id="orders-confirmed-count">0</strong></div>
         <div class="finance-stat"><span>Pedidos concluídos</span><strong id="orders-done-count">0</strong></div>
       </section>
+      <section class="order-stats operation-kpis" aria-label="Indicadores da operação"><div class="finance-stat"><span>Vagas preenchidas</span><strong id="orders-fill-rate">0%</strong></div><div class="finance-stat"><span>Taxa de faltas confirmadas</span><strong id="orders-absence-rate">0%</strong></div><div class="finance-stat"><span>Presenças por confirmar</span><strong id="orders-awaiting-attendance">0</strong></div></section>
+      <section class="list-card weekly-card" aria-labelledby="weekly-title"><div class="list-top"><div><h2 id="weekly-title">Escala semanal</h2><p>Equipe, horários e vagas em aberto por dia.</p></div><input id="weekly-date" type="date" aria-label="Escolher semana da escala"></div><div id="weekly-days" class="weekly-days"></div></section>
       <section class="list-card" aria-labelledby="orders-list-title">
         <div class="list-top order-list-top"><div><h2 id="orders-list-title">Solicitações recebidas</h2><p>Acompanhe cada pedido desde o recebimento até a conclusão.</p></div></div>
         <div class="order-filters"><div class="search-wrap"><span aria-hidden="true">⌕</span><input id="orders-search" type="search" placeholder="Buscar supermercado, unidade ou setor" aria-label="Buscar pedidos"></div><select id="orders-status-filter" aria-label="Filtrar pedidos por situação"><option value="todos">Todas as situações</option><option value="novo">Novos</option><option value="em_selecao">Em seleção</option><option value="confirmado">Confirmados</option><option value="concluido">Concluídos</option><option value="cancelado">Cancelados</option></select></div>
@@ -190,6 +216,17 @@
         <div class="list-card"><div id="settings-sector-empty" class="settings-empty">Nenhum valor por setor cadastrado. As diárias usam os valores padrão das redes.</div><div id="settings-sector-list" class="settings-sector-list"></div></div>
       </section>
       <p class="settings-note">Alterações nos valores servem para novos pagamentos. Diárias já registradas mantêm o valor que foi salvo nelas.</p>
+      <section id="staff-settings" class="settings-section" aria-labelledby="staff-settings-title" hidden>
+        <div class="settings-heading"><div><h2 id="staff-settings-title">Acesso dos funcionários</h2><p>Autorize cada e-mail individualmente. Operação gerencia cadastros e escalas; Financeiro gerencia pagamentos e tarifas; Consulta apenas visualiza.</p></div></div>
+        <form id="staff-form" class="staff-form"><label>E-mail<input id="staff-email" type="email" required autocomplete="off" placeholder="funcionario@empresa.com"></label><label>Permissão<select id="staff-role"><option value="operacao">Operação</option><option value="financeiro">Financeiro</option><option value="consulta">Consulta</option></select></label><button class="button button-primary" type="submit">Autorizar e-mail</button></form>
+        <p class="section-help">A autorização não cria a senha. Crie a conta do funcionário em Supabase Authentication → Users e informe a senha diretamente a ele. Não compartilhe sua conta de administrador.</p>
+        <div id="staff-list" class="staff-list"></div>
+      </section>
+      <section id="backup-settings" class="settings-section" aria-labelledby="backup-title" hidden>
+        <div class="settings-heading"><div><h2 id="backup-title">Cópia de segurança dos dados</h2><p>Baixe uma cópia criptografada dos registros. Guarde o arquivo e a senha em lugares separados.</p></div></div>
+        <div class="staff-form"><label>Senha para criptografar<input id="backup-password" type="password" autocomplete="new-password" minlength="12" placeholder="Mínimo de 12 caracteres"></label><button id="backup-download" class="button button-primary" type="button">Baixar cópia</button><label>Conferir arquivo<input id="backup-file" type="file" accept=".json,application/json"></label><button id="backup-check" class="button button-outline" type="button">Verificar cópia</button></div>
+        <p id="backup-feedback" class="section-help" role="status" aria-live="polite"></p>
+      </section>
     </main>
   </div>
 

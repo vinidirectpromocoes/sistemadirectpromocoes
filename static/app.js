@@ -341,9 +341,11 @@ function renderHistory(items) {
     payment.className = `payment-state ${item.data_pagamento ? 'paid' : 'pending'}`;
     payment.textContent = item.data_pagamento ? `Pagamento: ${dateLabel(item.data_pagamento)}` : 'Pagamento pendente';
     content.append(payment);
-    const amount = document.createElement('small');
-    amount.textContent = `Valor: ${moneyLabel(item.valor_centavos)}${item.vencimento_pagamento ? ` · Vencimento: ${dateLabel(item.vencimento_pagamento)}` : ''}`;
-    content.append(amount);
+    if (!window.directRemote || ['admin', 'financeiro'].includes(window.directRemote.role)) {
+      const amount = document.createElement('small');
+      amount.textContent = `Valor: ${moneyLabel(item.valor_centavos)}${item.vencimento_pagamento ? ` · Vencimento: ${dateLabel(item.vencimento_pagamento)}` : ''}`;
+      content.append(amount);
+    }
     if (item.observacoes) { const notes = document.createElement('small'); notes.textContent = item.observacoes; content.append(notes); }
     const actions = document.createElement('div'); actions.className = 'history-actions';
     const editPayment = document.createElement('button'); editPayment.type = 'button'; editPayment.className = 'text-button';
@@ -353,7 +355,7 @@ function renderHistory(items) {
     const remove = document.createElement('button'); remove.type = 'button'; remove.className = 'text-button history-remove';
     remove.textContent = 'Excluir'; remove.setAttribute('aria-label', `Excluir diária de ${dateLabel(item.data)}`);
     remove.addEventListener('click', () => deleteDaily(item));
-    actions.append(editPayment, remove);
+    if (!window.directRemote || ['admin', 'financeiro'].includes(window.directRemote.role)) actions.append(editPayment, remove);
     row.append(content, actions); list.append(row);
   });
 }

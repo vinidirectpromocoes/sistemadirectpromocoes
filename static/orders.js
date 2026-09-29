@@ -4,6 +4,54 @@ let orderDetailId = null;
 let orderScales = [];
 let orderWorkers = [];
 let orderDetailBusy = false;
+let weeklyScales = {};
+
+function weekStart(value) {
+  const date = new Date(`${value}T12:00:00Z`);
+  date.setUTCDate(date.getUTCDate() - (date.getUTCDay() + 6) % 7);
+  return date;
+}
+
+function renderWeekly() {
+  const target = $('#weekly-days'); target.replaceChildren();
+  let demand = 0, filled = 0, present = 0, absent = 0, awaiting = 0;
+  for (const order of orderRecords) {
+    if (order.situacao === 'cancelado') continue;
+    demand += order.total_diarias;
+    const scales = weeklyScales[order.id] || [];
+    filled += scales.filter(scale => scale.status !== 'falta').length;
+    present += scales.filter(scale => scale.status === 'presente').length;
+    absent += scales.filter(scale => scale.status === 'falta').length;
+    awaiting += scales.filter(scale => scale.status === 'escalada' && scale.data <= orderToday()).length;
+  }
+  $('#orders-fill-rate').textContent = `${demand ? Math.round(filled / demand * 100) : 0}%`;
+  $('#orders-absence-rate').textContent = `${present + absent ? Math.round(absent / (present + absent) * 100) : 0}%`;
+  $('#orders-awaiting-attendance').textContent = String(awaiting);
+  const start = weekStart($('#weekly-date').value || orderToday());
+  for (let offset = 0; offset < 7; offset++) {
+    const date = new Date(start);
+    date.setUTCDate(date.getUTCDate() + offset);
+    const key = date.toISOString().slice(0, 10);
+    const card = document.createElement('article'); card.className = 'weekly-day';
+    const heading = document.createElement('h3'); heading.textContent = dateLabel(key); card.append(heading);
+    let found = false;
+    for (const order of orderRecords) {
+      if (order.situacao === 'cancelado') continue;
+      const shift = order.turnos.find(item => item.data === key);
+      if (!shift) continue;
+      found = true;
+      const active = (weeklyScales[order.id] || []).filter(scale => scale.data === key && scale.status !== 'falta');
+      const button = document.createElement('button'); button.type = 'button';
+      button.className = `weekly-shift${active.length < order.quantidade_diaristas ? ' is-open' : ''}`;
+      const title = document.createElement('strong'); title.textContent = `${order.supermercado} · ${order.unidade || 'Loja não informada'}`;
+      const subtitle = document.createElement('span'); subtitle.textContent = `${shift.inicio}–${shift.fim} · ${order.setor}`;
+      const people = document.createElement('span'); people.textContent = `${active.length}/${order.quantidade_diaristas} · ${active.map(scale => scale.diarista_nome).join(', ') || 'Vaga aberta'}`;
+      button.append(title, subtitle, people); button.addEventListener('click', () => openOrderDetail(order.id)); card.append(button);
+    }
+    if (!found) { const empty = document.createElement('p'); empty.textContent = 'Sem pedidos'; card.append(empty); }
+    target.append(card);
+  }
+}
 
 const orderStatusLabels = {
   novo: 'Novo', em_selecao: 'Em seleção', confirmado: 'Confirmado',
@@ -85,7 +133,14 @@ function renderOrders() {
 }
 
 async function loadOrders() {
-  try { orderRecords = await request('/api/pedidos'); renderOrders(); }
+  try {
+    orderRecords = await request('/api/pedidos');
+    renderOrders();
+    await Promise.all(orderRecords.filter(order => order.situacao !== 'cancelado').map(async order => {
+      weeklyScales[order.id] = await request(`/api/pedidos/${order.id}/escalas`);
+    }));
+    renderWeekly();
+  }
   catch (err) { showOrderFeedback(`Não foi possível carregar os pedidos: ${err.message}`, true); }
 }
 
@@ -198,7 +253,9 @@ function orderDetailError(message) {
 async function refreshOrderScales() {
   if (!orderDetailId) return;
   orderScales = await request(`/api/pedidos/${orderDetailId}/escalas`);
+  weeklyScales[orderDetailId] = orderScales;
   renderOrderShifts();
+  renderWeekly();
 }
 
 async function addOrderWorker(data, select) {
@@ -229,8 +286,11 @@ async function changeOrderAttendance(scale, status) {
       method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ status }),
     });
     await refreshOrderScales();
-    if (status === 'presente') $('#finance-month').value = scale.data.slice(0, 7);
-    await loadFinance();
+    if (!window.directRemote || ['admin', 'financeiro'].includes(window.directRemote.role)) {
+      if (status === 'presente') $('#finance-month').value = scale.data.slice(0, 7);
+      await loadFinance();
+    }
+    if (typeof loadHome === 'function') await loadHome();
   } catch (err) { orderDetailError(err.message); }
   finally { orderDetailBusy = false; }
 }
@@ -249,6 +309,7 @@ async function removeOrderWorker(scale) {
 function renderOrderShifts() {
   const item = orderRecords.find(row => row.id === orderDetailId);
   if (!item) return;
+  const canOperate = !window.directRemote || ['admin', 'operacao'].includes(window.directRemote.role);
   const list = $('#order-detail-shifts'); list.replaceChildren();
   item.turnos.forEach(shift => {
     const scales = orderScales.filter(scale => scale.data === shift.data);
@@ -271,7 +332,7 @@ function renderOrderShifts() {
       state.textContent = { escalada: 'Aguardando', presente: 'Presença', falta: 'Falta' }[scale.status];
       identity.append(name, state); row.append(identity);
       const actions = document.createElement('div'); actions.className = 'order-worker-actions';
-      for (const [status, label] of [['presente', 'Presença'], ['falta', 'Falta']]) {
+      for (const [status, label] of canOperate ? [['presente', 'Presença'], ['falta', 'Falta']] : []) {
         const button = document.createElement('button'); button.type = 'button';
         button.className = `order-attendance-button ${status}${scale.status === status ? ' selected' : ''}`;
         button.textContent = label; button.disabled = scale.status === status || shift.data > orderToday();
@@ -279,13 +340,13 @@ function renderOrderShifts() {
         button.setAttribute('aria-label', `${label} de ${scale.diarista_nome} em ${dateLabel(shift.data)}`);
         button.addEventListener('click', () => changeOrderAttendance(scale, status)); actions.append(button);
       }
-      if (scale.status === 'escalada') {
+      if (canOperate && scale.status === 'escalada') {
         const remove = document.createElement('button'); remove.type = 'button'; remove.className = 'text-button'; remove.textContent = 'Retirar';
         remove.setAttribute('aria-label', `Retirar ${scale.diarista_nome} da escala`);
         remove.addEventListener('click', () => removeOrderWorker(scale)); actions.append(remove);
       }
       row.append(actions);
-      if (scale.status === 'presente') {
+      if (scale.status === 'presente' && (!window.directRemote || ['admin', 'financeiro'].includes(window.directRemote.role))) {
         const payment = document.createElement('div'); payment.className = 'order-payment-line';
         const label = document.createElement('span');
         label.textContent = scale.diaria?.data_pagamento ? `Pago em ${dateLabel(scale.diaria.data_pagamento)}` : scale.diaria?.valor_centavos != null ? 'Pagamento pendente' : 'Pagamento pendente · valor não informado';
@@ -302,12 +363,20 @@ function renderOrderShifts() {
       }
       body.append(row);
     });
-    if (active < item.quantidade_diaristas) {
+    if (canOperate && active < item.quantidade_diaristas) {
       const picker = document.createElement('div'); picker.className = 'order-worker-picker';
       const select = document.createElement('select'); select.setAttribute('aria-label', `Escolher diarista para ${dateLabel(shift.data)}`);
       const placeholder = document.createElement('option'); placeholder.value = ''; placeholder.textContent = 'Selecione uma diarista'; select.append(placeholder);
-      orderWorkers.filter(worker => !worker.bloqueada && workerAvailableForShift(worker, shift) && !scales.some(scale => scale.diarista_id === worker.id)).forEach(worker => {
-        const option = document.createElement('option'); option.value = String(worker.id); option.textContent = worker.nome; select.append(option);
+      const normalize = value => String(value || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase();
+      const candidates = orderWorkers.filter(worker => !worker.bloqueada && workerAvailableForShift(worker, shift) && !scales.some(scale => scale.diarista_id === worker.id));
+      candidates.sort((a, b) => {
+        const matches = worker => (worker.setores || []).some(sector => normalize(sector).includes(normalize(item.setor)) || normalize(item.setor).includes(normalize(sector)));
+        return Number(matches(b)) - Number(matches(a)) || a.nome.localeCompare(b.nome, 'pt-BR');
+      });
+      candidates.forEach(worker => {
+        const option = document.createElement('option'); option.value = String(worker.id);
+        const match = (worker.setores || []).some(sector => normalize(sector).includes(normalize(item.setor)) || normalize(item.setor).includes(normalize(sector)));
+        option.textContent = `${match ? '★ ' : ''}${worker.nome}${match ? ' · experiência no setor' : ''}`; select.append(option);
       });
       const add = document.createElement('button'); add.type = 'button'; add.className = 'button button-outline'; add.textContent = 'Escalar';
       add.addEventListener('click', () => addOrderWorker(shift.data, select));
@@ -367,6 +436,8 @@ $('#new-order-button').addEventListener('click', () => openOrderForm());
 $('#orders-empty-new').addEventListener('click', () => openOrderForm());
 $('#orders-search').addEventListener('input', renderOrders);
 $('#orders-status-filter').addEventListener('change', renderOrders);
+$('#weekly-date').value = orderToday();
+$('#weekly-date').addEventListener('change', renderWeekly);
 $('#order-close-button').addEventListener('click', () => $('#order-dialog').close());
 $('#order-cancel-button').addEventListener('click', () => $('#order-dialog').close());
 $('#order-form').addEventListener('submit', saveOrder);
