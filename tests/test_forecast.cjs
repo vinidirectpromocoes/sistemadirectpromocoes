@@ -36,4 +36,21 @@ assert.equal(result.demand, 0, 'pedido cancelado não entra na previsão');
 
 result = calculate([{ ...order, supermercado: 'super do povo' }, order], {}, tariffs, '2026-09');
 assert.equal(result.byNetwork.length, 1, 'variações de maiúsculas não duplicam a rede');
-console.log('Forecast: 7 cenários passaram.');
+
+const firstOrder = { ...order, id: 10, quantidade_diaristas: 1, situacao: 'novo',
+  turnos: ['2026-09-29', '2026-09-30', '2026-10-01', '2026-10-02', '2026-10-03', '2026-10-04', '2026-10-05'].map(data => ({ data })) };
+const secondOrder = { ...order, id: 11, unidade: 'Outra loja', quantidade_diaristas: 2, situacao: 'em_selecao',
+  turnos: Array.from({ length: 24 }, (_, index) => ({ data: `2026-10-${String(index + 1).padStart(2, '0')}` })) };
+const allOrders = [firstOrder, secondOrder];
+result = calculate(allOrders, {}, tariffs);
+assert.equal(result.demand, 55, 'soma todas as diárias dos pedidos registrados');
+assert.equal(result.expectedDays, 55, 'prevê atendimento integral antes das faltas');
+assert.equal(result.byOrder.length, 2, 'mantém cada pedido no detalhamento');
+assert.equal(result.byOrder.reduce((sum, item) => sum + item.revenue, 0), result.expected.revenue);
+assert.equal(calculate(allOrders, {}, tariffs, '2026-09').demand, 2, 'filtro mensal é opcional');
+result = calculate(allOrders, { 11: [scale(1, '2026-10-01', 'falta')] }, tariffs);
+assert.equal(result.expectedDays, 54, 'uma falta reduz a previsão em uma diária');
+assert.equal(result.expected.revenue, 54 * 13400, 'falta reduz o faturamento previsto');
+assert.equal(calculate([secondOrder], { 11: [scale(1, '2026-10-01', 'falta')] }, tariffs).demand, 48, 'pedido excluído sai do total');
+assert.equal(calculate([{ ...secondOrder, situacao: 'cancelado' }], {}, tariffs).demand, 0, 'pedido cancelado sai do total');
+console.log('Forecast: cenários de pedidos, exclusão, falta e período passaram.');

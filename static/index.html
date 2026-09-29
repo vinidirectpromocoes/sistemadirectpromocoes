@@ -138,7 +138,7 @@
         <div class="finance-stat"><span>A pagar · total</span><strong id="finance-payable">R$ 0,00</strong></div>
       </section>
       <section class="forecast-section" aria-labelledby="forecast-title">
-        <div class="finance-dashboard-heading"><div><span class="eyebrow">PEDIDOS E PRESENÇAS</span><h2 id="forecast-title">Previsão operacional</h2><p>O cenário ideal considera todas as vagas de todos os dias atendidas. Faltas sem substituição reduzem a previsão atual. Margem bruta antes de outros custos.</p></div></div>
+        <div class="finance-dashboard-heading"><div><span class="eyebrow">PEDIDOS E PRESENÇAS</span><h2 id="forecast-title">Previsão operacional</h2><p>Cada pedido e cada diária solicitada entram na previsão. Faltas sem substituição reduzem a previsão atual. Margem bruta antes de outros custos.</p></div><label class="forecast-period-label">Período da previsão<select id="forecast-period"><option value="all">Todos os pedidos</option><option value="month">Mês selecionado</option></select></label></div>
         <div class="forecast-cards">
           <article class="finance-stat forecast-card"><span>Faturamento previsto</span><strong id="forecast-revenue">R$ 0,00</strong><small id="forecast-revenue-ideal">Cenário ideal: R$ 0,00</small></article>
           <article class="finance-stat forecast-card"><span>Custo previsto com diárias</span><strong id="forecast-cost">R$ 0,00</strong><small id="forecast-cost-ideal">Cenário ideal: R$ 0,00</small></article>
@@ -149,6 +149,7 @@
           <article class="finance-chart-card"><h3>Composição da previsão</h3><div id="forecast-ring" class="forecast-ring" role="img" aria-label="Custo e margem bruta previstos"><span id="forecast-ring-total">R$ 0,00</span></div><div class="forecast-key"><span>● Custo</span><span>● Margem bruta</span></div><p id="forecast-presence-note">0 presenças · 0 faltas</p></article>
           <article class="finance-chart-card"><h3>Previsão por rede</h3><div id="forecast-networks" class="forecast-networks"></div></article>
         </div>
+        <details class="forecast-orders"><summary id="forecast-orders-summary">Conferir pedidos incluídos</summary><div id="forecast-orders-list"></div></details>
       </section>
       <section class="finance-dashboard" aria-labelledby="finance-dashboard-title">
         <div class="finance-dashboard-heading"><div><span class="eyebrow">VISÃO GERAL</span><h2 id="finance-dashboard-title">Dashboard financeira</h2><p>Toque em uma fatia ou legenda para filtrar os lançamentos.</p></div><button id="finance-clear-filters" class="button button-quiet" type="button" hidden>Limpar filtros</button></div>

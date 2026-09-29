@@ -7,7 +7,7 @@
       expected: { revenue: 0, cost: 0, margin: 0 },
       confirmed: { revenue: 0, cost: 0, margin: 0 },
       demand: 0, expectedDays: 0, present: 0, absent: 0, open: 0,
-      missingRevenue: 0, missingCost: 0, byNetwork: [],
+      missingRevenue: 0, missingCost: 0, byNetwork: [], byOrder: [],
     };
     const networks = new Map();
     for (const order of orders || []) {
@@ -21,6 +21,10 @@
       const networkKey = norm(networkName);
       const aggregate = networks.get(networkKey) || { name: networkName, revenue: 0, cost: 0, days: 0 };
       networks.set(networkKey, aggregate);
+      const orderTotal = {
+        id: order.id, network: networkName, unit: order.unidade || '', sector: order.setor || '',
+        requested: 0, days: 0, present: 0, absent: 0, revenue: 0, cost: 0, margin: 0,
+      };
       const scales = scalesByOrder?.[order.id] || [];
       for (const shift of order.turnos || []) {
         if (month && !shift.data.startsWith(month)) continue;
@@ -37,6 +41,10 @@
         result.present += present.length;
         result.absent += absent;
         result.open += Math.max(0, requested - active.length);
+        orderTotal.requested += requested;
+        orderTotal.days += expected;
+        orderTotal.present += present.length;
+        orderTotal.absent += absent;
         if (currentRevenue != null) result.ideal.revenue += currentRevenue * requested;
         if (currentCost != null) result.ideal.cost += currentCost * requested;
         const forecastPresent = present.slice(0, expected);
@@ -46,10 +54,12 @@
         if (currentRevenue != null) {
           result.expected.revenue += currentRevenue * remaining;
           aggregate.revenue += currentRevenue * remaining;
+          orderTotal.revenue += currentRevenue * remaining;
         }
         if (currentCost != null) {
           result.expected.cost += currentCost * remaining;
           aggregate.cost += currentCost * remaining;
+          orderTotal.cost += currentCost * remaining;
         }
         aggregate.days += expected;
         for (const scale of present) {
@@ -62,10 +72,14 @@
           const revenue = scale.diaria?.valor_recebido_centavos ?? currentRevenue;
           const cost = scale.diaria?.valor_centavos ?? currentCost;
           if (revenue == null) result.missingRevenue++;
-          else { result.expected.revenue += revenue; aggregate.revenue += revenue; }
+          else { result.expected.revenue += revenue; aggregate.revenue += revenue; orderTotal.revenue += revenue; }
           if (cost == null) result.missingCost++;
-          else { result.expected.cost += cost; aggregate.cost += cost; }
+          else { result.expected.cost += cost; aggregate.cost += cost; orderTotal.cost += cost; }
         }
+      }
+      if (orderTotal.requested) {
+        orderTotal.margin = orderTotal.revenue - orderTotal.cost;
+        result.byOrder.push(orderTotal);
       }
     }
     for (const target of [result.ideal, result.expected, result.confirmed]) target.margin = target.revenue - target.cost;

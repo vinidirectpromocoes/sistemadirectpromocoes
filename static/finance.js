@@ -7,11 +7,13 @@ const financeToday = () => {
 let visibleFinanceRows = [];
 let financeOpenGroupId = null;
 let financeForecastInput = null;
+let financeLoadSequence = 0;
 
 function renderFinanceForecast() {
   if (!financeForecastInput) return;
-  const period = $('#finance-all-months').checked ? '' : $('#finance-month').value;
+  const period = $('#forecast-period').value === 'month' ? $('#finance-month').value : '';
   const data = window.DirectForecast.calculate(financeForecastInput.orders, financeForecastInput.scales, financeForecastInput.tariffs, period);
+  const count = (value, singular, plural) => `${value} ${value === 1 ? singular : plural}`;
   for (const [key, field] of [['revenue', 'revenue'], ['cost', 'cost'], ['margin', 'margin']]) {
     $(`#forecast-${key}`).textContent = moneyLabel(data.expected[field]);
     $(`#forecast-${key}-ideal`).textContent = `Cenário ideal: ${moneyLabel(data.ideal[field])}`;
@@ -25,9 +27,19 @@ function renderFinanceForecast() {
   ring.style.setProperty('--forecast-cost-share', `${costShare}%`);
   ring.setAttribute('aria-label', `Faturamento ${moneyLabel(data.expected.revenue)}, custo ${moneyLabel(data.expected.cost)}, margem bruta ${moneyLabel(data.expected.margin)}`);
   $('#forecast-ring-total').textContent = moneyLabel(data.expected.revenue);
-  $('#forecast-presence-note').textContent = `${data.demand} diária(s) solicitada(s) · ${data.expectedDays} prevista(s) · ${data.present} presença(s) · ${data.absent} falta(s)`;
+  $('#forecast-presence-note').textContent = `${count(data.byOrder.length, 'pedido', 'pedidos')} · ${count(data.demand, 'diária solicitada', 'diárias solicitadas')} · ${count(data.expectedDays, 'prevista', 'previstas')} · ${count(data.present, 'presença', 'presenças')} · ${count(data.absent, 'falta', 'faltas')}`;
+  $('#forecast-orders-summary').textContent = `Conferir ${count(data.byOrder.length, 'pedido incluído', 'pedidos incluídos')}`;
+  const orderList = $('#forecast-orders-list'); orderList.replaceChildren();
+  if (!data.byOrder.length) orderList.textContent = 'Nenhum pedido neste período.';
+  data.byOrder.forEach(order => {
+    const row = document.createElement('div'); row.className = 'forecast-order';
+    const title = document.createElement('strong'); title.textContent = `Pedido #${order.id} · ${order.network}${order.unit ? ` · ${order.unit}` : ''} · ${order.sector}`;
+    const detail = document.createElement('span'); detail.textContent = `${order.days}/${order.requested} diárias previstas · ${count(order.present, 'presença', 'presenças')} · ${count(order.absent, 'falta', 'faltas')}`;
+    const values = document.createElement('small'); values.textContent = `Faturamento ${moneyLabel(order.revenue)} · custo ${moneyLabel(order.cost)} · margem ${moneyLabel(order.margin)}`;
+    row.append(title, detail, values); orderList.append(row);
+  });
   const list = $('#forecast-networks'); list.replaceChildren();
-  if (!data.byNetwork.some(item => item.days)) { list.textContent = 'Nenhum pedido neste período.'; return; }
+  if (!data.byNetwork.some(item => item.days)) { list.textContent = data.byOrder.length ? 'Nenhuma diária prevista após as faltas registradas.' : 'Nenhum pedido neste período.'; return; }
   const max = Math.max(1, ...data.byNetwork.map(item => item.revenue));
   data.byNetwork.filter(item => item.days).forEach(item => {
     const row = document.createElement('div'); row.className = 'forecast-network';
@@ -367,19 +379,21 @@ function renderFinance() {
 }
 
 async function loadFinance() {
+  const sequence = ++financeLoadSequence;
   try {
     const [records, orders, tariffs] = await Promise.all([
       request('/api/financeiro'), request('/api/pedidos'), request('/api/tarifas'),
     ]);
-    financeRecords = records;
     const scales = {};
     await Promise.all(orders.filter(order => order.situacao !== 'cancelado').map(async order => {
       scales[order.id] = await request(`/api/pedidos/${order.id}/escalas`);
     }));
+    if (sequence !== financeLoadSequence) return;
+    financeRecords = records;
     financeForecastInput = { orders, tariffs, scales };
     renderFinance();
   }
-  catch (err) { showFinanceFeedback(`Não foi possível carregar o financeiro: ${err.message}`, true); }
+  catch (err) { if (sequence === financeLoadSequence) showFinanceFeedback(`Não foi possível carregar o financeiro: ${err.message}`, true); }
 }
 
 function updateFinanceType() {
@@ -541,6 +555,9 @@ $('#finance-dialog').addEventListener('click', event => {
 $('#finance-type').addEventListener('change', updateFinanceType);
 $('#finance-month').addEventListener('change', renderFinance);
 $('#finance-all-months').addEventListener('change', renderFinance);
+$('#forecast-period').addEventListener('change', renderFinanceForecast);
+window.addEventListener('focus', () => { if (!$('#financeiro-page').hidden) loadFinance(); });
+document.addEventListener('visibilitychange', () => { if (!document.hidden && !$('#financeiro-page').hidden) loadFinance(); });
 $('#finance-search').addEventListener('input', renderFinance);
 $('#finance-type-filter').addEventListener('change', renderFinance);
 $('#finance-status-filter').addEventListener('change', renderFinance);

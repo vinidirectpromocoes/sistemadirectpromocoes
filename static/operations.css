@@ -1,5 +1,7 @@
 .forecast-section { margin: 18px 0 22px; padding: 20px; border: 1px solid var(--line, #dce5f2); border-radius: 20px; background: var(--surface, #fff); box-shadow: 0 12px 28px #0c28600d; }
 .forecast-section .finance-dashboard-heading { margin-bottom: 16px; }
+.forecast-period-label { min-width: 180px; font-size: .76rem; }
+.forecast-period-label select { display: block; width: 100%; margin-top: 5px; border: 1px solid var(--line, #dce5f2); border-radius: 9px; padding: 8px 10px; background: var(--surface, #fff); color: inherit; font-size: .85rem; }
 .forecast-cards { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; }
 .forecast-card { min-width: 0; }
 .forecast-card small { display: block; margin-top: 8px; font-size: .76rem; opacity: .76; }
@@ -18,7 +20,13 @@
 .forecast-network-track { height: 8px; margin: 7px 0 5px; border-radius: 8px; background: #bed2ed55; overflow: hidden; }
 .forecast-network-track span { display: block; height: 100%; background: linear-gradient(90deg, #1e54d9, #59a6ff); border-radius: inherit; transition: width .35s ease; }
 .forecast-network small { font-size: .75rem; opacity: .75; }
-@media (max-width: 720px) { .forecast-section { padding: 14px; } .forecast-cards { grid-template-columns: 1fr; } .forecast-visuals { grid-template-columns: 1fr; } .forecast-ring { width: 138px; height: 138px; } }
+.forecast-orders { margin-top: 14px; border-top: 1px solid var(--line, #dce5f2); padding-top: 12px; }
+.forecast-orders summary { cursor: pointer; font-weight: 700; font-size: .85rem; }
+#forecast-orders-list { display: grid; gap: 8px; margin-top: 11px; }
+.forecast-order { display: grid; gap: 3px; padding: 10px 12px; border: 1px solid var(--line, #dce5f2); border-radius: 10px; font-size: .8rem; }
+.forecast-order strong { overflow-wrap: anywhere; }
+.forecast-order small { opacity: .78; font-size: .76rem; }
+@media (max-width: 720px) { .forecast-section { padding: 14px; } .forecast-section .finance-dashboard-heading { align-items: stretch; flex-direction: column; } .forecast-period-label { width: 100%; } .forecast-cards { grid-template-columns: 1fr; } .forecast-visuals { grid-template-columns: 1fr; } .forecast-ring { width: 138px; height: 138px; } }
 .home-stats { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 10px; margin-bottom: 16px; }
 .home-stats a { color: inherit; text-decoration: none; transition: transform .18s ease, box-shadow .18s ease; }
 .home-stats a:hover { transform: translateY(-3px); box-shadow: 0 12px 24px #0b286021; }
@@ -39,6 +47,7 @@
 .staff-list { display: grid; gap: 8px; margin-top: 12px; }.staff-row { display: flex; justify-content: space-between; gap: 12px; align-items: center; padding: 12px; border: 1px solid var(--brand-border); border-radius: 12px; }.staff-row small { display: block; margin-top: 3px; }
 html[data-theme="dark"] .forecast-section, html[data-theme="dark"] .weekly-day { background: var(--dark-surface); border-color: var(--dark-border); }
 html[data-theme="dark"] .forecast-ring::before { background: var(--dark-surface); }
+html[data-theme="dark"] .forecast-period-label select { background: var(--dark-field); color: var(--dark-text); border-color: var(--dark-border); }
 html[data-theme="dark"] .weekly-shift, html[data-theme="dark"] .home-action { background: var(--dark-raised); color: var(--dark-text); border-color: var(--dark-border); }
 html[data-theme="dark"] .weekly-shift.is-open { border-color: #e6a36b; }
 html[data-theme="dark"] .staff-form, html[data-theme="dark"] .staff-row { border-color: var(--dark-border); }
