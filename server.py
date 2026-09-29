@@ -724,23 +724,36 @@ class Handler(BaseHTTPRequestHandler):
                 payload = self.read_json()
                 if not isinstance(payload, dict) or isinstance(payload.get("diarista_id"), bool) or not isinstance(payload.get("diarista_id"), int):
                     raise ValueError("Escolha uma diarista cadastrada.")
-                day = validate_date(payload.get("data"), "a escala")
+                batch = "datas" in payload
+                raw_days = payload.get("datas") if batch else [payload.get("data")]
+                if not isinstance(raw_days, list) or not 1 <= len(raw_days) <= 90:
+                    raise ValueError("Selecione entre 1 e 90 datas do pedido.")
+                days = [validate_date(value, "a escala") for value in raw_days]
+                if len(set(days)) != len(days):
+                    raise ValueError("Cada data da escala deve aparecer apenas uma vez.")
                 with connect() as db:
                     db.execute("BEGIN IMMEDIATE")
                     order = db.execute("SELECT * FROM pedidos WHERE id = ?", (scale_route[0],)).fetchone()
                     person = db.execute("SELECT * FROM diaristas WHERE id = ?", (payload["diarista_id"],)).fetchone()
-                    if not order or day not in {shift["data"] for shift in json.loads(order["turnos"])}:
-                        raise ValueError("A data escolhida não consta no pedido.")
+                    if not order:
+                        raise ValueError("Pedido não encontrado.")
+                    if order["situacao"] in ("concluido", "cancelado"):
+                        raise ValueError("Não é possível escalar uma diarista em pedido encerrado.")
                     if not person or person["bloqueada"]:
                         raise ValueError("Escolha uma diarista cadastrada e não bloqueada.")
-                    validate_worker_shift(db, person, order, day)
-                    count = db.execute("SELECT count(*) FROM pedido_escalas WHERE pedido_id = ? AND data = ? AND status != 'falta'", (scale_route[0], day)).fetchone()[0]
-                    if count >= order["quantidade_diaristas"]:
-                        raise ValueError("A quantidade de diaristas deste dia já foi preenchida.")
+                    for day in days:
+                        if order_shift(order, day) is None:
+                            raise ValueError(f"A data {day} não consta no pedido.")
+                        validate_worker_shift(db, person, order, day)
+                        if db.execute("SELECT 1 FROM pedido_escalas WHERE pedido_id = ? AND data = ? AND diarista_id = ?", (scale_route[0], day, person["id"])).fetchone():
+                            raise ValueError(f"A diarista já está neste pedido em {day}.")
+                        count = db.execute("SELECT count(*) FROM pedido_escalas WHERE pedido_id = ? AND data = ? AND status != 'falta'", (scale_route[0], day)).fetchone()[0]
+                        if count >= order["quantidade_diaristas"]:
+                            raise ValueError(f"A quantidade de diaristas em {day} já foi preenchida.")
                     now = datetime.now(timezone.utc).isoformat()
-                    cur = db.execute("INSERT INTO pedido_escalas (pedido_id, diarista_id, data, status, criado_em, atualizado_em) VALUES (?, ?, ?, 'escalada', ?, ?)", (scale_route[0], payload["diarista_id"], day, now, now))
-                    row = next(row for row in order_scale_rows(db, scale_route[0]) if row["id"] == cur.lastrowid)
-                return self.respond(HTTPStatus.CREATED, row)
+                    ids = [db.execute("INSERT INTO pedido_escalas (pedido_id, diarista_id, data, status, criado_em, atualizado_em) VALUES (?, ?, ?, 'escalada', ?, ?)", (scale_route[0], payload["diarista_id"], day, now, now)).lastrowid for day in days]
+                    saved = [row for row in order_scale_rows(db, scale_route[0]) if row["id"] in ids]
+                return self.respond(HTTPStatus.CREATED, saved if batch else saved[0])
             except (ValueError, json.JSONDecodeError, TypeError) as exc:
                 return self.respond(HTTPStatus.BAD_REQUEST, {"erro": str(exc)})
             except sqlite3.IntegrityError:

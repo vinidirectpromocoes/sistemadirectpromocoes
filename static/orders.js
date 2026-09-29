@@ -270,18 +270,57 @@ async function refreshOrderScales() {
   renderWeekly();
 }
 
-async function addOrderWorker(data, select) {
-  if (!select.value || orderDetailBusy) return;
+async function addOrderWorker(dates, workerId) {
+  if (!dates.length || !workerId || orderDetailBusy) return;
+  const id = orderDetailId;
   orderDetailBusy = true;
   $('#order-detail-error').hidden = true;
+  $('#order-detail-success').hidden = true;
   try {
-    await request(`/api/pedidos/${orderDetailId}/escalas`, {
+    await request(`/api/pedidos/${id}/escalas`, {
       method: 'POST', headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ data, diarista_id: Number(select.value) }),
+      body: JSON.stringify(dates.length === 1 ? { data: dates[0], diarista_id: workerId } : { datas: dates, diarista_id: workerId }),
     });
-    await refreshOrderScales();
-  } catch (err) { orderDetailError(err.message); }
+    if (orderDetailId === id) {
+      await refreshOrderScales();
+      const notice = $('#order-detail-success');
+      notice.textContent = dates.length === 1 ? 'Diarista escalada neste dia.' : `Diarista escalada em ${dates.length} dias deste pedido.`;
+      notice.hidden = false;
+    }
+  } catch (err) { orderDetailError(`${dates.length > 1 ? 'Nenhum dos dias foi salvo. ' : ''}${err.message}`); }
   finally { orderDetailBusy = false; }
+}
+
+function chooseOrderWorker(data, select, picker) {
+  if (!select.value || orderDetailBusy) return;
+  const item = orderRecords.find(row => row.id === orderDetailId);
+  const worker = orderWorkers.find(row => row.id === Number(select.value));
+  if (!item || !worker) return;
+  document.querySelectorAll('.order-assign-choice').forEach(panel => panel.remove());
+  if (item.turnos.length === 1) return addOrderWorker([data], worker.id);
+  const assigned = new Set(orderScales.filter(scale => scale.diarista_id === worker.id).map(scale => scale.data));
+  let unavailable = 0, full = 0;
+  const dates = item.turnos.filter(shift => {
+    if (assigned.has(shift.data)) return false;
+    if (!workerAvailableForShift(worker, shift)) { unavailable++; return false; }
+    const occupied = orderScales.filter(scale => scale.data === shift.data && scale.status !== 'falta').length;
+    if (occupied >= item.quantidade_diaristas) { full++; return false; }
+    return true;
+  }).map(shift => shift.data);
+  const panel = document.createElement('div'); panel.className = 'order-assign-choice';
+  const question = document.createElement('strong'); question.textContent = `Escalar ${worker.nome} só em ${dateLabel(data)} ou nos outros dias deste pedido?`;
+  panel.append(question);
+  const details = document.createElement('p');
+  details.textContent = `${dates.length} dia${dates.length === 1 ? '' : 's'} com vaga e horário ${dates.length === 1 ? 'compatível' : 'compatíveis'}.${unavailable ? ` ${unavailable} sem disponibilidade.` : ''}${full ? ` ${full} já preenchido${full === 1 ? '' : 's'}.` : ''}`;
+  panel.append(details);
+  const actions = document.createElement('div'); actions.className = 'order-assign-actions';
+  const single = document.createElement('button'); single.type = 'button'; single.className = 'button button-quiet'; single.textContent = 'Só este dia';
+  single.addEventListener('click', () => addOrderWorker([data], worker.id));
+  const all = document.createElement('button'); all.type = 'button'; all.className = 'button button-primary'; all.textContent = `Todos os dias possíveis (${dates.length})`; all.disabled = dates.length < 2;
+  all.addEventListener('click', () => addOrderWorker(dates, worker.id));
+  const cancel = document.createElement('button'); cancel.type = 'button'; cancel.className = 'button button-quiet'; cancel.textContent = 'Cancelar';
+  cancel.addEventListener('click', () => panel.remove());
+  actions.append(single, all, cancel); panel.append(actions); picker.after(panel);
 }
 
 async function changeOrderAttendance(scale, status) {
@@ -375,7 +414,7 @@ function renderOrderShifts() {
       }
       body.append(row);
     });
-    if (canOperate && active < item.quantidade_diaristas) {
+    if (canOperate && !['concluido', 'cancelado'].includes(item.situacao) && active < item.quantidade_diaristas) {
       const picker = document.createElement('div'); picker.className = 'order-worker-picker';
       const select = document.createElement('select'); select.setAttribute('aria-label', `Escolher diarista para ${dateLabel(shift.data)}`);
       const placeholder = document.createElement('option'); placeholder.value = ''; placeholder.textContent = 'Selecione uma diarista'; select.append(placeholder);
@@ -391,7 +430,7 @@ function renderOrderShifts() {
         option.textContent = `${match ? '★ ' : ''}${worker.nome}${match ? ' · experiência no setor' : ''}`; select.append(option);
       });
       const add = document.createElement('button'); add.type = 'button'; add.className = 'button button-outline'; add.textContent = 'Escalar';
-      add.addEventListener('click', () => addOrderWorker(shift.data, select));
+      add.addEventListener('click', () => chooseOrderWorker(shift.data, select, picker));
       picker.append(select, add); body.append(picker);
     }
     card.append(body); list.append(card);
@@ -403,6 +442,7 @@ async function openOrderDetail(id) {
   if (!item) return showOrderFeedback('Pedido não encontrado.', true);
   orderDetailId = id;
   $('#order-detail-error').hidden = true;
+  $('#order-detail-success').hidden = true;
   $('#order-detail-title').textContent = item.supermercado;
   $('#order-detail-fields').replaceChildren(
     detailSection('Solicitação', [

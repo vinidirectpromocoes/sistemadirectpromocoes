@@ -332,6 +332,31 @@ class CadastroTest(unittest.TestCase):
         self.assertEqual(self.call("PATCH", path, {"status": "presente"})[0], 400)
         self.assertEqual(self.call("PATCH", path, {"status": "falta"})[0], 400)
 
+    def test_batch_assignment_is_atomic_when_one_day_is_full(self):
+        _, worker = self.call("POST", "/api/diaristas", SAMPLE)
+        _, other = self.call("POST", "/api/diaristas", {**SAMPLE, "nome": "Outra Pessoa de Teste", "cpf": "111.444.777-35"})
+        today = datetime.now(server.FORTALEZA).date()
+        first_monday = today + timedelta(days=(7 - today.weekday()))
+        dates = [(first_monday + timedelta(weeks=index)).isoformat() for index in range(3)]
+        _, order = self.call("POST", "/api/pedidos", {
+            "supermercado": "Super do Povo", "unidade": "Meireles", "contato": "",
+            "setor": "Operador de caixa", "quantidade_diaristas": 1,
+            "situacao": "novo", "observacoes": "",
+            "turnos": [{"data": day, "inicio": "08:00", "fim": "15:20"} for day in dates],
+        })
+        _, occupied = self.call("POST", f"/api/pedidos/{order['id']}/escalas", {"diarista_id": other["id"], "data": dates[1]})
+        path = f"/api/pedidos/{order['id']}/escalas"
+        status, _ = self.call("POST", path, {"diarista_id": worker["id"], "datas": dates})
+        self.assertEqual(status, 400)
+        self.assertEqual(len(self.call("GET", path)[1]), 1, "nenhuma data da tentativa pode ficar salva")
+        self.assertEqual(self.call("DELETE", f"{path}/{occupied['id']}")[0], 200)
+        status, saved = self.call("POST", path, {"diarista_id": worker["id"], "datas": dates})
+        self.assertEqual(status, 201)
+        self.assertEqual({row["data"] for row in saved}, set(dates))
+        self.assertEqual(len(self.call("GET", path)[1]), 3)
+        self.assertEqual(self.call("POST", path, {"diarista_id": worker["id"], "datas": dates})[0], 400)
+        self.assertEqual(len(self.call("GET", path)[1]), 3)
+
     def test_attendance_freezes_network_rates_and_updates_finance(self):
         today = datetime.now(server.FORTALEZA).date()
         worker_data = {**SAMPLE, "disponibilidade": [{

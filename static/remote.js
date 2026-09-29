@@ -252,7 +252,13 @@
           const byScale = new Map(daily.map(item => [item.pedido_escala_id, item]));
           return assignments.map(item => ({ ...item, diarista_nome: item.diaristas?.nome || '', diaria: byScale.get(item.id) || null }));
         }
-        if (method === 'POST') return unwrap(await sb.from('pedido_escalas').insert({ pedido_id: id, diarista_id: Number(p.diarista_id), data: p.data }).select().single());
+        if (method === 'POST') {
+          if (Array.isArray(p.datas)) {
+            if (!p.datas.length || p.datas.length > 90 || new Set(p.datas).size !== p.datas.length) throw new Error('Confira as datas escolhidas para a escala.');
+            return unwrap(await sb.from('pedido_escalas').insert(p.datas.map(data => ({ pedido_id: id, diarista_id: Number(p.diarista_id), data }))).select());
+          }
+          return unwrap(await sb.from('pedido_escalas').insert({ pedido_id: id, diarista_id: Number(p.diarista_id), data: p.data }).select().single());
+        }
         if (method === 'PATCH') return unwrap(await sb.from('pedido_escalas').update({ status: p.status }).eq('pedido_id', id).eq('id', scaleId).select().single());
         if (method === 'DELETE') { unwrap(await sb.from('pedido_escalas').delete().eq('pedido_id', id).eq('id', scaleId)); return { ok: true }; }
       }
