@@ -10,6 +10,8 @@ O administrador autorizado entra com o e-mail e a senha já cadastrados no Supab
 
 O arquivo `vercel.json` publica `static/`. O JavaScript desta pasta usa a chave publicável do Supabase, e as políticas RLS verificam o administrador em cada tabela. A chave de serviço e o banco SQLite não pertencem ao site ou repositório. Enviar alterações para `main` no GitHub aciona um novo deploy pela integração Git da Vercel.
 
+O fluxo recomendado de publicação é abrir um pull request, esperar o teste **Qualidade antes da publicação** ficar verde e só então integrar em `main`. O mesmo teste roda após cada atualização de `main`. A integração Git da Vercel publica automaticamente o commit; por isso, não envie commits diretamente a `main` antes de testar. O teste usa apenas banco temporário e dados sintéticos, sem credenciais de produção. Uma regra obrigatória de proteção da branch ainda deve ser configurada no GitHub para impedir integrações com testes reprovados.
+
 Para adicionar outro administrador, inclua seu e-mail em `public.direct_admins` usando um acesso seguro ao banco. Não coloque a lista de administradores no código publicado. As permissões de funcionários são Operação (cadastros, pedidos, escalas e leituras), Financeiro (lançamentos e tarifas) e Consulta (pedidos e lojas). O administrador autoriza ou desativa o e-mail em Configurações; a conta e a senha devem ser criadas separadamente em Supabase Auth. Os esquemas e políticas estão em `supabase/migrations/`.
 
 ## Como iniciar
@@ -29,6 +31,19 @@ Se `python3` não estiver disponível no Mac, use o Python incluído no Codex:
 ```
 
 O servidor local aceita conexões somente do próprio computador e usa o arquivo SQLite em `data/`. Os dados salvos localmente não são sincronizados automaticamente com o Supabase após a migração inicial. Para operação compartilhada, use o site publicado. Como o CPF é um dado pessoal, mantenha a pasta `data/` restrita e faça cópias de segurança do arquivo `diaristas.db`.
+
+## Cópia de segurança e ensaio de recuperação
+
+No site publicado, o administrador pode ir a **Configurações → Cópia de segurança**, baixar o arquivo criptografado e conferir a senha e a integridade pela opção **Verificar cópia**. Repita semanalmente e após mudanças importantes. A tela lembra a data da última verificação neste aparelho; esse lembrete local não substitui um calendário de trabalho nem comprova cópias em outros aparelhos.
+
+Para ensaiar uma recuperação sem tocar na produção, execute em um computador confiável:
+
+```bash
+python3 -m pip install cryptography==50.0.1
+python3 scripts/restore_backup.py /caminho/direct-backup-AAAA-MM-DD.json /caminho/ensaio-direct.db
+```
+
+O programa pede a senha sem mostrá-la, recusa sobrescrever arquivos, confere as relações entre diaristas, pedidos, escalas e diárias e materializa as 11 tabelas em SQLite isolado. A saída contém dados pessoais e financeiros **sem criptografia**; mantenha-a com acesso restrito e apague-a após o ensaio. Esta ferramenta verifica que os dados são recuperáveis para consulta e reimportação planejada. Ela não reimporta automaticamente para o Supabase e não inclui usuários do Supabase Auth, senhas nem configurações do projeto. Uma recuperação completa de desastre exigirá um projeto Supabase separado e uma rotina de importação validada para esse ambiente.
 
 ## Campos disponíveis
 

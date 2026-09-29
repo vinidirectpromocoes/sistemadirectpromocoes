@@ -5,10 +5,20 @@
     'financeiro_lancamentos', 'tarifas_redes', 'tarifas_setores', 'leituras_pendentes',
     'direct_staff', 'direct_auditoria'];
   const output = document.querySelector('#backup-feedback');
+  const lastCheck = document.querySelector('#backup-last-check');
   const encoder = new TextEncoder();
   const decoder = new TextDecoder();
   const toBase64 = bytes => btoa(Array.from(bytes, byte => String.fromCharCode(byte)).join(''));
   const fromBase64 = value => Uint8Array.from(atob(value), char => char.charCodeAt(0));
+  function showLastCheck() {
+    const value = localStorage.getItem('direct-backup-verified-at');
+    if (!value || Number.isNaN(Date.parse(value))) {
+      lastCheck.textContent = 'Nenhuma cópia foi verificada neste aparelho.';
+      return;
+    }
+    const days = Math.floor((Date.now() - Date.parse(value)) / 86400000);
+    lastCheck.textContent = `Última verificação neste aparelho: ${new Date(value).toLocaleString('pt-BR')}.${days >= 7 ? ' Faça uma nova cópia agora.' : ''}`;
+  }
 
   async function key(password, salt) {
     const secret = await crypto.subtle.importKey('raw', encoder.encode(password), 'PBKDF2', false, ['deriveKey']);
@@ -22,11 +32,17 @@
   }
   async function fetchTable(table) {
     const all = [];
+    let expected = null;
+    const sortKey = table === 'direct_staff' ? 'email' : 'id';
     for (let start = 0; ; start += 1000) {
-      const { data, error } = await window.directRemote.client.from(table).select('*').range(start, start + 999);
+      const { data, error, count } = await window.directRemote.client.from(table)
+        .select('*', { count: 'exact' }).order(sortKey).range(start, start + 999);
       if (error) throw new Error(`${table}: ${error.message}`);
+      if (expected === null) expected = count;
+      if (count !== expected) throw new Error(`${table}: os dados mudaram durante a cópia; tente novamente.`);
       all.push(...data);
-      if (data.length < 1000) return all;
+      if (all.length === expected) return all;
+      if (!data.length || all.length > expected) throw new Error(`${table}: contagem divergente; tente novamente.`);
     }
   }
   async function download() {
@@ -67,6 +83,8 @@
       if (payload.format !== 'direct-data-v1' || !tables.every(table => Array.isArray(payload.tables?.[table]))) throw new Error('Arquivo incompleto.');
       const count = tables.reduce((sum, table) => sum + payload.tables[table].length, 0);
       output.textContent = `Cópia legível e íntegra: ${count} registro(s) em ${tables.length} tabelas, criada em ${new Date(payload.exportedAt).toLocaleString('pt-BR')}.`;
+      localStorage.setItem('direct-backup-verified-at', new Date().toISOString());
+      showLastCheck();
     } catch (error) { output.textContent = `Não foi possível verificar: ${error.message}. Confira a senha e o arquivo.`; }
     finally { button.disabled = false; }
   }
@@ -74,4 +92,5 @@
   document.querySelector('#backup-check').addEventListener('click', check);
   window.addEventListener('hashchange', () => { area.hidden = window.directRemote?.role !== 'admin'; });
   area.hidden = window.directRemote?.role !== 'admin';
+  showLastCheck();
 })();

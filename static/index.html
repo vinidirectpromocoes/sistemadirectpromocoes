@@ -224,9 +224,9 @@
         <div id="staff-list" class="staff-list"></div>
       </section>
       <section id="backup-settings" class="settings-section" aria-labelledby="backup-title" hidden>
-        <div class="settings-heading"><div><h2 id="backup-title">Cópia de segurança dos dados</h2><p>Baixe uma cópia criptografada dos registros. Guarde o arquivo e a senha em lugares separados.</p></div></div>
+        <div class="settings-heading"><div><h2 id="backup-title">Cópia de segurança dos dados</h2><p>Faça uma cópia toda semana e depois de mudanças importantes. Guarde o arquivo e a senha em lugares separados. A verificação aqui confirma a leitura; a restauração deve ser ensaiada em uma base isolada.</p></div></div>
         <div class="staff-form"><label>Senha para criptografar<input id="backup-password" type="password" autocomplete="new-password" minlength="12" placeholder="Mínimo de 12 caracteres"></label><button id="backup-download" class="button button-primary" type="button">Baixar cópia</button><label>Conferir arquivo<input id="backup-file" type="file" accept=".json,application/json"></label><button id="backup-check" class="button button-outline" type="button">Verificar cópia</button></div>
-        <p id="backup-feedback" class="section-help" role="status" aria-live="polite"></p>
+        <p id="backup-feedback" class="section-help" role="status" aria-live="polite"></p><p id="backup-last-check" class="section-help"></p>
       </section>
     </main>
   </div>

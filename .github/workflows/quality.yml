@@ -1,0 +1,33 @@
+name: Qualidade antes da publicação
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 11.19.0
+      - name: Instalar dependências de teste
+        run: |
+          python -m pip install --disable-pip-version-check cryptography==50.0.1
+          pnpm install --frozen-lockfile
+          pnpm exec playwright install --with-deps chromium webkit
+      - name: Testes de backend e restauração
+        run: python -m unittest discover -s tests -p 'test_*.py' -v
+      - name: Testes de regras de negócio
+        run: pnpm test:unit
+      - name: Navegação, perfis e telas móveis
+        run: pnpm test:e2e
