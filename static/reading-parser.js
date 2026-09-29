@@ -85,11 +85,11 @@
     let end;
     if (/^\d{1,2}$/.test(match[2])) {
       const finalDay = Number(match[2]);
-      for (let step = 0; step < 4; step++) {
-        const candidate = dateUTC(start.getUTCFullYear(), start.getUTCMonth() + 1 + step, finalDay);
+      const monthOffset = finalDay >= start.getUTCDate() ? 0 : 1;
+      for (let step = monthOffset; step < monthOffset + 4; step++) {
+        const candidate = dateUTC(start.getUTCFullYear(), start.getUTCMonth() + step, finalDay);
         if (candidate && candidate >= start) { end = candidate; break; }
       }
-      if (finalDay >= start.getUTCDate()) end = dateUTC(start.getUTCFullYear(), start.getUTCMonth() + 1, finalDay);
     } else {
       end = readDate(match[2], start);
     }

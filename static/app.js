@@ -146,6 +146,7 @@ function setRadio(name, value) {
 }
 
 function openForm(record = null) {
+  window.directPendingForm = null;
   if ($('#detail-dialog').open) $('#detail-dialog').close();
   editingId = record?.id ?? null;
   $('#diarista-form').reset();
@@ -240,9 +241,10 @@ async function save(event) {
       method: editingId ? 'PUT' : 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(data),
     });
     const wasEditing = Boolean(editingId);
+    const pendingError = await window.directResolvePendingForm?.('diarista');
     $('#form-dialog').close();
     await load();
-    showFeedback(wasEditing ? 'Cadastro atualizado com sucesso.' : 'Diarista cadastrada com sucesso.');
+    showFeedback(pendingError || (wasEditing ? 'Cadastro atualizado com sucesso.' : 'Diarista cadastrada com sucesso.'));
   } catch (err) { showFormError(err.message); }
   finally { button.disabled = false; }
 }

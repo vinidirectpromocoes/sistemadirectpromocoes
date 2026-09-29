@@ -11,7 +11,7 @@
     };
     const networks = new Map();
     for (const order of orders || []) {
-      if (order.situacao === 'cancelado') continue;
+      const cancelled = order.situacao === 'cancelado';
       const network = (tariffs?.redes || []).find(rate => norm(rate.rede) === norm(order.supermercado));
       const sectorRates = (tariffs?.setores || []).filter(rate => norm(rate.setor) === norm(order.setor) && rate.valor_pago_centavos != null);
       const sectorRate = sectorRates.find(rate => norm(rate.rede) === norm(order.supermercado)) || sectorRates.find(rate => !rate.rede);
@@ -28,25 +28,26 @@
       const scales = scalesByOrder?.[order.id] || [];
       for (const shift of order.turnos || []) {
         if (month && !shift.data.startsWith(month)) continue;
-        const requested = Number(order.quantidade_diaristas) || 0;
         const dayScales = scales.filter(scale => scale.data === shift.data);
         const active = dayScales.filter(scale => scale.status !== 'falta');
         const present = active.filter(scale => scale.status === 'presente');
-        const absent = dayScales.length - active.length;
+        const requested = cancelled ? present.length : Number(order.quantidade_diaristas) || 0;
+        const absent = cancelled ? 0 : dayScales.length - active.length;
         // Uma vaga ainda não escalada permanece na hipótese de atendimento integral.
         // A falta reduz a projeção; uma substituta escalada recompõe a vaga.
-        const expected = Math.min(requested, active.length + Math.max(0, requested - dayScales.length));
+        // Pedido cancelado mantém apenas diárias realizadas, inclusive valores congelados.
+        const expected = cancelled ? present.length : Math.min(requested, active.length + Math.max(0, requested - dayScales.length));
         result.demand += requested;
         result.expectedDays += expected;
         result.present += present.length;
         result.absent += absent;
-        result.open += Math.max(0, requested - active.length);
+        result.open += cancelled ? 0 : Math.max(0, requested - active.length);
         orderTotal.requested += requested;
         orderTotal.days += expected;
         orderTotal.present += present.length;
         orderTotal.absent += absent;
-        if (currentRevenue != null) result.ideal.revenue += currentRevenue * requested;
-        if (currentCost != null) result.ideal.cost += currentCost * requested;
+        if (!cancelled && currentRevenue != null) result.ideal.revenue += currentRevenue * requested;
+        if (!cancelled && currentCost != null) result.ideal.cost += currentCost * requested;
         const forecastPresent = present.slice(0, expected);
         const remaining = expected - forecastPresent.length;
         if (currentRevenue == null) result.missingRevenue += remaining;

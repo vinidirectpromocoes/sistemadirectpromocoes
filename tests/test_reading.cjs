@@ -38,6 +38,11 @@ Quantidade de dias: 7`;
   assert.match(item.avisos[0], /1 diarista por dia/);
 });
 
+test('intervalo abreviado termina no mesmo mês quando a data final é posterior', () => {
+  const item = parser.parse('Loja: Meireles\nFunção: FLV\nHorário: 07:00 as 15:20\nData de inicio: 29 a 30', { stores, sectors, today })[0];
+  assert.deepEqual(item.dados.turnos.map(shift => shift.data), ['2026-09-29', '2026-09-30']);
+});
+
 test('ambiguidade de loja mantém pedido como pendência', () => {
   const item = parser.parse('Loja: Centro\nFunção: Caixa\nHorário: 07:00 as 15:20\nData: 29/09/2026', {
     stores: [{ rede: 'Rede A', nome: 'Centro' }, { rede: 'Rede B', nome: 'Centro' }], sectors, today,

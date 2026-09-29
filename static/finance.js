@@ -36,7 +36,10 @@ function renderFinanceForecast() {
     const title = document.createElement('strong'); title.textContent = `Pedido #${order.id} · ${order.network}${order.unit ? ` · ${order.unit}` : ''} · ${order.sector}`;
     const detail = document.createElement('span'); detail.textContent = `${order.days}/${order.requested} diárias previstas · ${count(order.present, 'presença', 'presenças')} · ${count(order.absent, 'falta', 'faltas')}`;
     const values = document.createElement('small'); values.textContent = `Faturamento ${moneyLabel(order.revenue)} · custo ${moneyLabel(order.cost)} · margem ${moneyLabel(order.margin)}`;
-    row.append(title, detail, values); orderList.append(row);
+    const open = document.createElement('button'); open.type = 'button'; open.className = 'text-button forecast-order-open'; open.textContent = 'Abrir pedido';
+    open.setAttribute('aria-label', `Abrir pedido número ${order.id}`);
+    open.addEventListener('click', async () => { location.hash = '#pedidos'; await loadOrders(); openOrderDetail(order.id); });
+    row.append(title, detail, values, open); orderList.append(row);
   });
   const list = $('#forecast-networks'); list.replaceChildren();
   if (!data.byNetwork.some(item => item.days)) { list.textContent = data.byOrder.length ? 'Nenhuma diária prevista após as faltas registradas.' : 'Nenhum pedido neste período.'; return; }
@@ -385,7 +388,7 @@ async function loadFinance() {
       request('/api/financeiro'), request('/api/pedidos'), request('/api/tarifas'),
     ]);
     const scales = {};
-    await Promise.all(orders.filter(order => order.situacao !== 'cancelado').map(async order => {
+    await Promise.all(orders.map(async order => {
       scales[order.id] = await request(`/api/pedidos/${order.id}/escalas`);
     }));
     if (sequence !== financeLoadSequence) return;
@@ -535,6 +538,7 @@ function showPage() {
     else link.removeAttribute('aria-current');
   }
   document.title = `${{ inicio: 'Início', diaristas: 'Diaristas', pedidos: 'Pedidos', leitura: 'Leitura IA', redes: 'Redes e lojas', financeiro: 'Financeiro', configuracoes: 'Configurações' }[page]} | Direct Promoções`;
+  window.scrollTo(0, 0);
   if (page === 'inicio') loadHome();
   if (page === 'financeiro') loadFinance();
   if (page === 'pedidos' && typeof loadOrders === 'function') loadOrders();

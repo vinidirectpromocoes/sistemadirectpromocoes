@@ -7,6 +7,38 @@ let orderDetailBusy = false;
 let weeklyScales = {};
 let weeklyPage = 0;
 const weeklyPageSize = 7;
+let orderCatalogStores = [];
+let orderCatalogSectors = [];
+
+const orderNormalize = value => String(value || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').trim().toLocaleLowerCase('pt-BR');
+
+function matchingOrderStore(market, unit) {
+  if (!market || !unit) return null;
+  return orderCatalogStores.find(store => orderNormalize(store.rede) === orderNormalize(market) && orderNormalize(store.nome) === orderNormalize(unit)) || null;
+}
+
+function updateOrderStoreOptions() {
+  const market = $('#order-market');
+  const unit = $('#order-unit');
+  const networks = [...new Set(orderCatalogStores.map(store => store.rede))].sort((a, b) => a.localeCompare(b, 'pt-BR'));
+  $('#order-market-options').replaceChildren(...networks.map(name => new Option(name)));
+  const chosenNetwork = networks.find(name => orderNormalize(name) === orderNormalize(market.value));
+  if (chosenNetwork && market.value !== chosenNetwork) market.value = chosenNetwork;
+  const units = orderCatalogStores.filter(store => !chosenNetwork || store.rede === chosenNetwork);
+  $('#order-unit-options').replaceChildren(...[...new Set(units.map(store => store.nome))].sort((a, b) => a.localeCompare(b, 'pt-BR')).map(name => new Option(name)));
+  $('#order-sector-options').replaceChildren(...[...new Set(orderCatalogSectors)].sort((a, b) => a.localeCompare(b, 'pt-BR')).map(name => new Option(name)));
+  const store = matchingOrderStore(market.value, unit.value);
+  const hint = $('#order-store-hint');
+  hint.textContent = store ? `Loja do catálogo: ${[store.endereco, store.bairro, `${store.cidade}/${store.uf}`].filter(Boolean).join(' · ')}` :
+    unit.value.trim() ? 'Loja não encontrada nessa rede. Confira o nome em Redes e lojas.' : 'Selecione uma loja do catálogo para conferir o endereço.';
+}
+
+async function loadOrderCatalog() {
+  const [stores, tariffs] = await Promise.all([request('/api/lojas'), request('/api/tarifas')]);
+  orderCatalogStores = stores;
+  orderCatalogSectors = (tariffs.setores || []).map(rate => rate.setor);
+  updateOrderStoreOptions();
+}
 
 function renderWeekly() {
   const target = $('#weekly-days'); target.replaceChildren();
@@ -148,6 +180,7 @@ async function loadOrders() {
   try {
     orderRecords = await request('/api/pedidos');
     renderOrders();
+    loadOrderCatalog().catch(() => {});
     await Promise.all(orderRecords.filter(order => order.situacao !== 'cancelado').map(async order => {
       weeklyScales[order.id] = await request(`/api/pedidos/${order.id}/escalas`);
     }));
@@ -193,6 +226,7 @@ function addOrderShift(shift = null) {
 }
 
 function openOrderForm(item = null) {
+  window.directPendingForm = null;
   if ($('#order-detail-dialog').open) $('#order-detail-dialog').close();
   orderEditingId = item?.id ?? null;
   $('#order-form').reset();
@@ -208,6 +242,7 @@ function openOrderForm(item = null) {
   $('#order-notes').value = item?.observacoes || '';
   $('#order-shifts').replaceChildren();
   (item?.turnos || [null]).forEach(addOrderShift);
+  updateOrderStoreOptions();
   updateOrderPreview();
   $('#order-dialog').showModal();
   $('#order-market').focus();
@@ -248,9 +283,10 @@ async function saveOrder(event) {
       method: orderEditingId ? 'PUT' : 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(data),
     });
     const edited = Boolean(orderEditingId);
+    const pendingError = await window.directResolvePendingForm?.('pedido');
     $('#order-dialog').close();
     await loadOrders();
-    showOrderFeedback(edited ? 'Pedido atualizado.' : 'Pedido registrado.');
+    showOrderFeedback(pendingError || (edited ? 'Pedido atualizado.' : 'Pedido registrado.'));
   } catch (err) { showOrderFormError(err.message); }
   finally { save.disabled = false; }
 }
@@ -383,6 +419,17 @@ function renderOrderShifts() {
       state.textContent = { escalada: 'Aguardando', presente: 'Presença', falta: 'Falta' }[scale.status];
       identity.append(name, state); row.append(identity);
       const actions = document.createElement('div'); actions.className = 'order-worker-actions';
+      if (!window.directRemote || window.directRemote.role !== 'consulta') {
+        const profile = document.createElement('button'); profile.type = 'button'; profile.className = 'text-button';
+        profile.textContent = 'Ver ficha'; profile.setAttribute('aria-label', `Ver ficha de ${scale.diarista_nome}`);
+        profile.addEventListener('click', async () => {
+          $('#order-detail-dialog').close();
+          location.hash = '#diaristas';
+          await load();
+          await openDetail(scale.diarista_id);
+        });
+        actions.append(profile);
+      }
       for (const [status, label] of canOperate ? [['presente', 'Presença'], ['falta', 'Falta']] : []) {
         const button = document.createElement('button'); button.type = 'button';
         button.className = `order-attendance-button ${status}${scale.status === status ? ' selected' : ''}`;
@@ -460,10 +507,30 @@ async function openOrderDetail(id) {
       ['Pedido registrado em', new Date(item.criado_em).toLocaleString('pt-BR')],
     ]),
   );
+  const showStore = () => {
+    if (orderDetailId !== id || !$('#order-detail-dialog').open) return;
+    const store = matchingOrderStore(item.supermercado, item.unidade);
+    $('#order-detail-store')?.remove();
+    if (!store) return;
+    const section = detailSection('Loja cadastrada', [['Endereço', [store.endereco, store.bairro, `${store.cidade}/${store.uf}`].filter(Boolean).join(' · ')]]);
+    section.id = 'order-detail-store';
+    const link = document.createElement('button'); link.type = 'button'; link.className = 'text-button'; link.textContent = 'Ver em Redes e lojas';
+    link.addEventListener('click', () => {
+      $('#order-detail-dialog').close();
+      $('#stores-search').value = store.nome;
+      location.hash = '#redes';
+      loadStores();
+    });
+    section.append(link);
+    $('#order-detail-fields').append(section);
+  };
   $('#order-detail-shifts').textContent = 'Carregando escalas...';
   $('#order-detail-dialog').showModal();
+  showStore();
+  loadOrderCatalog().then(showStore).catch(() => {});
   try {
-    [orderWorkers, orderScales] = await Promise.all([request('/api/diaristas'), request(`/api/pedidos/${id}/escalas`)]);
+    const canOperate = !window.directRemote || ['admin', 'operacao'].includes(window.directRemote.role);
+    [orderWorkers, orderScales] = await Promise.all([canOperate ? request('/api/diaristas') : Promise.resolve([]), request(`/api/pedidos/${id}/escalas`)]);
     if (orderDetailId === id && $('#order-detail-dialog').open) renderOrderShifts();
   } catch (err) { orderDetailError(`Não foi possível carregar as escalas: ${err.message}`); }
 }
@@ -495,6 +562,8 @@ $('#weekly-next').addEventListener('click', () => { weeklyPage++; renderWeekly()
 $('#order-close-button').addEventListener('click', () => $('#order-dialog').close());
 $('#order-cancel-button').addEventListener('click', () => $('#order-dialog').close());
 $('#order-form').addEventListener('submit', saveOrder);
+$('#order-market').addEventListener('input', updateOrderStoreOptions);
+$('#order-unit').addEventListener('input', updateOrderStoreOptions);
 $('#order-add-day').addEventListener('click', () => addOrderShift().focus());
 $('#order-quantity').addEventListener('input', updateOrderPreview);
 $('#order-detail-close').addEventListener('click', () => $('#order-detail-dialog').close());

@@ -33,6 +33,11 @@ assert.equal(result.demand, 2, 'não mistura meses');
 
 result = calculate([{ ...order, situacao: 'cancelado' }], {}, tariffs, '2026-09');
 assert.equal(result.demand, 0, 'pedido cancelado não entra na previsão');
+result = calculate([{ ...order, situacao: 'cancelado' }], { 1: [scale(1, '2026-09-29', 'presente', { valor_centavos: 8500, valor_recebido_centavos: 12400 })] }, tariffs, '2026-09');
+assert.equal(result.expected.revenue, 12400, 'pedido cancelado preserva faturamento de presença realizada');
+assert.equal(result.expected.cost, 8500, 'pedido cancelado preserva custo de presença realizada');
+assert.equal(result.expectedDays, 1, 'pedido cancelado não projeta vagas restantes');
+assert.equal(result.ideal.revenue, 0, 'pedido cancelado sai do cenário ideal');
 
 result = calculate([{ ...order, supermercado: 'super do povo' }, order], {}, tariffs, '2026-09');
 assert.equal(result.byNetwork.length, 1, 'variações de maiúsculas não duplicam a rede');

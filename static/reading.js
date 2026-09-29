@@ -226,8 +226,9 @@
     } catch (error) { feedback(`Não foi possível concluir a importação: ${error.message}`, true); }
     finally { button.disabled = false; button.textContent = '✦ Ler e registrar tudo'; }
   }
-  function fillDiarista(d) {
+  function fillDiarista(d, pendingId) {
     window.location.hash = '#diaristas'; openForm();
+    window.directPendingForm = { id: pendingId, tipo: 'diarista' };
     for (const key of ['nome', 'cpf', 'cep', 'logradouro', 'numero', 'complemento', 'bairro', 'local_trabalho', 'observacoes_locomocao']) pick(`#${key}`).value = d[key] || '';
     pick('#setores').value = (d.setores || []).join(', ');
     document.querySelectorAll('input[name="trabalhando"]').forEach(input => { input.checked = d.trabalhando !== null && input.value === String(d.trabalhando); });
@@ -239,6 +240,11 @@
       : transport.includes('aplicativo') || transport.includes('táxi') ? 'Aplicativo / táxi'
       : transport ? 'Outros meios' : '';
     pick('#transporte').value = mapped;
+    if (d.disponibilidade?.length) {
+      const anyHours = d.disponibilidade.every(slot => slot.inicio === '00:00' && slot.fim === '23:59');
+      setRadio('horario_tipo', anyHours ? 'qualquer' : 'especifico');
+      updateScheduleMode();
+    }
     for (const slot of d.disponibilidade || []) {
       const row = [...document.querySelectorAll('.day-row')].find(node => node.dataset.day === slot.dia);
       if (!row) continue;
@@ -250,8 +256,9 @@
     if (typeof formatCpf === 'function') pick('#cpf').value = formatCpf(pick('#cpf').value);
     if (typeof formatCep === 'function') pick('#cep').value = formatCep(pick('#cep').value);
   }
-  function fillPedido(p) {
+  function fillPedido(p, pendingId) {
     window.location.hash = '#pedidos'; openOrderForm();
+    window.directPendingForm = { id: pendingId, tipo: 'pedido' };
     pick('#order-market').value = p.supermercado || '';
     pick('#order-unit').value = p.unidade || '';
     pick('#order-contact').value = p.contato || '';
@@ -260,6 +267,7 @@
     pick('#order-notes').value = p.observacoes || '';
     pick('#order-shifts').replaceChildren();
     if (p.turnos?.length) p.turnos.forEach(addOrderShift); else addOrderShift();
+    updateOrderStoreOptions();
     updateOrderPreview();
   }
   function pendingCard(item) {
@@ -271,7 +279,7 @@
     const actions = document.createElement('div'); actions.className = 'reading-item-actions';
     if (item.tipo !== 'indefinido') {
       const edit = document.createElement('button'); edit.className = 'button button-outline'; edit.type = 'button'; edit.textContent = 'Abrir e completar';
-      edit.addEventListener('click', () => item.tipo === 'diarista' ? fillDiarista(item.dados) : fillPedido(item.dados)); actions.append(edit);
+      edit.addEventListener('click', () => item.tipo === 'diarista' ? fillDiarista(item.dados, item.id) : fillPedido(item.dados, item.id)); actions.append(edit);
     }
     const resolve = document.createElement('button'); resolve.className = 'button button-quiet'; resolve.type = 'button'; resolve.textContent = 'Marcar resolvido';
     resolve.addEventListener('click', async () => { try { await request(`/api/leituras-pendentes/${item.id}`, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: body({ status: 'resolvido' }) }); await loadPending(); } catch (error) { feedback(error.message, true); } });
@@ -288,6 +296,21 @@
       else pending.forEach(item => area.append(pendingCard(item)));
     } catch (error) { const area = pick('#reading-pending-items'); area.textContent = `Não foi possível carregar as pendências: ${error.message}`; }
     finally { loadingPending = false; }
+  }
+  window.directResolvePendingForm = async tipo => {
+    const current = window.directPendingForm;
+    if (!current || current.tipo !== tipo) return null;
+    window.directPendingForm = null;
+    try {
+      await request(`/api/leituras-pendentes/${current.id}`, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: body({ status: 'resolvido' }) });
+      await loadPending();
+      return null;
+    } catch (error) {
+      return `Registro salvo, mas não foi possível marcar a pendência como resolvida: ${error.message}`;
+    }
+  };
+  for (const id of ['#form-dialog', '#order-dialog']) {
+    pick(id).addEventListener('close', () => { window.directPendingForm = null; });
   }
   pick('#reading-form').addEventListener('submit', submit);
   pick('#reading-file').addEventListener('change', showFiles);
