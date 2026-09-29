@@ -69,6 +69,12 @@ function showFinanceFeedback(message, isError = false) {
 
 function financeStatus(item) {
   if (item.valor_centavos == null) return { label: 'Sem valor', style: 'incomplete' };
+  if (item.origem === 'cobranca') {
+    if (item.valor_recebido_centavos >= item.valor_centavos) return { label: 'Recebida', style: 'settled' };
+    if (item.valor_recebido_centavos > 0) return { label: 'Parcial', style: 'partial' };
+    if (item.vencimento < financeToday()) return { label: 'Atrasada', style: 'overdue' };
+    return { label: 'A receber', style: 'open' };
+  }
   if (item.data_pagamento) return { label: item.tipo === 'receita' ? 'Recebido' : 'Pago', style: 'settled' };
   if (item.origem === 'diaria' && !item.vencimento) return { label: 'Sem vencimento', style: 'incomplete' };
   if (item.vencimento && item.vencimento < financeToday()) return { label: 'Atrasado', style: 'overdue' };
@@ -88,8 +94,9 @@ function filteredFinanceRows({ ignoreType = false, ignoreStatus = false } = {}) 
   return financeRecords.filter(item => {
     if (!allMonths && month && !financePeriodDate(item)?.startsWith(month)) return false;
     if (!ignoreType && type !== 'todos' && item.tipo !== type) return false;
-    if (!ignoreStatus && status === 'pago' && !item.data_pagamento) return false;
-    if (!ignoreStatus && status === 'pendente' && item.data_pagamento) return false;
+    const settled = financeStatus(item).style === 'settled';
+    if (!ignoreStatus && status === 'pago' && !settled) return false;
+    if (!ignoreStatus && status === 'pendente' && settled) return false;
     if (!ignoreStatus && status === 'sem-valor' && item.valor_centavos != null) return false;
     if (!ignoreStatus && status === 'sem-vencimento' && !(item.origem === 'diaria' && !item.data_pagamento && item.valor_centavos != null && !item.vencimento)) return false;
     if (query && !`${item.descricao} ${item.contraparte} ${item.categoria}`.toLocaleLowerCase('pt-BR').includes(query)) return false;
@@ -164,7 +171,7 @@ function renderFinanceCharts() {
     { label: 'Saídas', value: expense, display: moneyLabel(expense), color: '#f0a04d', colorClass: 'expense', filter: 'despesa' },
   ], compactMoney(income + expense), 'valor conhecido', 'finance-type-filter');
   const statusRows = filteredFinanceRows({ ignoreStatus: true });
-  const settled = statusRows.filter(item => item.data_pagamento).length;
+  const settled = statusRows.filter(item => financeStatus(item).style === 'settled').length;
   const pending = statusRows.length - settled;
   renderFinanceChart('finance-status-chart', 'finance-status-legend', [
     { label: 'Liquidados', value: settled, display: String(settled), color: '#22aa84', colorClass: 'settled', filter: 'pago' },
@@ -229,6 +236,7 @@ function renderFinanceGroup() {
   const items = visibleFinanceRows.filter(item => item.origem === 'diaria' && item.diarista_id === financeOpenGroupId);
   if (!items.length) { if ($('#finance-group-dialog').open) $('#finance-group-dialog').close(); return false; }
   $('#finance-group-dialog').querySelector('.finance-group-notice')?.remove();
+  $('#finance-group-dialog').querySelector('.finance-batch-button')?.remove();
   $('#finance-group-title').textContent = items[0].contraparte;
   const totals = financeGroupTotals(items);
   const summary = $('#finance-group-summary');
@@ -253,6 +261,8 @@ function renderFinanceGroup() {
     detail.textContent = item.data_pagamento ? `Pago em ${dateLabel(item.data_pagamento)}${item.forma_pagamento ? ` · ${item.forma_pagamento}` : ''}` : item.vencimento ? `Vence em ${dateLabel(item.vencimento)}` : 'Vencimento não informado';
     const edit = document.createElement('button'); edit.type = 'button'; edit.className = 'text-button'; edit.textContent = item.valor_centavos == null ? 'Completar pagamento' : 'Editar pagamento';
     edit.setAttribute('aria-label', `${edit.textContent} da diária de ${dateLabel(item.data)}`);
+    edit.disabled = Boolean(item.pagamento_lote_id);
+    if (item.pagamento_lote_id) edit.title = 'Pagamento feito em lote. Reabra o fechamento para corrigir.';
     edit.addEventListener('click', () => { $('#finance-group-dialog').close(); startPayment(item, 'finance-group'); });
     meta.append(badge, detail, edit);
     row.append(main, amount, meta); list.append(row);
@@ -261,6 +271,14 @@ function renderFinanceGroup() {
     const notice = document.createElement('p'); notice.className = 'finance-group-notice';
     notice.textContent = `${totals.missing} diária${totals.missing === 1 ? '' : 's'} sem valor. Complete para calcular o total definitivo.`;
     summary.after(notice);
+  }
+  const payable = items.filter(item => !item.data_pagamento && item.valor_centavos > 0);
+  if (payable.length && typeof window.openPaymentBatch === 'function') {
+    const button = document.createElement('button'); button.type = 'button'; button.className = 'button button-primary';
+    button.textContent = `Fechar pagamento (${payable.length})`;
+    button.addEventListener('click', () => window.openPaymentBatch(financeOpenGroupId, payable));
+    list.before(button);
+    button.classList.add('finance-batch-button');
   }
   return true;
 }
@@ -275,6 +293,11 @@ function renderFinance() {
   const allMonths = $('#finance-all-months').checked;
   const total = (type, paid) => financeRecords.reduce((sum, item) => {
     if (item.tipo !== type || item.valor_centavos == null) return sum;
+    if (item.origem === 'cobranca') {
+      if (paid) return sum + item.recebimentos.reduce((value, receipt) =>
+        value + (!receipt.estornado && (allMonths || receipt.data_recebimento.startsWith(month)) ? receipt.valor_centavos : 0), 0);
+      return sum + Math.max(0, item.valor_centavos - item.valor_recebido_centavos);
+    }
     if (paid && item.data_pagamento && (allMonths || item.data_pagamento.startsWith(month))) return sum + item.valor_centavos;
     if (!paid && !item.data_pagamento) return sum + item.valor_centavos;
     return sum;
@@ -345,7 +368,7 @@ function renderFinance() {
     const category = document.createElement('small'); category.textContent = item.origem === 'diaria' ? 'Diária · Pagamento de diarista' : item.categoria;
     description.append(title, category); row.append(description);
     row.append(cell(item.contraparte));
-    const reference = item.data_pagamento ? `Pago em ${dateLabel(item.data_pagamento)}` : item.vencimento ? `Vence em ${dateLabel(item.vencimento)}` : `Diária de ${dateLabel(item.referencia)}`;
+    const reference = item.origem === 'cobranca' ? `Vence em ${dateLabel(item.vencimento)}` : item.data_pagamento ? `Pago em ${dateLabel(item.data_pagamento)}` : item.vencimento ? `Vence em ${dateLabel(item.vencimento)}` : `Diária de ${dateLabel(item.referencia)}`;
     row.append(cell(reference));
     const typeCell = document.createElement('td');
     const typeBadge = document.createElement('span'); typeBadge.className = `finance-type ${item.tipo}`;
@@ -357,9 +380,11 @@ function renderFinance() {
     statusCell.append(badge); row.append(statusCell);
     const actions = document.createElement('td'); actions.className = 'finance-actions';
     const edit = document.createElement('button'); edit.type = 'button'; edit.className = 'text-button';
-    edit.textContent = item.origem === 'diaria' && item.valor_centavos == null ? 'Completar' : 'Editar';
+    edit.textContent = item.origem === 'cobranca' ? 'Ver cobrança' : item.origem === 'diaria' && item.valor_centavos == null ? 'Completar' : 'Editar';
     edit.setAttribute('aria-label', `${edit.textContent} ${item.descricao}`);
-    edit.addEventListener('click', () => item.origem === 'diaria' ? startPayment(item, 'finance') : openFinanceForm(item));
+    edit.disabled = item.origem === 'diaria' && Boolean(item.pagamento_lote_id);
+    edit.addEventListener('click', () => item.origem === 'cobranca' ? window.openInvoiceDetail(item.id)
+      : item.origem === 'diaria' ? startPayment(item, 'finance') : openFinanceForm(item));
     actions.append(edit);
     if (item.origem === 'manual') {
       if (!item.data_pagamento) {
@@ -395,6 +420,7 @@ async function loadFinance() {
     financeRecords = records;
     financeForecastInput = { orders, tariffs, scales };
     renderFinance();
+    if (typeof window.renderWorkflow === 'function') await window.renderWorkflow(financeRecords, orders, scales);
   }
   catch (err) { if (sequence === financeLoadSequence) showFinanceFeedback(`Não foi possível carregar o financeiro: ${err.message}`, true); }
 }
@@ -483,7 +509,7 @@ async function deleteFinanceEntry(item) {
 function exportFinanceCsv() {
   const headers = ['Tipo', 'Origem', 'Descrição', 'Cliente ou favorecido', 'Categoria', 'Data de referência', 'Vencimento', 'Data de pagamento', 'Valor (R$)', 'Situação', 'Forma de pagamento', 'Observações'];
   const rows = visibleFinanceRows.map(item => [
-    item.tipo === 'receita' ? 'Entrada' : 'Saída', item.origem === 'diaria' ? 'Diária' : 'Manual', item.descricao,
+    item.tipo === 'receita' ? 'Entrada' : 'Saída', item.origem === 'diaria' ? 'Diária' : item.origem === 'cobranca' ? 'Cobrança' : 'Manual', item.descricao,
     item.contraparte, item.categoria, item.referencia, item.vencimento || '', item.data_pagamento || '',
     item.valor_centavos == null ? '' : (item.valor_centavos / 100).toFixed(2).replace('.', ','),
     financeStatus(item).label, item.forma_pagamento || '', item.observacoes || '',
@@ -513,7 +539,7 @@ async function openFinanceAudit() {
       const details = document.createElement('details'); details.className = 'finance-audit-item';
       const summary = document.createElement('summary');
       const action = { INSERT: 'Cadastro', UPDATE: 'Alteração', DELETE: 'Exclusão' }[item.operacao] || item.operacao;
-      const entity = { diarias: 'Diária', financeiro_lancamentos: 'Lançamento', pedido_escalas: 'Escala', tarifas_redes: 'Tarifa da rede', tarifas_setores: 'Tarifa do setor' }[item.tabela] || item.tabela;
+      const entity = { diarias: 'Diária', financeiro_lancamentos: 'Lançamento', pedido_escalas: 'Escala', pedidos: 'Pedido', diaristas: 'Diarista', cobrancas: 'Cobrança', cobranca_itens: 'Item cobrado', cobranca_recebimentos: 'Recebimento', pagamento_lotes: 'Fechamento', tarifas_redes: 'Tarifa da rede', tarifas_setores: 'Tarifa do setor' }[item.tabela] || item.tabela;
       summary.textContent = `${action} · ${entity} #${item.registro_id} · ${new Date(item.alterado_em).toLocaleString('pt-BR')}`;
       const actor = document.createElement('small'); actor.textContent = `Responsável: ${item.email_autor || 'Processo administrativo'}`;
       const data = document.createElement('pre'); data.textContent = JSON.stringify({ antes: item.antes, depois: item.depois }, null, 2);

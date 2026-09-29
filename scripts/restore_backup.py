@@ -18,8 +18,10 @@ from cryptography.hazmat.primitives.ciphers.aead import AESGCM
 TABLES = (
     "diaristas", "diarias", "pedidos", "pedido_escalas", "lojas",
     "financeiro_lancamentos", "tarifas_redes", "tarifas_setores",
-    "leituras_pendentes", "direct_staff", "direct_auditoria",
+    "leituras_pendentes", "direct_staff", "direct_auditoria", "cobrancas",
+    "cobranca_itens", "cobranca_recebimentos", "pagamento_lotes",
 )
+LEGACY_TABLES = TABLES[:11]
 
 
 def decrypt_archive(archive, password):
@@ -32,24 +34,33 @@ def decrypt_archive(archive, password):
         raise ValueError("Parâmetros de criptografia inválidos")
     key = __import__("hashlib").pbkdf2_hmac("sha256", password.encode(), salt, 200000, 32)
     payload = json.loads(AESGCM(key).decrypt(iv, ciphertext, None))
-    if payload.get("format") != "direct-data-v1" or not isinstance(payload.get("tables"), dict):
+    if payload.get("format") not in ("direct-data-v1", "direct-data-v2") or not isinstance(payload.get("tables"), dict):
         raise ValueError("Conteúdo da cópia não reconhecido")
-    for table in TABLES:
+    required = TABLES if payload["format"] == "direct-data-v2" else LEGACY_TABLES
+    for table in required:
         if not isinstance(payload["tables"].get(table), list):
             raise ValueError(f"Tabela ausente: {table}")
         if not all(isinstance(row, dict) for row in payload["tables"][table]):
             raise ValueError(f"Registros inválidos: {table}")
+    for table in TABLES:
+        payload["tables"].setdefault(table, [])
     return payload
 
 
 def relationship_errors(data):
     ids = {table: {str(row["id"]) for row in data[table] if row.get("id") is not None}
-           for table in ("diaristas", "pedidos", "pedido_escalas")}
+           for table in ("diaristas", "pedidos", "pedido_escalas", "diarias", "cobrancas", "pagamento_lotes")}
     links = (
         ("diarias", "diarista_id", "diaristas"),
         ("diarias", "pedido_escala_id", "pedido_escalas"),
         ("pedido_escalas", "pedido_id", "pedidos"),
         ("pedido_escalas", "diarista_id", "diaristas"),
+        ("diarias", "pagamento_lote_id", "pagamento_lotes"),
+        ("pagamento_lotes", "diarista_id", "diaristas"),
+        ("cobranca_itens", "cobranca_id", "cobrancas"),
+        ("cobranca_itens", "diaria_id", "diarias"),
+        ("cobranca_itens", "pedido_id", "pedidos"),
+        ("cobranca_recebimentos", "cobranca_id", "cobrancas"),
     )
     errors = []
     for table, column, target in links:

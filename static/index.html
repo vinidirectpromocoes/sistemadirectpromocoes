@@ -18,13 +18,16 @@
   <link rel="stylesheet" href="/reading.css">
   <link rel="stylesheet" href="/motion.css">
   <link rel="stylesheet" href="/operations.css">
+  <link rel="stylesheet" href="/workflow.css">
   <script src="/vendor/supabase-2.117.2.js" defer></script>
   <script src="/remote.js" defer></script>
   <script src="/app.js" defer></script>
   <script src="/stores.js" defer></script>
   <script src="/forecast.js" defer></script>
   <script src="/operations.js" defer></script>
+  <script src="/workflow.js" defer></script>
   <script src="/finance.js" defer></script>
+  <script src="/matching.js" defer></script>
   <script src="/orders.js" defer></script>
   <script src="/settings.js" defer></script>
   <script src="/backup.js" defer></script>
@@ -116,7 +119,7 @@
         </form>
       </section>
       <section id="reading-result" class="list-card reading-result" aria-labelledby="reading-result-title" hidden>
-        <div class="reading-result-heading"><div><span class="eyebrow">RESULTADO DA IMPORTAÇÃO</span><h2 id="reading-result-title">Dados processados</h2><p id="reading-result-summary"></p></div></div>
+        <div class="reading-result-heading"><div><span class="eyebrow">RESULTADO DA IMPORTAÇÃO</span><h2 id="reading-result-title">Dados processados</h2><p id="reading-result-summary"></p><p id="reading-result-sources" class="section-help"></p></div><label class="reading-result-filter">Mostrar<select id="reading-result-filter"><option value="todos">Todos</option><option value="revisar">Pendências e erros</option><option value="saved">Registrados</option><option value="duplicate">Duplicados</option></select></label></div>
         <div id="reading-result-items" class="reading-result-items"></div>
       </section>
       <section class="list-card reading-result" aria-labelledby="reading-pending-title">
@@ -150,6 +153,15 @@
           <article class="finance-chart-card"><h3>Previsão por rede</h3><div id="forecast-networks" class="forecast-networks"></div></article>
         </div>
         <details class="forecast-orders"><summary id="forecast-orders-summary">Conferir pedidos incluídos</summary><div id="forecast-orders-list"></div></details>
+      </section>
+      <section class="list-card workflow-section" aria-labelledby="invoice-title">
+        <div class="list-top workflow-header"><div><span class="eyebrow">PEDIDO → PRESENÇA → RECEBIMENTO</span><h2 id="invoice-title">Cobranças das redes</h2><p>Gere cobranças das presenças confirmadas. Cada diária entra em uma única cobrança.</p></div><button id="invoice-new" class="button button-primary" type="button">＋ Gerar cobrança</button></div>
+        <div class="workflow-stats"><div><span>Faturado</span><strong id="invoice-billed">R$ 0,00</strong></div><div><span>Recebido</span><strong id="invoice-received">R$ 0,00</strong></div><div><span>A receber</span><strong id="invoice-open">R$ 0,00</strong></div></div>
+        <div id="invoice-list" class="workflow-list"></div>
+      </section>
+      <section class="list-card workflow-section" aria-labelledby="batch-title">
+        <div class="list-top"><div><span class="eyebrow">PAGAMENTO DE DIARISTAS</span><h2 id="batch-title">Fechamentos em lote</h2><p>Abra um grupo de diárias abaixo e escolha “Fechar pagamento”. O histórico dos lotes fica aqui.</p></div></div>
+        <div id="batch-list" class="workflow-list"></div>
       </section>
       <section class="finance-dashboard" aria-labelledby="finance-dashboard-title">
         <div class="finance-dashboard-heading"><div><span class="eyebrow">VISÃO GERAL</span><h2 id="finance-dashboard-title">Dashboard financeira</h2><p>Toque em uma fatia ou legenda para filtrar os lançamentos.</p></div><button id="finance-clear-filters" class="button button-quiet" type="button" hidden>Limpar filtros</button></div>
@@ -300,6 +312,27 @@
     <div class="dialog-header"><div><span class="eyebrow">DIÁRIAS AGRUPADAS</span><h2 id="finance-group-title"></h2></div><button class="icon-button" id="finance-group-close" type="button" aria-label="Fechar">×</button></div>
     <div class="dialog-body"><p class="finance-group-help">Os valores abaixo seguem os filtros aplicados na lista do Financeiro.</p><div id="finance-group-summary" class="finance-group-summary"></div><div id="finance-group-items" class="finance-group-items"></div></div>
     <div class="dialog-footer"><button class="button button-quiet" id="finance-group-close-bottom" type="button">Fechar</button></div>
+  </dialog>
+  <dialog id="invoice-create-dialog" aria-labelledby="invoice-create-title">
+    <form id="invoice-create-form">
+      <div class="dialog-header"><div><span class="eyebrow">COBRANÇA VINCULADA</span><h2 id="invoice-create-title">Gerar cobrança</h2></div><button class="icon-button" type="button" data-close-dialog="invoice-create-dialog" aria-label="Fechar">×</button></div>
+      <div class="dialog-body"><p class="section-help">Somente presenças confirmadas ainda não cobradas entram no valor. Diárias sem tarifa recebida precisam de correção antes de gerar.</p><div id="invoice-create-error" class="form-error" role="alert" hidden></div>
+        <label>Rede<select id="invoice-network" required></select></label><div class="field-grid two"><label>Período inicial<input id="invoice-start" type="date" required></label><label>Período final<input id="invoice-end" type="date" required></label></div><div class="field-grid two"><label>Vencimento<input id="invoice-due" type="date" required></label><label>Número da nota, se já houver<input id="invoice-note" maxlength="80" placeholder="Opcional"></label></div><p id="invoice-preview" class="workflow-preview"></p>
+      </div><div class="dialog-footer"><button class="button button-quiet" type="button" data-close-dialog="invoice-create-dialog">Cancelar</button><button id="invoice-create-submit" class="button button-primary" type="submit">Gerar cobrança</button></div>
+    </form>
+  </dialog>
+  <dialog id="invoice-detail-dialog" aria-labelledby="invoice-detail-title">
+    <div class="dialog-header"><div><span class="eyebrow">COBRANÇA DA REDE</span><h2 id="invoice-detail-title"></h2></div><button class="icon-button" type="button" data-close-dialog="invoice-detail-dialog" aria-label="Fechar">×</button></div>
+    <div class="dialog-body"><div id="invoice-detail-summary" class="workflow-detail-summary"></div><h3>Diárias incluídas</h3><div id="invoice-detail-items" class="workflow-detail-list"></div><h3>Recebimentos</h3><div id="invoice-detail-receipts" class="workflow-detail-list"></div>
+      <form id="invoice-receive-form" class="workflow-inline-form"><h3>Registrar recebimento</h3><div class="field-grid two"><label>Valor recebido (R$)<input id="invoice-receive-value" type="number" min="0.01" step="0.01" inputmode="decimal" required></label><label>Data<input id="invoice-receive-date" type="date" required></label></div><label>Forma<input id="invoice-receive-method" maxlength="80" placeholder="Pix, transferência..."></label><button class="button button-primary" type="submit">Registrar recebimento</button></form>
+      <form id="invoice-cancel-form" class="workflow-inline-form"><h3>Cancelar cobrança sem recebimento</h3><label>Motivo<input id="invoice-cancel-reason" minlength="8" maxlength="300" required placeholder="Explique a correção da cobrança"></label><button class="button button-danger" type="submit">Cancelar cobrança</button></form><div id="invoice-detail-error" class="form-error" role="alert" hidden></div>
+    </div><div class="dialog-footer"><button class="button button-quiet" type="button" data-close-dialog="invoice-detail-dialog">Fechar</button></div>
+  </dialog>
+  <dialog id="batch-dialog" aria-labelledby="batch-dialog-title">
+    <form id="batch-form"><div class="dialog-header"><div><span class="eyebrow">FECHAMENTO DE DIÁRIAS</span><h2 id="batch-dialog-title"></h2></div><button class="icon-button" type="button" data-close-dialog="batch-dialog" aria-label="Fechar">×</button></div>
+      <div class="dialog-body"><p class="section-help">Marque as diárias que serão pagas juntas. O pagamento é registrado de uma vez para todas elas.</p><div id="batch-error" class="form-error" role="alert" hidden></div><div id="batch-choices" class="workflow-detail-list"></div><strong id="batch-total" class="workflow-batch-total"></strong><div class="field-grid two"><label>Data do pagamento<input id="batch-date" type="date" required></label><label>Forma de pagamento<input id="batch-method" maxlength="80" placeholder="Pix, transferência..."></label></div></div>
+      <div class="dialog-footer"><button class="button button-quiet" type="button" data-close-dialog="batch-dialog">Cancelar</button><button id="batch-submit" class="button button-primary" type="submit">Confirmar pagamento</button></div>
+    </form>
   </dialog>
   <dialog id="finance-dialog" aria-labelledby="finance-form-title">
     <form id="finance-form" novalidate>

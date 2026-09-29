@@ -1,7 +1,7 @@
 {
   "private": true,
   "scripts": {
-    "test:unit": "node --test tests/test_forecast.cjs tests/test_reading.cjs",
+    "test:unit": "node --test tests/test_forecast.cjs tests/test_reading.cjs tests/test_matching.cjs",
     "test:e2e": "node tests/e2e.mjs"
   },
   "devDependencies": {

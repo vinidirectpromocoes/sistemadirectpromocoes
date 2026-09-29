@@ -157,10 +157,29 @@
     };
   }
   const orderView = o => ({ ...o, quantidade_dias: o.turnos.length, total_diarias: o.turnos.length * o.quantidade_diaristas });
+  async function invoiceRows() {
+    const [invoices, items, receipts] = await Promise.all([
+      rows('cobrancas'),
+      rows('cobranca_itens', '*, pedidos(supermercado,unidade,setor), diarias(diarista_id,diaristas(nome))'),
+      rows('cobranca_recebimentos'),
+    ]);
+    return invoices.sort((a, b) => b.id - a.id).map(invoice => {
+      const invoiceItems = items.filter(item => item.cobranca_id === invoice.id).map(item => ({
+        ...item, supermercado: item.pedidos?.supermercado || invoice.rede,
+        unidade: item.pedidos?.unidade || '', setor: item.pedidos?.setor || '',
+        diarista_id: item.diarias?.diarista_id,
+        diarista_nome: item.diarias?.diaristas?.nome || '',
+      }));
+      const invoiceReceipts = receipts.filter(item => item.cobranca_id === invoice.id)
+        .sort((a, b) => a.data_recebimento.localeCompare(b.data_recebimento) || a.id - b.id);
+      return { ...invoice, itens: invoiceItems, recebimentos: invoiceReceipts,
+        valor_recebido_centavos: invoiceReceipts.reduce((sum, item) => sum + (item.estornado ? 0 : item.valor_centavos), 0) };
+    });
+  }
   async function financeRows() {
-    const [manual, daily] = await Promise.all([
+    const [manual, daily, invoices] = await Promise.all([
       rows('financeiro_lancamentos'),
-      rows('diarias', '*, diaristas(nome)')
+      rows('diarias', '*, diaristas(nome)'), invoiceRows(),
     ]);
     return [
       ...manual.map(item => ({ ...item, chave: `manual:${item.id}`, origem: 'manual', referencia: item.vencimento, diarista_id: null })),
@@ -169,7 +188,13 @@
         descricao: `Diária · ${item.setor} · ${item.local}`, categoria: 'Pagamento de diarista',
         contraparte: item.diaristas?.nome || '', vencimento: item.vencimento_pagamento,
         referencia: item.data
-      }))
+      })),
+      ...invoices.filter(item => item.status !== 'cancelada').map(item => ({
+        ...item, chave: `cobranca:${item.id}`, origem: 'cobranca', tipo: 'receita',
+        descricao: `Cobrança · ${item.rede}`, categoria: 'Serviços faturados',
+        contraparte: item.rede, referencia: item.periodo_fim, data_pagamento: null,
+        forma_pagamento: '', observacoes: item.numero_nota || '', diarista_id: null,
+      })),
     ];
   }
   async function run(url, options = {}) {
@@ -223,6 +248,32 @@
         unwrap(await sb.from('financeiro_lancamentos').delete().eq('id', id)); return { ok: true };
       }
     }
+    if (entity === 'cobrancas') {
+      if (method === 'GET') return invoiceRows();
+      if (method === 'POST' && !id) return unwrap(await sb.rpc('direct_create_invoice', {
+        p_rede: p.rede, p_inicio: p.periodo_inicio, p_fim: p.periodo_fim,
+        p_vencimento: p.vencimento, p_numero_nota: p.numero_nota || '',
+      }));
+      if (method === 'POST' && parts[3] === 'recebimentos') return unwrap(await sb.rpc('direct_receive_invoice', {
+        p_id: id, p_valor_centavos: money(p.valor), p_data: p.data_recebimento, p_forma: p.forma || '',
+      }));
+      if (method === 'PATCH' && parts[3] === 'cancelar') return unwrap(await sb.rpc('direct_cancel_invoice', {
+        p_id: id, p_motivo: p.motivo,
+      }));
+    }
+    if (entity === 'recebimentos' && method === 'PATCH' && parts[3] === 'estornar') {
+      return unwrap(await sb.rpc('direct_void_invoice_receipt', { p_id: id, p_motivo: p.motivo }));
+    }
+    if (entity === 'pagamento-lotes') {
+      if (method === 'GET') return rows('pagamento_lotes', '*, diaristas(nome)');
+      if (method === 'POST' && !id) return unwrap(await sb.rpc('direct_pay_daily_batch', {
+        p_diarista_id: p.diarista_id, p_diaria_ids: p.diaria_ids,
+        p_data: p.data_pagamento, p_forma: p.forma || '',
+      }));
+      if (method === 'PATCH' && parts[3] === 'reabrir') return unwrap(await sb.rpc('direct_reopen_payment_batch', {
+        p_id: id, p_motivo: p.motivo,
+      }));
+    }
     if (entity === 'auditoria' && method === 'GET') {
       return unwrap(await sb.from('direct_auditoria').select('id,tabela,registro_id,operacao,antes,depois,email_autor,alterado_em').order('id', { ascending: false }).limit(100));
     }
@@ -248,7 +299,7 @@
           const assignments = unwrap(await sb.from('pedido_escalas').select('*, diaristas(nome)').eq('pedido_id', id).order('data').order('id'));
           if (!assignments.length) return [];
           const daily = ['admin', 'financeiro'].includes(currentRole)
-            ? unwrap(await sb.from('diarias').select('id,pedido_escala_id,data_pagamento,valor_centavos,valor_recebido_centavos,vencimento_pagamento,forma_pagamento').in('pedido_escala_id', assignments.map(item => item.id))) : [];
+            ? unwrap(await sb.from('diarias').select('id,pedido_escala_id,data_pagamento,valor_centavos,valor_recebido_centavos,vencimento_pagamento,forma_pagamento,pagamento_lote_id').in('pedido_escala_id', assignments.map(item => item.id))) : [];
           const byScale = new Map(daily.map(item => [item.pedido_escala_id, item]));
           return assignments.map(item => ({ ...item, diarista_nome: item.diaristas?.nome || '', diaria: byScale.get(item.id) || null }));
         }

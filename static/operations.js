@@ -25,33 +25,50 @@ async function loadHome() {
     }));
     const today = homeToday();
     let open = 0, attendance = 0;
+    const queue = [];
+    const tomorrowDate = new Date(`${today}T12:00:00Z`);
+    tomorrowDate.setUTCDate(tomorrowDate.getUTCDate() + 1);
+    const tomorrow = tomorrowDate.toISOString().slice(0, 10);
     for (const order of orders) {
-      if (['cancelado', 'concluido'].includes(order.situacao)) continue;
+      if (order.situacao === 'cancelado') continue;
       for (const shift of order.turnos) {
-        if (shift.data < today) continue;
         const active = (scales[order.id] || []).filter(scale => scale.data === shift.data && scale.status !== 'falta');
-        open += Math.max(0, order.quantidade_diaristas - active.length);
+        const vacancies = Math.max(0, order.quantidade_diaristas - active.length);
+        if (shift.data >= today && order.situacao !== 'concluido') open += vacancies;
+        if (canOperate && shift.data >= today && shift.data <= tomorrow && vacancies && order.situacao !== 'concluido')
+          queue.push({ priority: shift.data === today ? 0 : 1, label: `${vacancies} vaga(s) · ${order.supermercado} ${order.unidade} · ${order.setor} · ${dateLabel(shift.data)}`, kind: 'order', id: order.id });
       }
-      attendance += (scales[order.id] || []).filter(scale => scale.status === 'escalada' && scale.data <= today).length;
+      const awaiting = (scales[order.id] || []).filter(scale => scale.status === 'escalada' && scale.data <= today);
+      attendance += awaiting.length;
+      if (canOperate) for (const scale of awaiting.slice(0, 4))
+        queue.push({ priority: -1, label: `Confirmar ${scale.diarista_nome} · ${order.supermercado} · ${dateLabel(scale.data)}`, kind: 'order', id: order.id });
     }
     const pending = readings.filter(row => row.status === 'pendente').length;
-    const overdue = finance.filter(row => !row.data_pagamento && row.valor_centavos != null && row.vencimento && row.vencimento < today).length;
+    const overdueRows = finance.filter(row => row.valor_centavos != null && row.vencimento && row.vencimento < today &&
+      (row.origem === 'cobranca' ? row.valor_recebido_centavos < row.valor_centavos : !row.data_pagamento));
+    const overdue = overdueRows.length;
+    if (canFinance) for (const item of overdueRows.slice(0, 5)) queue.push({ priority: 2,
+      label: `${item.origem === 'cobranca' ? 'Cobrança' : 'Pagamento'} vencido · ${item.contraparte} · ${moneyLabel(item.origem === 'cobranca' ? item.valor_centavos - item.valor_recebido_centavos : item.valor_centavos)}`,
+      kind: item.origem === 'cobranca' ? 'invoice' : 'finance', id: item.id });
+    if (canReadings && pending) queue.push({ priority: 3, label: `${pending} leitura(s) aguardando revisão`, kind: 'reading' });
     for (const [id, value] of [['home-open', open], ['home-attendance', attendance], ['home-reading', pending], ['home-overdue', overdue]]) {
       document.getElementById(id).textContent = String(value);
     }
     const list = document.getElementById('home-actions'); list.replaceChildren();
-    const actions = [
-      [canOperate ? open : 0, 'Vagas a preencher nos próximos pedidos', '#pedidos'],
-      [canOperate ? attendance : 0, 'Confirmar presença ou falta das escalas', '#pedidos'],
-      [canReadings ? pending : 0, 'Completar leituras pendentes', '#leitura'],
-      [canFinance ? overdue : 0, 'Conferir lançamentos vencidos', '#financeiro'],
-    ];
-    for (const [count, label, href] of actions.filter(item => item[0] > 0)) {
-      const link = document.createElement('a'); link.href = href; link.className = 'home-action';
-      const number = document.createElement('strong'); number.textContent = String(count);
-      const text = document.createElement('span'); text.textContent = label;
+    if (canOperate && open && !queue.some(item => item.kind === 'order' && item.priority >= 0))
+      queue.push({ priority: 4, label: `${open} vaga(s) em datas posteriores`, kind: 'orders' });
+    for (const action of queue.sort((a, b) => a.priority - b.priority).slice(0, 15)) {
+      const link = document.createElement('a'); link.href = action.kind === 'reading' ? '#leitura' : ['invoice','finance'].includes(action.kind) ? '#financeiro' : '#pedidos'; link.className = 'home-action';
+      const number = document.createElement('strong'); number.textContent = action.kind === 'order' ? '▤' : action.kind === 'invoice' ? '◉' : '↗';
+      const text = document.createElement('span'); text.textContent = action.label;
       const arrow = document.createElement('span'); arrow.textContent = '↗'; arrow.setAttribute('aria-hidden', 'true');
       link.append(number, text, arrow); list.append(link);
+      if (action.kind === 'order') link.addEventListener('click', async event => {
+        event.preventDefault(); location.hash = '#pedidos'; await loadOrders(); await openOrderDetail(action.id);
+      });
+      if (action.kind === 'invoice') link.addEventListener('click', async event => {
+        event.preventDefault(); location.hash = '#financeiro'; await loadFinance(); window.openInvoiceDetail(action.id);
+      });
     }
     if (!list.children.length) list.textContent = 'Tudo em dia. As novas pendências aparecerão aqui.';
   } catch (error) {

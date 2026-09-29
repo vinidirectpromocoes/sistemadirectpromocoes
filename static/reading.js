@@ -109,12 +109,18 @@
   }
   function resultCard(item, state, description, onUndo = null) {
     const card = document.createElement('article'); card.className = `reading-item ${state}`;
+    card.dataset.resultState = state;
     const head = document.createElement('div'); head.className = 'reading-item-head';
     const title = document.createElement('strong');
     title.textContent = item.tipo === 'diarista' ? (item.dados.nome || 'Diarista sem nome') : item.tipo === 'pedido' ? [item.dados.supermercado, item.dados.unidade].filter(Boolean).join(' · ') || 'Pedido sem loja' : 'Tipo não identificado';
     head.append(title, tag(state === 'saved' ? 'Registrado' : state === 'duplicate' ? 'Já existente' : state === 'pending' ? 'Pendente' : 'Erro', 'reading-state'));
     const detail = document.createElement('p'); detail.textContent = description;
     card.append(head, detail);
+    if (item.fonte) {
+      const source = document.createElement('small');
+      source.textContent = `Origem: ${item.fonte}${item.confianca == null ? ' · texto recebido' : ` · leitura de imagem ${Math.round(item.confianca)}%${item.confianca < 75 ? ' · revisão obrigatória' : ''}`}`;
+      card.append(source);
+    }
     if (item.avisos?.length) {
       const note = document.createElement('small'); note.textContent = item.avisos.join(' '); card.append(note);
     }
@@ -187,6 +193,7 @@
     const resultArea = pick('#reading-result'); resultArea.hidden = false;
     const list = pick('#reading-result-items'); list.replaceChildren();
     const counts = { saved: 0, pending: 0, duplicate: 0, error: 0 };
+    const sourceReport = [];
     try {
       const data = await getData();
       const existing = {
@@ -199,12 +206,15 @@
       if (typed) sources.push({ name: 'Texto colado', text: typed });
       for (const file of files) {
         try { lastOcrConfidence = 100; sources.push({ name: file.name, text: await fileText(file), confidence: lastOcrConfidence }); }
-        catch (error) { counts.error++; list.append(resultCard({ tipo: 'indefinido', dados: {} }, 'error', error.message)); }
+        catch (error) { counts.error++; sourceReport.push(`${file.name}: erro de leitura`); list.append(resultCard({ tipo: 'indefinido', dados: {}, fonte: file.name }, 'error', error.message)); }
       }
       for (const source of sources) {
+        const before = { ...counts };
         const parts = parser.parse(source.text, { stores: data.stores, sectors: data.sectors, today: orderToday() });
-        if (!parts.length) { counts.error++; list.append(resultCard({ tipo: 'indefinido', dados: {} }, 'error', `${source.name}: nenhum texto reconhecido. Envie uma imagem mais nítida ou um PDF com melhor resolução.`)); continue; }
+        if (!parts.length) { counts.error++; sourceReport.push(`${source.name}: nenhum registro reconhecido`); list.append(resultCard({ tipo: 'indefinido', dados: {}, fonte: source.name, confianca: source.confidence ?? null }, 'error', `${source.name}: nenhum texto reconhecido. Envie uma imagem mais nítida ou um PDF com melhor resolução.`)); continue; }
         for (const item of parts) {
+          item.fonte = source.name;
+          item.confianca = source.confidence ?? null;
           if (source.confidence < 75) {
             item.faltando.push('Conferir dados reconhecidos na imagem');
             const advice = source.confidence < 45
@@ -221,8 +231,11 @@
           } : null;
           list.append(resultCard(item, outcome.state, outcome.description, undo));
         }
+        sourceReport.push(`${source.name}: ${counts.saved - before.saved} salvo(s), ${counts.pending - before.pending} em revisão, ${counts.duplicate - before.duplicate} duplicado(s), ${counts.error - before.error} erro(s)`);
       }
       pick('#reading-result-summary').textContent = `${counts.saved} registrado(s) · ${counts.pending} pendente(s) · ${counts.duplicate} já existente(s) · ${counts.error} erro(s).`;
+      pick('#reading-result-sources').textContent = sourceReport.join(' | ');
+      pick('#reading-result-filter').value = 'todos';
       feedback(counts.error ? 'Processamento concluído com erros. Confira o resultado abaixo.' : 'Processamento concluído. Confira o resultado abaixo.', !!counts.error);
       await Promise.all([load(), loadOrders(), loadPending()]);
       resultArea.scrollIntoView({ behavior: 'smooth', block: 'start' });
@@ -316,6 +329,12 @@
     pick(id).addEventListener('close', () => { window.directPendingForm = null; });
   }
   pick('#reading-form').addEventListener('submit', submit);
+  pick('#reading-result-filter').addEventListener('change', () => {
+    const filter = pick('#reading-result-filter').value;
+    pick('#reading-result-items').querySelectorAll('[data-result-state]').forEach(card => {
+      card.hidden = filter !== 'todos' && (filter === 'revisar' ? !['pending','error'].includes(card.dataset.resultState) : card.dataset.resultState !== filter);
+    });
+  });
   pick('#reading-file').addEventListener('change', showFiles);
   pick('#reading-remove-file').addEventListener('click', () => { pick('#reading-file').value = ''; showFiles(); });
   window.addEventListener('hashchange', () => { if (location.hash === '#leitura') loadPending(); });

@@ -95,6 +95,9 @@ class CadastroTest(unittest.TestCase):
             ("/finance.js", "text/javascript; charset=utf-8"),
             ("/forecast.js", "text/javascript; charset=utf-8"),
             ("/operations.js", "text/javascript; charset=utf-8"),
+            ("/workflow.js", "text/javascript; charset=utf-8"),
+            ("/matching.js", "text/javascript; charset=utf-8"),
+            ("/workflow.css", "text/css; charset=utf-8"),
             ("/backup.js", "text/javascript; charset=utf-8"),
             ("/operations.css", "text/css; charset=utf-8"),
             ("/orders.js", "text/javascript; charset=utf-8"),
@@ -112,6 +115,68 @@ class CadastroTest(unittest.TestCase):
                 self.assertEqual(response.status, 200)
                 self.assertEqual(response.headers["Content-Type"], content_type)
                 self.assertTrue(response.read())
+
+    def test_invoice_tracks_confirmed_days_partial_receipts_and_absence(self):
+        _, worker = self.call("POST", "/api/diaristas", SAMPLE)
+        scales = []
+        for day in ("2026-09-21", "2026-09-28"):
+            _, order = self.call("POST", "/api/pedidos", {
+                "supermercado": "Super do Povo", "unidade": "Meireles", "setor": "Operador de caixa",
+                "quantidade_diaristas": 1, "turnos": [{"data": day, "inicio": "08:00", "fim": "17:00"}],
+                "situacao": "confirmado", "observacoes": "",
+            })
+            self.assertEqual(self.call("POST", f"/api/pedidos/{order['id']}/escalas", {"data": day, "diarista_id": worker["id"]})[0], 201)
+            scale = self.call("GET", f"/api/pedidos/{order['id']}/escalas")[1][0]
+            self.assertEqual(self.call("PATCH", f"/api/pedidos/{order['id']}/escalas/{scale['id']}", {"status": "presente"})[0], 200)
+            scales.append((order, scale))
+        payload = {"rede": "Super do Povo", "periodo_inicio": "2026-09-21", "periodo_fim": "2026-09-28",
+                   "vencimento": "2026-10-10", "numero_nota": "TESTE-1"}
+        status, invoice = self.call("POST", "/api/cobrancas", payload)
+        self.assertEqual(status, 201)
+        self.assertEqual(invoice["valor_centavos"], 26800)
+        self.assertEqual(len(invoice["itens"]), 2)
+        self.assertEqual(self.call("POST", "/api/cobrancas", payload)[0], 400)
+        first_order, first_scale = scales[0]
+        status, result = self.call("PATCH", f"/api/pedidos/{first_order['id']}/escalas/{first_scale['id']}", {"status": "falta"})
+        self.assertEqual(status, 400)
+        self.assertIn("cobrança", result["erro"])
+        invoice_id = invoice["id"]
+        self.assertEqual(self.call("POST", f"/api/cobrancas/{invoice_id}/recebimentos", {"valor": "100.00", "data_recebimento": "2026-09-29", "forma": "Pix"})[0], 201)
+        self.assertEqual(self.call("POST", f"/api/cobrancas/{invoice_id}/recebimentos", {"valor": "200.00", "data_recebimento": "2026-09-29"})[0], 400)
+        invoices = self.call("GET", "/api/cobrancas")[1]
+        self.assertEqual(invoices[0]["valor_recebido_centavos"], 10000)
+        receipt_id = invoices[0]["recebimentos"][0]["id"]
+        self.assertEqual(self.call("PATCH", f"/api/recebimentos/{receipt_id}/estornar", {"motivo": "Valor lançado por engano"})[0], 200)
+        self.assertEqual(self.call("GET", "/api/cobrancas")[1][0]["valor_recebido_centavos"], 0)
+        self.assertEqual(self.call("PATCH", f"/api/cobrancas/{invoice_id}/cancelar", {"motivo": "Corrigir presença registrada"})[0], 200)
+        self.assertEqual(self.call("PATCH", f"/api/pedidos/{first_order['id']}/escalas/{first_scale['id']}", {"status": "falta"})[0], 200)
+        status, corrected = self.call("POST", "/api/cobrancas", payload)
+        self.assertEqual(status, 201)
+        self.assertEqual(corrected["valor_centavos"], 13400)
+        self.assertEqual(len(corrected["itens"]), 1)
+
+    def test_batch_payment_is_atomic_and_can_be_reopened(self):
+        _, worker = self.call("POST", "/api/diaristas", SAMPLE)
+        daily_ids = []
+        for day in ("2026-09-21", "2026-09-28"):
+            status, daily = self.call("POST", f"/api/diaristas/{worker['id']}/diarias", {
+                "data": day, "local": "Loja de teste", "setor": "Eventos", "observacoes": "",
+                "valor": "90.00", "vencimento_pagamento": "2026-10-05",
+            })
+            self.assertEqual(status, 201)
+            daily_ids.append(daily["id"])
+        payload = {"diarista_id": worker["id"], "diaria_ids": daily_ids, "data_pagamento": "2026-09-29", "forma": "Pix"}
+        self.assertEqual(self.call("POST", "/api/pagamento-lotes", {**payload, "diaria_ids": [daily_ids[0], daily_ids[0]]})[0], 400)
+        status, batch = self.call("POST", "/api/pagamento-lotes", payload)
+        self.assertEqual(status, 201)
+        self.assertEqual(batch["valor_centavos"], 18000)
+        self.assertEqual(batch["quantidade"], 2)
+        self.assertEqual(self.call("POST", "/api/pagamento-lotes", payload)[0], 400)
+        self.assertEqual(self.call("PATCH", f"/api/diaristas/{worker['id']}/diarias/{daily_ids[0]}/pagamento", {"data_pagamento": None, "motivo_ajuste": "Correção de teste"})[0], 400)
+        self.assertEqual(self.call("PATCH", f"/api/pagamento-lotes/{batch['id']}/reabrir", {"motivo": "Correção da data do pagamento"})[0], 200)
+        history = self.call("GET", f"/api/diaristas/{worker['id']}/diarias")[1]
+        self.assertTrue(all(row["data_pagamento"] is None and row["pagamento_lote_id"] is None for row in history))
+        self.assertEqual(self.call("GET", "/api/pagamento-lotes")[1][0]["status"], "reaberto")
 
     def test_pending_reading_is_saved_once_and_can_be_resolved(self):
         reading = {"tipo": "diarista", "chave": "cpf:52998224725", "dados": {"nome": "Maria"},
