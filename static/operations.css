@@ -3,6 +3,7 @@
 .forecast-cards { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; }
 .forecast-card { min-width: 0; }
 .forecast-card small { display: block; margin-top: 8px; font-size: .76rem; opacity: .76; }
+.forecast-card.emphasis small { color: #e5efff; opacity: 1; }
 .forecast-visuals { display: grid; grid-template-columns: minmax(220px, 1fr) minmax(280px, 1.4fr); gap: 12px; margin-top: 12px; }
 .forecast-visuals .finance-chart-card { min-width: 0; }
 .forecast-ring { --forecast-cost-share: 0%; display: grid; place-items: center; width: 164px; height: 164px; margin: 16px auto; border-radius: 50%; background: conic-gradient(#e9984b 0 var(--forecast-cost-share), #2378eb var(--forecast-cost-share) 100%); position: relative; }
