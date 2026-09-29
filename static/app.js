@@ -104,13 +104,29 @@ function createAvailability() {
     end.type = 'time'; end.className = 'day-end'; end.value = '18:00'; end.disabled = true;
     end.setAttribute('aria-label', `Fim ${label}`);
     times.append(start, document.createTextNode('até'), end);
+    times.hidden = true;
     row.append(checkLabel, times);
     container.append(row);
     checkbox.addEventListener('change', () => {
-      start.disabled = end.disabled = !checkbox.checked;
+      start.disabled = end.disabled = !checkbox.checked || scheduleMode() !== 'especifico';
       row.classList.toggle('selected', checkbox.checked);
     });
   });
+}
+
+function scheduleMode() {
+  return $('input[name="horario_tipo"]:checked')?.value || 'qualquer';
+}
+
+function updateScheduleMode() {
+  const specific = scheduleMode() === 'especifico';
+  document.querySelectorAll('.day-row').forEach(row => {
+    const selected = row.querySelector('.day-enabled').checked;
+    row.querySelector('.day-times').hidden = !specific;
+    row.querySelector('.day-start').disabled = !specific || !selected;
+    row.querySelector('.day-end').disabled = !specific || !selected;
+  });
+  $('#schedule-error').hidden = true;
 }
 
 function toggleConditional() {
@@ -134,6 +150,7 @@ function openForm(record = null) {
   editingId = record?.id ?? null;
   $('#diarista-form').reset();
   $('#form-error').hidden = true;
+  $('#schedule-error').hidden = true;
   $('#dialog-title').textContent = record ? 'Editar diarista' : 'Nova diarista';
   $('#save-button').textContent = record ? 'Salvar alterações' : 'Salvar cadastro';
   document.querySelectorAll('.day-row').forEach(row => {
@@ -150,6 +167,7 @@ function openForm(record = null) {
     $('#setores').value = record.setores.join(', ');
     setRadio('trabalhando', String(record.trabalhando));
     setRadio('pode_se_deslocar', String(record.pode_se_deslocar));
+    setRadio('horario_tipo', record.disponibilidade.every(slot => slot.inicio === '00:00' && slot.fim === '23:59') ? 'qualquer' : 'especifico');
     record.disponibilidade.forEach(slot => {
       const row = document.querySelector(`.day-row[data-day="${slot.dia}"]`);
       if (!row) return;
@@ -159,6 +177,7 @@ function openForm(record = null) {
       row.querySelector('.day-end').value = slot.fim;
     });
   }
+  updateScheduleMode();
   toggleConditional();
   $('#form-dialog').showModal();
   $('#nome').focus();
@@ -167,8 +186,11 @@ function openForm(record = null) {
 function formData() {
   const workingChoice = $('input[name="trabalhando"]:checked');
   const travelChoice = $('input[name="pode_se_deslocar"]:checked');
+  const anyHours = scheduleMode() === 'qualquer';
   const availability = [...document.querySelectorAll('.day-row')].filter(row => row.querySelector('.day-enabled').checked).map(row => ({
-    dia: row.dataset.day, inicio: row.querySelector('.day-start').value, fim: row.querySelector('.day-end').value,
+    dia: row.dataset.day,
+    inicio: anyHours ? '00:00' : row.querySelector('.day-start').value,
+    fim: anyHours ? '23:59' : row.querySelector('.day-end').value,
   }));
   return {
     nome: $('#nome').value, cpf: $('#cpf').value,
@@ -190,7 +212,8 @@ function validateForm(data) {
   if (data.trabalhando === null) return 'Confirme se a pessoa está trabalhando atualmente.';
   if (data.trabalhando && !data.local_trabalho.trim()) return 'Informe o local onde está trabalhando.';
   if (!data.disponibilidade.length) return 'Selecione ao menos um dia disponível.';
-  if (data.disponibilidade.some(slot => !slot.inicio || !slot.fim || slot.inicio >= slot.fim)) return 'Confira os horários selecionados.';
+  const invalidSlot = data.disponibilidade.find(slot => !slot.inicio || !slot.fim || slot.inicio >= slot.fim);
+  if (invalidSlot) return `Confira o horário de ${days.find(([key]) => key === invalidSlot.dia)?.[1] || invalidSlot.dia}: o início deve ser antes do fim.`;
   if (data.pode_se_deslocar === null) return 'Confirme a disponibilidade de locomoção.';
   if (data.pode_se_deslocar && !data.transporte) return 'Selecione o meio de transporte.';
   return null;
@@ -200,8 +223,16 @@ async function save(event) {
   event.preventDefault();
   const data = formData();
   const error = validateForm(data);
-  if (error) return showFormError(error);
+  if (error) {
+    showFormError(error);
+    if (error.includes('dia disponível') || error.includes('horário de ')) {
+      const warning = $('#schedule-error'); warning.textContent = error; warning.hidden = false;
+      warning.scrollIntoView({ block: 'nearest' });
+    }
+    return;
+  }
   $('#form-error').hidden = true;
+  $('#schedule-error').hidden = true;
   const button = $('#save-button');
   button.disabled = true;
   try {
@@ -304,7 +335,7 @@ function renderDetail(record) {
   $('#add-daily-button').title = record.bloqueada ? 'Desbloqueie a diarista para registrar uma nova diária.' : '';
   const schedule = record.disponibilidade.map(slot => {
     const label = days.find(([key]) => key === slot.dia)?.[1] || slot.dia;
-    return `${label}: ${slot.inicio} às ${slot.fim}`;
+    return `${label}: ${slot.inicio === '00:00' && slot.fim === '23:59' ? 'qualquer horário' : `${slot.inicio} às ${slot.fim}`}`;
   }).join('\n');
   const address = `${record.logradouro}, ${record.numero}${record.complemento ? `, ${record.complemento}` : ''} · ${record.bairro} · Fortaleza–CE · CEP ${formatCep(record.cep)}`;
   $('#detail-fields').replaceChildren(
@@ -509,6 +540,7 @@ createAvailability();
 $('#cpf').addEventListener('input', event => { event.target.value = formatCpf(event.target.value); });
 $('#cep').addEventListener('input', event => { event.target.value = formatCep(event.target.value); });
 document.querySelectorAll('input[name="trabalhando"], input[name="pode_se_deslocar"]').forEach(input => input.addEventListener('change', toggleConditional));
+document.querySelectorAll('input[name="horario_tipo"]').forEach(input => input.addEventListener('change', updateScheduleMode));
 $('#new-button').addEventListener('click', () => openForm());
 $('#empty-new-button').addEventListener('click', () => openForm());
 $('#close-button').addEventListener('click', () => $('#form-dialog').close());

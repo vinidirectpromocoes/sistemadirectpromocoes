@@ -43,5 +43,7 @@ html[data-theme="dark"] .weekly-shift, html[data-theme="dark"] .home-action { ba
 html[data-theme="dark"] .weekly-shift.is-open { border-color: #e6a36b; }
 html[data-theme="dark"] .staff-form, html[data-theme="dark"] .staff-row { border-color: var(--dark-border); }
 .reading-identified { margin-top: 9px; font-size: .78rem; }.reading-identified summary { cursor: pointer; font-weight: 700; }
+.schedule-error { margin: 10px 0 0; }
+.day-times[hidden] { display: none; }
 .reading-identified pre { max-height: 230px; overflow: auto; margin: 8px 0 0; padding: 10px; border-radius: 9px; background: #d8e7fa66; white-space: pre-wrap; overflow-wrap: anywhere; }
 html[data-theme="dark"] .reading-identified pre { background: var(--dark-field); color: var(--dark-text); }

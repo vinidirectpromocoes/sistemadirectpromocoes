@@ -335,14 +335,14 @@ class CadastroTest(unittest.TestCase):
     def test_attendance_freezes_network_rates_and_updates_finance(self):
         today = datetime.now(server.FORTALEZA).date()
         worker_data = {**SAMPLE, "disponibilidade": [{
-            "dia": server.WEEKDAYS[today.weekday()], "inicio": "07:00", "fim": "16:00",
+            "dia": server.WEEKDAYS[today.weekday()], "inicio": "00:00", "fim": "23:59",
         }]}
         _, worker = self.call("POST", "/api/diaristas", worker_data)
         order_data = {
             "supermercado": "Super do Povo", "unidade": "Meireles", "contato": "",
             "setor": "Operador de caixa", "quantidade_diaristas": 1,
             "situacao": "confirmado", "observacoes": "",
-            "turnos": [{"data": today.isoformat(), "inicio": "07:00", "fim": "15:20"}],
+            "turnos": [{"data": today.isoformat(), "inicio": "13:40", "fim": "22:00"}],
         }
         _, order = self.call("POST", "/api/pedidos", order_data)
         _, scale = self.call("POST", f"/api/pedidos/{order['id']}/escalas", {
