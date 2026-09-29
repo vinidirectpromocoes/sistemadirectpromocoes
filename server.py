@@ -15,6 +15,7 @@ from urllib.parse import urlparse
 from zoneinfo import ZoneInfo
 
 from catalogo_lojas import LOJAS
+import workflow_local as workflow
 
 
 ROOT = Path(__file__).resolve().parent
@@ -237,6 +238,7 @@ def init_db():
                 (rede, setor, valor_pago_centavos, atualizado_em) VALUES (NULL, ?, NULL, ?)""",
                 ((setor, now) for setor in SETORES_INICIAIS))
             db.execute("INSERT INTO direct_config_meta (chave, valor) VALUES ('setores_iniciais_v1', 'aplicado')")
+        workflow.ensure_schema(db)
 
 
 def valid_cpf(cpf):
@@ -411,6 +413,7 @@ def finance_rows():
         daily = db.execute("""SELECT d.*, p.nome AS diarista_nome FROM diarias d
                               JOIN diaristas p ON p.id = d.diarista_id
                               ORDER BY d.data DESC, d.id DESC""").fetchall()
+        invoices = workflow.invoice_rows(db)
     result = []
     for row in manual:
         item = dict(row)
@@ -426,6 +429,15 @@ def finance_rows():
             "diarista_id": row["diarista_id"],
         })
         result.append(item)
+    for invoice in invoices:
+        if invoice['status'] == 'cancelada':
+            continue
+        result.append({**invoice, 'chave': f"cobranca:{invoice['id']}", 'origem': 'cobranca',
+                       'tipo': 'receita', 'descricao': f"Cobrança · {invoice['rede']}",
+                       'categoria': 'Serviços faturados', 'contraparte': invoice['rede'],
+                       'referencia': invoice['periodo_fim'], 'data_pagamento': None,
+                       'forma_pagamento': '', 'observacoes': invoice['numero_nota'],
+                       'diarista_id': None})
     return result
 
 
@@ -502,7 +514,7 @@ def validate_reading(payload):
 def public_scale(row):
     item = dict(row)
     item["diaria"] = None if item.get("diaria_id") is None else {
-        key: item[key] for key in ("diaria_id", "data_pagamento", "valor_centavos", "valor_recebido_centavos", "vencimento_pagamento", "forma_pagamento")
+        key: item[key] for key in ("diaria_id", "data_pagamento", "valor_centavos", "valor_recebido_centavos", "vencimento_pagamento", "forma_pagamento", "pagamento_lote_id")
     }
     if item["diaria"]:
         item["diaria"]["id"] = item["diaria"].pop("diaria_id")
@@ -532,7 +544,7 @@ def validate_worker_shift(db, worker, order, day):
 
 def order_scale_rows(db, order_id):
     return [public_scale(row) for row in db.execute("""SELECT e.*, p.nome AS diarista_nome,
-        d.id AS diaria_id, d.data_pagamento, d.valor_centavos, d.valor_recebido_centavos, d.vencimento_pagamento, d.forma_pagamento
+        d.id AS diaria_id, d.data_pagamento, d.valor_centavos, d.valor_recebido_centavos, d.vencimento_pagamento, d.forma_pagamento, d.pagamento_lote_id
         FROM pedido_escalas e JOIN diaristas p ON p.id = e.diarista_id
         LEFT JOIN diarias d ON d.pedido_escala_id = e.id
         WHERE e.pedido_id = ? ORDER BY e.data, e.id""", (order_id,))]
@@ -639,6 +651,14 @@ class Handler(BaseHTTPRequestHandler):
             return self.respond(HTTPStatus.OK, [public_row(row) for row in rows])
         if path == "/api/financeiro":
             return self.respond(HTTPStatus.OK, finance_rows())
+        if path == "/api/cobrancas":
+            with connect() as db:
+                return self.respond(HTTPStatus.OK, workflow.invoice_rows(db))
+        if path == "/api/pagamento-lotes":
+            with connect() as db:
+                rows = db.execute("""SELECT l.*, d.nome AS diarista_nome FROM pagamento_lotes l
+                    JOIN diaristas d ON d.id = l.diarista_id ORDER BY l.id DESC""").fetchall()
+            return self.respond(HTTPStatus.OK, [dict(row) for row in rows])
         if path == "/api/auditoria":
             with connect() as db:
                 rows = db.execute("SELECT * FROM direct_auditoria ORDER BY id DESC LIMIT 100").fetchall()
@@ -680,7 +700,7 @@ class Handler(BaseHTTPRequestHandler):
             return self.respond(HTTPStatus.OK, [dict(row) for row in rows])
         if path == "/":
             path = "/index.html"
-        assets = {"/index.html": "text/html; charset=utf-8", "/style.css": "text/css; charset=utf-8", "/brand.css": "text/css; charset=utf-8", "/theme.css": "text/css; charset=utf-8", "/mobile.css": "text/css; charset=utf-8", "/reading.css": "text/css; charset=utf-8", "/motion.css": "text/css; charset=utf-8", "/operations.css": "text/css; charset=utf-8", "/app.js": "text/javascript; charset=utf-8", "/theme.js": "text/javascript; charset=utf-8", "/finance.js": "text/javascript; charset=utf-8", "/forecast.js": "text/javascript; charset=utf-8", "/operations.js": "text/javascript; charset=utf-8", "/backup.js": "text/javascript; charset=utf-8", "/orders.js": "text/javascript; charset=utf-8", "/stores.js": "text/javascript; charset=utf-8", "/settings.js": "text/javascript; charset=utf-8", "/reading.js": "text/javascript; charset=utf-8", "/reading-parser.js": "text/javascript; charset=utf-8", "/remote.js": "text/javascript; charset=utf-8", "/vendor/supabase-2.117.2.js": "text/javascript; charset=utf-8", "/stores.css": "text/css; charset=utf-8", "/settings.css": "text/css; charset=utf-8", "/login.css": "text/css; charset=utf-8", "/favicon.svg": "image/svg+xml", "/logo-direct-promocoes.jpg": "image/jpeg", "/logo-direct-promocoes-transparente.png": "image/png"}
+        assets = {"/index.html": "text/html; charset=utf-8", "/style.css": "text/css; charset=utf-8", "/brand.css": "text/css; charset=utf-8", "/theme.css": "text/css; charset=utf-8", "/mobile.css": "text/css; charset=utf-8", "/reading.css": "text/css; charset=utf-8", "/motion.css": "text/css; charset=utf-8", "/operations.css": "text/css; charset=utf-8", "/workflow.css": "text/css; charset=utf-8", "/app.js": "text/javascript; charset=utf-8", "/theme.js": "text/javascript; charset=utf-8", "/finance.js": "text/javascript; charset=utf-8", "/forecast.js": "text/javascript; charset=utf-8", "/operations.js": "text/javascript; charset=utf-8", "/workflow.js": "text/javascript; charset=utf-8", "/matching.js": "text/javascript; charset=utf-8", "/backup.js": "text/javascript; charset=utf-8", "/orders.js": "text/javascript; charset=utf-8", "/stores.js": "text/javascript; charset=utf-8", "/settings.js": "text/javascript; charset=utf-8", "/reading.js": "text/javascript; charset=utf-8", "/reading-parser.js": "text/javascript; charset=utf-8", "/remote.js": "text/javascript; charset=utf-8", "/vendor/supabase-2.117.2.js": "text/javascript; charset=utf-8", "/stores.css": "text/css; charset=utf-8", "/settings.css": "text/css; charset=utf-8", "/login.css": "text/css; charset=utf-8", "/favicon.svg": "image/svg+xml", "/logo-direct-promocoes.jpg": "image/jpeg", "/logo-direct-promocoes-transparente.png": "image/png"}
         if path in assets:
             return self.respond(HTTPStatus.OK, (STATIC / path[1:]).read_bytes(), assets[path])
         return self.respond(HTTPStatus.NOT_FOUND, {"erro": "Página não encontrada."})
@@ -688,7 +708,55 @@ class Handler(BaseHTTPRequestHandler):
     def do_POST(self):
         if not self._allowed_origin():
             return self.respond(HTTPStatus.FORBIDDEN, {"erro": "Acesso não permitido."})
-        if urlparse(self.path).path == "/api/leituras-pendentes":
+        path = urlparse(self.path).path
+        if path == "/api/cobrancas" or re.fullmatch(r"/api/cobrancas/\d+/recebimentos", path):
+            try:
+                payload = self.read_json()
+                if not isinstance(payload, dict):
+                    raise ValueError("Dados da cobrança inválidos.")
+                with connect() as db:
+                    if path == "/api/cobrancas":
+                        network = clean_text(payload.get("rede"), "a rede", 180)
+                        start = validate_date(payload.get("periodo_inicio"), "o início do período")
+                        end = validate_date(payload.get("periodo_fim"), "o fim do período")
+                        due = validate_date(payload.get("vencimento"), "o vencimento")
+                        note = clean_text(payload.get("numero_nota", ""), "o número da nota", 80, False)
+                        if start > end or (date.fromisoformat(end) - date.fromisoformat(start)).days > 365:
+                            raise ValueError("Selecione um período de até 365 dias em ordem crescente.")
+                        invoice_id = workflow.create_invoice(db, network, start, end, due, note)
+                        response = next(row for row in workflow.invoice_rows(db) if row["id"] == invoice_id)
+                    else:
+                        invoice_id = int(path.split("/")[3])
+                        amount = money_cents(payload.get("valor"), True)
+                        day = validate_date(payload.get("data_recebimento"), "a data de recebimento")
+                        method = clean_text(payload.get("forma", ""), "a forma", 80, False)
+                        workflow.receive_invoice(db, invoice_id, amount, day, method)
+                        response = next(row for row in workflow.invoice_rows(db) if row["id"] == invoice_id)
+                return self.respond(HTTPStatus.CREATED, response)
+            except (ValueError, json.JSONDecodeError, TypeError) as exc:
+                return self.respond(HTTPStatus.BAD_REQUEST, {"erro": str(exc)})
+            except sqlite3.IntegrityError:
+                return self.respond(HTTPStatus.CONFLICT, {"erro": "Uma diária deste período já entrou em outra cobrança."})
+        if path == "/api/pagamento-lotes":
+            try:
+                payload = self.read_json()
+                if not isinstance(payload, dict):
+                    raise ValueError("Dados do fechamento inválidos.")
+                ids = payload.get("diaria_ids")
+                worker_id = payload.get("diarista_id")
+                if isinstance(worker_id, bool) or not isinstance(worker_id, int) or not isinstance(ids, list) or not 1 <= len(ids) <= 500 or any(isinstance(x, bool) or not isinstance(x, int) for x in ids) or len(set(ids)) != len(ids):
+                    raise ValueError("Selecione diárias válidas de uma diarista.")
+                day = validate_date(payload.get("data_pagamento"), "a data do pagamento")
+                method = clean_text(payload.get("forma", ""), "a forma", 80, False)
+                with connect() as db:
+                    batch_id = workflow.pay_batch(db, worker_id, ids, day, method)
+                    response = dict(db.execute("SELECT * FROM pagamento_lotes WHERE id = ?", (batch_id,)).fetchone())
+                return self.respond(HTTPStatus.CREATED, response)
+            except (ValueError, json.JSONDecodeError, TypeError) as exc:
+                return self.respond(HTTPStatus.BAD_REQUEST, {"erro": str(exc)})
+            except sqlite3.IntegrityError as exc:
+                return self.respond(HTTPStatus.CONFLICT, {"erro": str(exc)})
+        if path == "/api/leituras-pendentes":
             try:
                 data = validate_reading(self.read_json(max_length=70000))
                 now = datetime.now(timezone.utc).isoformat()
@@ -928,6 +996,26 @@ class Handler(BaseHTTPRequestHandler):
     def do_PATCH(self):
         if not self._allowed_origin():
             return self.respond(HTTPStatus.FORBIDDEN, {"erro": "Acesso não permitido."})
+        path = urlparse(self.path).path
+        invoice_match = re.fullmatch(r"/api/cobrancas/(\d+)/cancelar", path)
+        receipt_match = re.fullmatch(r"/api/recebimentos/(\d+)/estornar", path)
+        batch_match = re.fullmatch(r"/api/pagamento-lotes/(\d+)/reabrir", path)
+        if invoice_match or receipt_match or batch_match:
+            try:
+                payload = self.read_json()
+                reason = clean_text(payload.get("motivo") if isinstance(payload, dict) else None, "o motivo", 300)
+                if len(reason) < 8:
+                    raise ValueError("Explique o motivo com pelo menos 8 caracteres.")
+                with connect() as db:
+                    if invoice_match:
+                        workflow.cancel_invoice(db, int(invoice_match.group(1)), reason)
+                    elif receipt_match:
+                        workflow.void_receipt(db, int(receipt_match.group(1)), reason)
+                    else:
+                        workflow.reopen_batch(db, int(batch_match.group(1)), reason)
+                return self.respond(HTTPStatus.OK, {"ok": True})
+            except (ValueError, json.JSONDecodeError, TypeError) as exc:
+                return self.respond(HTTPStatus.BAD_REQUEST, {"erro": str(exc)})
         reading_match = re.fullmatch(r"/api/leituras-pendentes/(\d+)", urlparse(self.path).path)
         if reading_match:
             try:
@@ -961,6 +1049,9 @@ class Handler(BaseHTTPRequestHandler):
                             daily = db.execute("SELECT data_pagamento FROM diarias WHERE pedido_escala_id = ?", (scale["id"],)).fetchone()
                             if daily and daily["data_pagamento"]:
                                 raise ValueError("A diária já foi paga. Corrija o pagamento antes de alterar a presença.")
+                            if db.execute("""SELECT 1 FROM cobranca_itens i JOIN diarias d ON d.id = i.diaria_id
+                                WHERE d.pedido_escala_id = ?""", (scale["id"],)).fetchone():
+                                raise ValueError("Esta presença já entrou numa cobrança. Cancele a cobrança antes de corrigir a falta.")
                             db.execute("DELETE FROM diarias WHERE pedido_escala_id = ?", (scale["id"],))
                         if scale["status"] == "falta" and status != "falta":
                             count = db.execute("SELECT count(*) FROM pedido_escalas WHERE pedido_id = ? AND data = ? AND status != 'falta'", (scale_route[0], scale["data"])).fetchone()[0]
@@ -1007,6 +1098,8 @@ class Handler(BaseHTTPRequestHandler):
                     old = db.execute("SELECT * FROM diarias WHERE id = ? AND diarista_id = ?", (int(payment_match.group(2)), int(payment_match.group(1)))).fetchone()
                     if not old:
                         return self.respond(HTTPStatus.NOT_FOUND, {"erro": "Diária não encontrada."})
+                    if old["pagamento_lote_id"] is not None:
+                        raise ValueError("Reabra o fechamento antes de corrigir esta diária.")
                     effective = {key: updates.get(key, old[key]) for key in ("data_pagamento", "valor_centavos", "vencimento_pagamento")}
                     validate_payment_consistency(effective["data_pagamento"], effective["valor_centavos"], effective["vencimento_pagamento"])
                     if old["data_pagamento"] and any(old[key] != value for key, value in updates.items() if key != "motivo_ajuste"):

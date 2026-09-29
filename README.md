@@ -43,7 +43,7 @@ python3 -m pip install cryptography==50.0.1
 python3 scripts/restore_backup.py /caminho/direct-backup-AAAA-MM-DD.json /caminho/ensaio-direct.db
 ```
 
-O programa pede a senha sem mostrá-la, recusa sobrescrever arquivos, confere as relações entre diaristas, pedidos, escalas e diárias e materializa as 11 tabelas em SQLite isolado. A saída contém dados pessoais e financeiros **sem criptografia**; mantenha-a com acesso restrito e apague-a após o ensaio. Esta ferramenta verifica que os dados são recuperáveis para consulta e reimportação planejada. Ela não reimporta automaticamente para o Supabase e não inclui usuários do Supabase Auth, senhas nem configurações do projeto. Uma recuperação completa de desastre exigirá um projeto Supabase separado e uma rotina de importação validada para esse ambiente.
+O programa pede a senha sem mostrá-la, recusa sobrescrever arquivos, confere as relações entre diaristas, pedidos, escalas, diárias, cobranças e lotes de pagamento e materializa as 15 tabelas em SQLite isolado. Cópias antigas de 11 tabelas continuam aceitas. A saída contém dados pessoais e financeiros **sem criptografia**; mantenha-a com acesso restrito e apague-a após o ensaio. Esta ferramenta verifica que os dados são recuperáveis para consulta e reimportação planejada. Ela não reimporta automaticamente para o Supabase e não inclui usuários do Supabase Auth, senhas nem configurações do projeto. Uma recuperação completa de desastre exigirá um projeto Supabase separado e uma rotina de importação validada para esse ambiente.
 
 ## Campos disponíveis
 
@@ -68,6 +68,8 @@ Os indicadores contam como **disponíveis** os cadastros não bloqueados e como 
 - O filtro de mês afeta a lista; a opção **Ver todos os meses** mostra todo o histórico. Há busca, filtros por tipo e situação, e exportação CSV do resultado filtrado.
 - Diárias antigas sem valor ficam sinalizadas e não entram nos totais até serem completadas.
 - Uma diária marcada como paga não pode ser excluída diretamente. Cadastros com diárias registradas também não podem ser excluídos, para preservar o histórico financeiro; use o bloqueio da diarista quando necessário.
+- Em **Cobranças das redes**, gere uma cobrança por rede e período a partir das presenças confirmadas, com número de nota opcional e vencimento. A ficha mostra os pedidos e as diárias incluídos. Cada diária só pode ser cobrada uma vez enquanto a cobrança estiver ativa. Registre recebimentos parciais; o saldo, os cards, o gráfico e o razão financeiro são recalculados. Um recebimento incorreto pode ser estornado com motivo. Para corrigir uma presença já cobrada, cancele a cobrança antes; os itens voltam a ficar disponíveis e a alteração fica na auditoria.
+- Em um grupo de diárias por pessoa, **Fechar pagamento** permite selecionar várias diárias, registrar data e forma uma vez e preservar o total do lote. Para corrigir, reabra o lote com motivo; o pagamento das diárias volta a pendente.
 
 ## Pedidos dos supermercados
 
@@ -77,11 +79,13 @@ Os indicadores contam como **disponíveis** os cadastros não bloqueados e como 
 - A lista oferece busca e filtro por situação; a ficha mostra todos os dias e horários e permite editar ou excluir o pedido.
 - Um pedido corresponde a um setor e a uma quantidade de diaristas por dia. Para demandas diferentes por setor, registre pedidos separados.
 - A escala semanal mostra horários, equipe e vagas abertas. Na ficha do pedido, associe diaristas e confirme presença ou falta por data. A página Início reúne vagas abertas, presenças pendentes, leituras pendentes e lançamentos vencidos.
+- A lista de pessoas disponíveis prioriza experiência no setor, bairro da loja e locomoção. Bloqueio, indisponibilidade no turno, deslocamento limitado e conflito com outra escala impedem a sugestão. A confirmação de falta reabre a vaga para substituição e atualiza a previsão financeira. A página Início aponta pedidos, presenças e cobranças vencidas com links diretos para resolver cada pendência.
 
 ## Leitura IA
 
 - A aba **Leitura IA** aceita vários registros em texto, várias fotos e PDFs de até 10 MB e 20 páginas. O reconhecimento de texto em imagens usa Tesseract.js no navegador; PDFs usam PDF.js para texto e OCR nas páginas digitalizadas. As bibliotecas e o modelo de português são baixados da internet na primeira leitura. Não há chamada à API OpenAI nem cobrança por créditos.
 - O sistema separa cadastros e pedidos pelas etiquetas das mensagens, identifica seus campos e registra automaticamente os completos. Verifica CPF, datas, loja e duplicidade antes de salvar. Informações incompletas ficam na lista **Informações pendentes**, preservadas no banco e disponíveis para completar no formulário.
+- O resultado mostra o arquivo de origem, a confiança da leitura de imagem, os totais por arquivo e um filtro para registrados, pendentes, duplicados ou erros. Imagens com confiança baixa exigem revisão antes do registro.
 - Para pedidos, intervalos abreviados como `29 a 05` são interpretados com base no dia atual em Fortaleza. A rede é associada ao nome da loja quando há correspondência única no catálogo. A quantidade de dias nunca é usada como quantidade de diaristas. Se a quantidade de pessoas não vier informada, o padrão da empresa é 1 por dia.
 - A leitura segue formatos com etiquetas como `Nome Completo:`, `CPF:`, `Loja:`, `Função:` e `Horário:`. Texto ilegível, escrita manual ou mensagens ambíguas podem exigir revisão na lista de pendências.
 - Cada resultado da leitura pode ser expandido para conferir os campos identificados. OCR com baixa confiança vai para revisão, e o último pedido salvo pode ser desfeito se ainda não tiver escala associada.

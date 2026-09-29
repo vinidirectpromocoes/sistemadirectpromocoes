@@ -102,14 +102,6 @@ const orderStatusLabels = {
   concluido: 'Concluído', cancelado: 'Cancelado',
 };
 const orderPlural = (count, one, many) => `${count} ${count === 1 ? one : many}`;
-const orderWeekdays = ['domingo', 'segunda', 'terca', 'quarta', 'quinta', 'sexta', 'sabado'];
-
-function workerAvailableForShift(worker, shift) {
-  const weekday = orderWeekdays[new Date(`${shift.data}T12:00:00`).getDay()];
-  return Array.isArray(worker.disponibilidade) && worker.disponibilidade.some(slot =>
-    slot.dia === weekday && slot.inicio <= shift.inicio && slot.fim >= shift.fim
-  );
-}
 
 function orderToday() {
   const parts = Object.fromEntries(new Intl.DateTimeFormat('en-US', { timeZone: 'America/Fortaleza', year: 'numeric', month: '2-digit', day: '2-digit' }).formatToParts(new Date()).map(part => [part.type, part.value]));
@@ -304,6 +296,7 @@ async function refreshOrderScales() {
   weeklyScales[orderDetailId] = orderScales;
   renderOrderShifts();
   renderWeekly();
+  if (typeof loadHome === 'function') loadHome().catch(() => {});
 }
 
 async function addOrderWorker(dates, workerId) {
@@ -335,10 +328,11 @@ function chooseOrderWorker(data, select, picker) {
   document.querySelectorAll('.order-assign-choice').forEach(panel => panel.remove());
   if (item.turnos.length === 1) return addOrderWorker([data], worker.id);
   const assigned = new Set(orderScales.filter(scale => scale.diarista_id === worker.id).map(scale => scale.data));
+  const store = matchingOrderStore(item.supermercado, item.unidade);
   let unavailable = 0, full = 0;
   const dates = item.turnos.filter(shift => {
     if (assigned.has(shift.data)) return false;
-    if (!workerAvailableForShift(worker, shift)) { unavailable++; return false; }
+    if (!window.DirectMatching.rank(worker, shift, item, store, orderRecords, weeklyScales).eligible) { unavailable++; return false; }
     const occupied = orderScales.filter(scale => scale.data === shift.data && scale.status !== 'falta').length;
     if (occupied >= item.quantidade_diaristas) { full++; return false; }
     return true;
@@ -347,7 +341,7 @@ function chooseOrderWorker(data, select, picker) {
   const question = document.createElement('strong'); question.textContent = `Escalar ${worker.nome} só em ${dateLabel(data)} ou nos outros dias deste pedido?`;
   panel.append(question);
   const details = document.createElement('p');
-  details.textContent = `${dates.length} dia${dates.length === 1 ? '' : 's'} com vaga e horário ${dates.length === 1 ? 'compatível' : 'compatíveis'}.${unavailable ? ` ${unavailable} sem disponibilidade.` : ''}${full ? ` ${full} já preenchido${full === 1 ? '' : 's'}.` : ''}`;
+  details.textContent = `${dates.length} dia${dates.length === 1 ? '' : 's'} com vaga e horário ${dates.length === 1 ? 'compatível' : 'compatíveis'}.${unavailable ? ` ${unavailable} com indisponibilidade, conflito ou deslocamento limitado.` : ''}${full ? ` ${full} já preenchido${full === 1 ? '' : 's'}.` : ''}`;
   panel.append(details);
   const actions = document.createElement('div'); actions.className = 'order-assign-actions';
   const single = document.createElement('button'); single.type = 'button'; single.className = 'button button-quiet'; single.textContent = 'Só este dia';
@@ -373,6 +367,11 @@ async function changeOrderAttendance(scale, status) {
       method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ status }),
     });
     await refreshOrderScales();
+    if (status === 'falta') {
+      const notice = $('#order-detail-success');
+      notice.textContent = 'Falta registrada. A vaga está aberta para substituição e a previsão financeira foi recalculada.';
+      notice.hidden = false;
+    }
     if (!window.directRemote || ['admin', 'financeiro'].includes(window.directRemote.role)) {
       if (status === 'presente') $('#finance-month').value = scale.data.slice(0, 7);
       await loadFinance();
@@ -451,7 +450,10 @@ function renderOrderShifts() {
         payment.append(label);
         if (scale.diaria) {
           const edit = document.createElement('button'); edit.type = 'button'; edit.className = 'text-button'; edit.textContent = 'Pagamento';
-          edit.addEventListener('click', () => {
+          if (scale.diaria.pagamento_lote_id) {
+            edit.textContent = `Lote #${scale.diaria.pagamento_lote_id}`;
+            edit.addEventListener('click', () => { $('#order-detail-dialog').close(); location.hash = '#financeiro'; });
+          } else edit.addEventListener('click', () => {
             $('#order-detail-dialog').close();
             startPayment({ ...scale.diaria, diarista_id: scale.diarista_id, data: scale.data, setor: item.setor, local: `${item.supermercado}${item.unidade ? ` · ${item.unidade}` : ''}` }, 'order');
           });
@@ -465,18 +467,17 @@ function renderOrderShifts() {
       const picker = document.createElement('div'); picker.className = 'order-worker-picker';
       const select = document.createElement('select'); select.setAttribute('aria-label', `Escolher diarista para ${dateLabel(shift.data)}`);
       const placeholder = document.createElement('option'); placeholder.value = ''; placeholder.textContent = 'Selecione uma diarista'; select.append(placeholder);
-      const normalize = value => String(value || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase();
-      const candidates = orderWorkers.filter(worker => !worker.bloqueada && workerAvailableForShift(worker, shift) && !scales.some(scale => scale.diarista_id === worker.id));
-      candidates.sort((a, b) => {
-        const matches = worker => (worker.setores || []).some(sector => normalize(sector).includes(normalize(item.setor)) || normalize(item.setor).includes(normalize(sector)));
-        return Number(matches(b)) - Number(matches(a)) || a.nome.localeCompare(b.nome, 'pt-BR');
-      });
-      candidates.forEach(worker => {
+      const store = matchingOrderStore(item.supermercado, item.unidade);
+      const candidates = orderWorkers.map(worker => ({ worker, match: window.DirectMatching.rank(worker, shift, item, store, orderRecords, weeklyScales) }))
+        .filter(({ worker, match }) => match.eligible && !scales.some(scale => scale.diarista_id === worker.id))
+        .sort((a, b) => b.match.score - a.match.score || a.worker.nome.localeCompare(b.worker.nome, 'pt-BR'));
+      candidates.forEach(({ worker, match }, index) => {
         const option = document.createElement('option'); option.value = String(worker.id);
-        const match = (worker.setores || []).some(sector => normalize(sector).includes(normalize(item.setor)) || normalize(item.setor).includes(normalize(sector)));
-        option.textContent = `${match ? '★ ' : ''}${worker.nome}${match ? ' · experiência no setor' : ''}`; select.append(option);
+        option.textContent = `${index < 3 ? '★ ' : ''}${worker.nome}${match.reasons.length ? ` · ${match.reasons.join(', ')}` : ''}`; select.append(option);
       });
+      if (!candidates.length) placeholder.textContent = 'Nenhuma diarista compatível';
       const add = document.createElement('button'); add.type = 'button'; add.className = 'button button-outline'; add.textContent = 'Escalar';
+      add.disabled = !candidates.length;
       add.addEventListener('click', () => chooseOrderWorker(shift.data, select, picker));
       picker.append(select, add); body.append(picker);
     }

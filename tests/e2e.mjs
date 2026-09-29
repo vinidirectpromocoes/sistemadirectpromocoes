@@ -166,12 +166,72 @@ async function runReadingFlow() {
   } finally { await browser.close(); }
 }
 
+async function runFinancialWorkflow() {
+  const api = async (method, route, body) => {
+    const response = await fetch(`${url.slice(0, -1)}${route}`, {
+      method, headers: { 'Content-Type': 'application/json' }, body: body ? JSON.stringify(body) : undefined,
+    });
+    const data = await response.json();
+    assert.ok(response.ok, `${method} ${route}: ${JSON.stringify(data)}`);
+    return data;
+  };
+  const worker = await api('POST', '/api/diaristas', {
+    nome: 'Pessoa Financeira de Teste', cpf: '529.982.247-25', setores: ['Operador de caixa'],
+    cep: '60000-000', logradouro: 'Rua de Teste', numero: '10', complemento: '', bairro: 'Meireles',
+    trabalhando: false, local_trabalho: '', disponibilidade: [{ dia: 'segunda', inicio: '07:00', fim: '16:00' }],
+    pode_se_deslocar: true, transporte: 'Ônibus', observacoes_locomocao: '',
+  });
+  for (const day of ['2026-09-21', '2026-09-28']) {
+    const order = await api('POST', '/api/pedidos', {
+      supermercado: 'Super do Povo', unidade: 'Meireles', contato: '', setor: 'Operador de caixa',
+      quantidade_diaristas: 1, turnos: [{ data: day, inicio: '07:00', fim: '15:20' }],
+      situacao: 'confirmado', observacoes: '',
+    });
+    const scale = await api('POST', `/api/pedidos/${order.id}/escalas`, { diarista_id: worker.id, data: day });
+    await api('PATCH', `/api/pedidos/${order.id}/escalas/${scale.id}`, { status: 'presente' });
+  }
+  const browser = await chromium.launch({ headless: true });
+  try {
+    const context = await browser.newContext({ viewport: { width: 390, height: 844 }, isMobile: true, hasTouch: true });
+    const page = await context.newPage();
+    const errors = []; page.on('pageerror', error => errors.push(error.message));
+    await page.goto(`${url}#financeiro`, { waitUntil: 'domcontentloaded' });
+    await page.locator('#invoice-new').click();
+    await page.locator('#invoice-network').selectOption('Super do Povo');
+    await page.locator('#invoice-start').fill('2026-09-21');
+    await page.locator('#invoice-end').fill('2026-09-28');
+    await page.locator('#invoice-due').fill('2026-10-10');
+    await page.locator('#invoice-note').fill('QA-2026');
+    await page.getByText('2 presença(s) ainda não cobradas').waitFor();
+    await page.locator('#invoice-create-submit').click();
+    await page.locator('#invoice-list .workflow-entry').waitFor();
+    assert.match(await page.locator('#invoice-billed').innerText(), /268,00/);
+    await page.locator('#invoice-list .workflow-entry button').first().click();
+    assert.equal(await page.locator('#invoice-detail-items .workflow-line').count(), 2);
+    await page.locator('#invoice-receive-value').fill('100.00');
+    await page.locator('#invoice-receive-form button').click();
+    await page.waitForFunction(() => document.querySelector('#invoice-detail-summary')?.textContent.includes('168,00'));
+    await page.locator('#invoice-detail-dialog [data-close-dialog]').last().click();
+    await page.locator('#finance-rows .finance-group-row button').first().click();
+    await page.getByRole('button', { name: 'Fechar pagamento (2)' }).click();
+    assert.match(await page.locator('#batch-total').innerText(), /180,00/);
+    await page.locator('#batch-method').fill('Pix');
+    await page.locator('#batch-submit').click();
+    await page.locator('#batch-list .workflow-entry').waitFor();
+    assert.match(await page.locator('#finance-out').innerText(), /180,00/);
+    assert.deepEqual(errors, [], 'Fluxo financeiro no navegador teve erro JavaScript');
+    console.log('Cobrança por dois pedidos, recebimento parcial e fechamento de diárias no celular OK');
+    await context.close();
+  } finally { await browser.close(); }
+}
+
 try {
   await ready();
   await runBrowser(chromium, 'Chromium');
   await runBrowser(webkit, 'WebKit');
   await runRoleNavigation();
   await runReadingFlow();
+  await runFinancialWorkflow();
 } finally {
   child.kill();
   await rm(work, { recursive: true, force: true });
