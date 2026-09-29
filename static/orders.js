@@ -5,12 +5,8 @@ let orderScales = [];
 let orderWorkers = [];
 let orderDetailBusy = false;
 let weeklyScales = {};
-
-function weekStart(value) {
-  const date = new Date(`${value}T12:00:00Z`);
-  date.setUTCDate(date.getUTCDate() - (date.getUTCDay() + 6) % 7);
-  return date;
-}
+let weeklyPage = 0;
+const weeklyPageSize = 7;
 
 function renderWeekly() {
   const target = $('#weekly-days'); target.replaceChildren();
@@ -27,19 +23,36 @@ function renderWeekly() {
   $('#orders-fill-rate').textContent = `${demand ? Math.round(filled / demand * 100) : 0}%`;
   $('#orders-absence-rate').textContent = `${present + absent ? Math.round(absent / (present + absent) * 100) : 0}%`;
   $('#orders-awaiting-attendance').textContent = String(awaiting);
-  const start = weekStart($('#weekly-date').value || orderToday());
-  for (let offset = 0; offset < 7; offset++) {
-    const date = new Date(start);
-    date.setUTCDate(date.getUTCDate() + offset);
-    const key = date.toISOString().slice(0, 10);
+  const firstDate = $('#weekly-date').value || orderToday();
+  const shiftsByDate = new Map();
+  for (const order of orderRecords) {
+    if (order.situacao === 'cancelado') continue;
+    for (const shift of order.turnos || []) {
+      if (shift.data < firstDate) continue;
+      const shifts = shiftsByDate.get(shift.data) || [];
+      shifts.push({ order, shift });
+      shiftsByDate.set(shift.data, shifts);
+    }
+  }
+  const dates = [...shiftsByDate.keys()].sort();
+  const pageCount = Math.ceil(dates.length / weeklyPageSize);
+  weeklyPage = Math.min(weeklyPage, Math.max(0, pageCount - 1));
+  const visibleDates = dates.slice(weeklyPage * weeklyPageSize, (weeklyPage + 1) * weeklyPageSize);
+  const pagination = $('#weekly-pagination');
+  pagination.hidden = pageCount <= 1;
+  $('#weekly-page-label').textContent = `Página ${weeklyPage + 1} de ${pageCount}`;
+  $('#weekly-prev').disabled = weeklyPage === 0;
+  $('#weekly-next').disabled = weeklyPage >= pageCount - 1;
+  if (!visibleDates.length) {
+    const empty = document.createElement('p'); empty.className = 'weekly-empty';
+    empty.textContent = 'Nenhuma diária a partir desta data.';
+    target.append(empty);
+  }
+  for (const key of visibleDates) {
     const card = document.createElement('article'); card.className = 'weekly-day';
     const heading = document.createElement('h3'); heading.textContent = dateLabel(key); card.append(heading);
-    let found = false;
-    for (const order of orderRecords) {
-      if (order.situacao === 'cancelado') continue;
-      const shift = order.turnos.find(item => item.data === key);
-      if (!shift) continue;
-      found = true;
+    const shifts = shiftsByDate.get(key).sort((a, b) => a.shift.inicio.localeCompare(b.shift.inicio) || a.order.supermercado.localeCompare(b.order.supermercado, 'pt-BR'));
+    for (const { order, shift } of shifts) {
       const active = (weeklyScales[order.id] || []).filter(scale => scale.data === key && scale.status !== 'falta');
       const button = document.createElement('button'); button.type = 'button';
       button.className = `weekly-shift${active.length < order.quantidade_diaristas ? ' is-open' : ''}`;
@@ -48,7 +61,6 @@ function renderWeekly() {
       const people = document.createElement('span'); people.textContent = `${active.length}/${order.quantidade_diaristas} · ${active.map(scale => scale.diarista_nome).join(', ') || 'Vaga aberta'}`;
       button.append(title, subtitle, people); button.addEventListener('click', () => openOrderDetail(order.id)); card.append(button);
     }
-    if (!found) { const empty = document.createElement('p'); empty.textContent = 'Sem pedidos'; card.append(empty); }
     target.append(card);
   }
 }
@@ -437,7 +449,9 @@ $('#orders-empty-new').addEventListener('click', () => openOrderForm());
 $('#orders-search').addEventListener('input', renderOrders);
 $('#orders-status-filter').addEventListener('change', renderOrders);
 $('#weekly-date').value = orderToday();
-$('#weekly-date').addEventListener('change', renderWeekly);
+$('#weekly-date').addEventListener('change', () => { weeklyPage = 0; renderWeekly(); });
+$('#weekly-prev').addEventListener('click', () => { if (weeklyPage > 0) { weeklyPage--; renderWeekly(); } });
+$('#weekly-next').addEventListener('click', () => { weeklyPage++; renderWeekly(); });
 $('#order-close-button').addEventListener('click', () => $('#order-dialog').close());
 $('#order-cancel-button').addEventListener('click', () => $('#order-dialog').close());
 $('#order-form').addEventListener('submit', saveOrder);
