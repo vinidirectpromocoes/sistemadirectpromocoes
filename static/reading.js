@@ -203,11 +203,14 @@
       }
       for (const source of sources) {
         const parts = parser.parse(source.text, { stores: data.stores, sectors: data.sectors, today: orderToday() });
-        if (!parts.length) { counts.error++; list.append(resultCard({ tipo: 'indefinido', dados: {} }, 'error', `${source.name}: nenhum texto reconhecido.`)); continue; }
+        if (!parts.length) { counts.error++; list.append(resultCard({ tipo: 'indefinido', dados: {} }, 'error', `${source.name}: nenhum texto reconhecido. Envie uma imagem mais nítida ou um PDF com melhor resolução.`)); continue; }
         for (const item of parts) {
-          if (source.confidence < 60) {
-            item.faltando.push('Conferir texto da imagem pouco legível');
-            item.avisos = [...(item.avisos || []), `Confiança do OCR: ${Math.round(source.confidence)}%.`];
+          if (source.confidence < 75) {
+            item.faltando.push('Conferir dados reconhecidos na imagem');
+            const advice = source.confidence < 45
+              ? 'A leitura ficou pouco legível. Fotografe novamente com boa luz, sem reflexos e com o documento inteiro enquadrado; confira todos os campos antes de registrar.'
+              : 'Confira nomes, números, datas e horários antes de registrar.';
+            item.avisos = [...(item.avisos || []), `Leitura de ${source.name}: confiança de ${Math.round(source.confidence)}%. ${advice}`];
           }
           feedback(`Registrando ${source.name} · ${counts.saved + counts.pending + counts.duplicate + counts.error + 1} registro(s) processado(s)...`);
           const outcome = await processItem(item, existing);
