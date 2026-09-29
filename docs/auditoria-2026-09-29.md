@@ -10,7 +10,7 @@ Os dados reais não foram alterados. As operações de teste usaram uma base SQL
 
 | Etapa | Estado | Evidência |
 | --- | --- | --- |
-| 1. Login e permissões | Parcial | Site publicado pede login; acesso anônimo às tabelas de pessoal, pedidos, financeiro e equipe retornou HTTP 401. Não havia sessão de teste autenticada no navegador de auditoria. |
+| 1. Login e permissões | Parcial | Site publicado pede login; acesso anônimo às tabelas de pessoal, pedidos, financeiro e equipe retornou HTTP 401. Uma sessão administrativa autenticada permitiu conferir as telas de produção em modo de leitura; os demais perfis não foram testados. |
 | 2. Diaristas | OK no ambiente local | Cadastro, ficha, histórico, disponibilidade específica e bloqueio foram testados. CPF e CEP são validados. |
 | 3. Pedidos e redes | OK no ambiente local | Pedido vincula rede e loja do catálogo, mostra o endereço na ficha e abre a loja correspondente. Os oito pedidos existentes em produção apontam para redes e lojas cadastradas. |
 | 4. Escala semanal | OK no ambiente local | A atribuição da mesma pessoa a todos os dias possíveis do pedido criou três escalas. A escala mostra apenas dias com pedido e permite avançar páginas. |
@@ -32,6 +32,7 @@ Os dados reais não foram alterados. As operações de teste usaram uma base SQL
 
 - **15 testes Python e 9 testes JavaScript passaram**, incluindo cadastro, bloqueio, validações, pedidos, tarifas, presenças, pagamento, leitura, datas abreviadas e previsão.
 - O percurso interativo local cobriu pedido com três datas, atribuição em todos os dias, presença, falta, cancelamento, ficha da diarista, endereço da loja e valores no financeiro.
+- Na produção autenticada, o financeiro carregou oito pedidos e 55 diárias solicitadas, com faturamento previsto de R$ 7.370, custo previsto de R$ 4.950 e margem bruta prevista de R$ 2.420. Esses números foram observados, sem gravações na base real.
 - As 12 tabelas públicas do Supabase inspecionadas têm Row Level Security habilitado. Não foi encontrada política de leitura irrestrita para `anon`; requisições anônimas às tabelas sensíveis testadas retornaram HTTP 401.
 - O Security Advisor do Supabase indicou **proteção contra senhas vazadas desativada**. A configuração de autenticação precisa ser revista no painel Supabase conforme a disponibilidade no plano atual. O Performance Advisor indicou avisos de políticas RLS e índices não utilizados; eles não bloquearam os testes, mas merecem revisão antes de um aumento relevante de uso.
 - A inspeção visual local não encontrou erros ou avisos no console do navegador.
@@ -48,7 +49,7 @@ Os dados reais não foram alterados. As operações de teste usaram uma base SQL
 
 ## Próximas atualizações gratuitas
 
-1. Testar os fluxos autenticados diretamente na produção com contas de cada perfil (admin, operação, financeiro e consulta), sem criar registros reais durante a auditoria.
+1. Testar os fluxos diretamente na produção com contas de cada perfil (admin, operação, financeiro e consulta), incluindo gravações controladas e reversíveis aprovadas para esse fim.
 2. Testar foto e PDF reais na Leitura IA, inclusive arquivos pouco legíveis e PDF digitalizado, e melhorar as mensagens de revisão quando a confiança do OCR for baixa.
 3. Validar o uso em Safari de iPhone e Android Chrome, com teclado aberto, rotação de tela e zoom de acessibilidade.
 4. Reforçar rotina de exportação e restauração de backup e ensaiar uma recuperação em base isolada.
@@ -57,4 +58,4 @@ Os dados reais não foram alterados. As operações de teste usaram uma base SQL
 
 ## Limites da auditoria
 
-Não foram feitas mudanças na base de produção. O navegador de auditoria não tinha uma sessão autenticada para testar gravações no site publicado. A responsividade foi medida por viewport simulado; o comportamento real de zoom no Safari depende de ensaio no aparelho. Fotos e PDFs da Leitura IA não foram processados neste teste.
+Não foram feitas mudanças na base de produção. A sessão administrativa permitiu leitura das telas publicadas, mas não foram testadas gravações no site publicado nem os demais perfis. A responsividade foi medida por viewport simulado; o comportamento real de zoom no Safari depende de ensaio no aparelho. Fotos e PDFs da Leitura IA não foram processados neste teste.
