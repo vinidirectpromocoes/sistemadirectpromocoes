@@ -414,14 +414,15 @@ function renderFinance() {
 async function loadFinance() {
   const sequence = ++financeLoadSequence;
   try {
-    const [records, orders, tariffs, allScales, extras] = await Promise.all([
-      request('/api/financeiro'), request('/api/pedidos'), request('/api/tarifas'), request('/api/escalas'), request('/api/custos-extras'),
+    const [records, orders, tariffs, allScales, extras, contracts] = await Promise.all([
+      request('/api/financeiro'), request('/api/pedidos'), request('/api/tarifas'), request('/api/escalas'), request('/api/custos-extras'), request('/api/contratos'),
     ]);
     const scales = allScales.reduce((groups, scale) => ((groups[scale.pedido_id] ||= []).push(scale), groups), {});
     if (sequence !== financeLoadSequence) return;
     financeRecords = records;
-    financeForecastInput = { orders, tariffs: { ...tariffs, extras }, scales };
+    financeForecastInput = { orders, tariffs: { ...tariffs, extras, contratos:contracts }, scales };
     renderFinance();
+    window.DirectOperations?.renderStoreResults(financeForecastInput);
     if (typeof window.renderWorkflow === 'function') await window.renderWorkflow(financeRecords, orders, scales);
   }
   catch (err) { if (sequence === financeLoadSequence) showFinanceFeedback(`Não foi possível carregar o financeiro: ${err.message}`, true); }

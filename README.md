@@ -44,7 +44,7 @@ python3 scripts/restore_backup.py /caminho/direct-backup-AAAA-MM-DD.json /caminh
 python3 scripts/restore_backup.py --operational /caminho/direct-backup-AAAA-MM-DD.json /caminho/ensaio-operacional.db
 ```
 
-O primeiro comando materializa as 16 tabelas da cópia em registros de consulta. O segundo recria as tabelas operacionais do servidor local em um arquivo novo, verifica contagens, vínculos e integridade e permite conferir pedidos, diárias e cobranças. Cópias antigas continuam aceitas. O programa pede a senha sem mostrá-la e recusa sobrescrever arquivos. A saída contém dados pessoais e financeiros **sem criptografia**; mantenha-a com acesso restrito e apague-a após o ensaio. A recuperação ainda não reimporta automaticamente para o Supabase e não inclui usuários do Supabase Auth, senhas nem configurações do projeto. Para desastre no serviço hospedado, será necessário criar um projeto Supabase separado e validar a importação nele.
+O primeiro comando materializa as 18 tabelas da cópia em registros de consulta. O segundo recria as tabelas operacionais do servidor local em um arquivo novo, verifica contagens, vínculos e integridade e permite conferir pedidos, diárias e cobranças. Cópias antigas continuam aceitas. O programa pede a senha sem mostrá-la e recusa sobrescrever arquivos. A saída contém dados pessoais e financeiros **sem criptografia**; mantenha-a com acesso restrito e apague-a após o ensaio. A recuperação ainda não reimporta automaticamente para o Supabase e não inclui usuários do Supabase Auth, senhas nem configurações do projeto. Para desastre no serviço hospedado, será necessário criar um projeto Supabase separado e validar a importação nele.
 
 ## Proteção da publicação
 
@@ -97,7 +97,7 @@ Os indicadores contam como **disponíveis** os cadastros não bloqueados e como 
 
 ## Cópia de segurança
 
-Em Configurações, o administrador pode baixar uma cópia **criptografada** das 16 tabelas operacionais e verificar se o arquivo abre com sua senha. Guarde arquivo e senha separadamente. O ensaio com `scripts/restore_backup.py --operational` recria uma base SQLite local utilizável e confere vínculos e contagens. A cópia não inclui contas do Supabase Auth nem configuração do projeto; a recuperação do banco hospedado exige um procedimento separado. Faça a verificação do arquivo após baixar; perder a senha impede a leitura da cópia.
+Em Configurações, o administrador pode baixar uma cópia **criptografada** das 18 tabelas operacionais e verificar se o arquivo abre com sua senha. Guarde arquivo e senha separadamente. O ensaio com `scripts/restore_backup.py --operational` recria uma base SQLite local utilizável e confere vínculos e contagens. A cópia não inclui contas do Supabase Auth nem configuração do projeto; a recuperação do banco hospedado exige um procedimento separado. Faça a verificação do arquivo após baixar; perder a senha impede a leitura da cópia.
 
 ## Redes e lojas
 
@@ -117,3 +117,19 @@ Em Configurações, o administrador pode baixar uma cópia **criptografada** das
 - `vercel.json`: configuração de publicação da interface
 
 Para evoluir o sistema por partes, novos módulos podem usar este mesmo servidor e banco, mantendo as diaristas cadastradas.
+
+
+## Operação ampliada (30/09/2026)
+
+- Início: indicadores com período, plantão, reservas por setor/bairro e qualidade dos registros.
+- Ficha da diarista: Contato e reserva registra telefone, reserva e reconfirmação da disponibilidade.
+- Pedido: confirmar/recusar, copiar convite de WhatsApp, validação da loja com horário efetivo e ocorrência. A confirmação é lançada pela equipe; não envia mensagens nem abre acesso externo.
+- Configurações: contratos por rede, loja e setor com vigência, prazo e novas versões. Diárias de presença guardam o contrato e valores da época.
+- Financeiro: resultado por loja/setor, conferência/contestação e demonstrativo para imprimir/salvar PDF. Contestação não é recebimento nem desconto automático.
+- Repetir pedido abre formulário para revisar novas datas; não copia diaristas nem presença.
+- Offline: instalação do shell estático; agenda mínima e rascunhos cifrados em IndexedDB. A chave fica na sessão do navegador e é apagada no logout. Revise e envie rascunhos antes de sair/fechar o navegador. Nenhuma presença ou lançamento financeiro é gravado sem conexão. Reenvio do mesmo rascunho usa UUID para não duplicar o pedido.
+- Backup v4 inclui contratos e ocorrências; as versões v1–v3 continuam aceitas. Restauração operacional ensaiada localmente; Supabase Auth e configurações do projeto são separados.
+
+`supabase/tests/operacao_completa.sql` realiza gravações de teste em uma transação e termina em ROLLBACK. Executar apenas em ambiente controlado com o administrador e banco previstos, sem transformar fixtures em registros de produção. Não cria contas de Auth.
+
+Em Configurações → Conferência neste aparelho, o administrador pode gerar um diagnóstico do aparelho físico. O diagnóstico de largura não substitui a conferência com teclado aberto, rotação e zoom.

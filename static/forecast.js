@@ -15,8 +15,8 @@
       const network = (tariffs?.redes || []).find(rate => norm(rate.rede) === norm(order.supermercado));
       const sectorRates = (tariffs?.setores || []).filter(rate => norm(rate.setor) === norm(order.setor) && rate.valor_pago_centavos != null);
       const sectorRate = sectorRates.find(rate => norm(rate.rede) === norm(order.supermercado)) || sectorRates.find(rate => !rate.rede);
-      const currentRevenue = network?.valor_recebido_centavos ?? null;
-      const currentCost = sectorRate?.valor_pago_centavos ?? network?.valor_padrao_centavos ?? null;
+      const baseRevenue = network?.valor_recebido_centavos ?? null;
+      const baseCost = sectorRate?.valor_pago_centavos ?? network?.valor_padrao_centavos ?? null;
       const extra = (tariffs?.extras || []).find(rate => norm(rate.rede) === norm(order.supermercado));
       const extraPerDay = (extra?.transporte_centavos || 0) + (extra?.taxas_centavos || 0) + (extra?.outros_centavos || 0);
       const networkName = network?.rede || order.supermercado;
@@ -30,6 +30,9 @@
       const scales = scalesByOrder?.[order.id] || [];
       for (const shift of order.turnos || []) {
         if (month && !shift.data.startsWith(month)) continue;
+        const chosenContract = (typeof window !== 'undefined' ? window.DirectInsights : require('./insights.js'))?.contract(tariffs?.contratos, order, shift.data);
+        const currentRevenue = chosenContract?.valor_recebido_centavos ?? baseRevenue;
+        const currentCost = chosenContract?.valor_pago_centavos ?? baseCost;
         const dayScales = scales.filter(scale => scale.data === shift.data);
         const active = dayScales.filter(scale => scale.status !== 'falta');
         const present = active.filter(scale => scale.status === 'presente');
