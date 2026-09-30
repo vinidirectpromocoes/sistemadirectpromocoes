@@ -41,9 +41,14 @@ Para ensaiar uma recuperação sem tocar na produção, execute em um computador
 ```bash
 python3 -m pip install cryptography==50.0.1
 python3 scripts/restore_backup.py /caminho/direct-backup-AAAA-MM-DD.json /caminho/ensaio-direct.db
+python3 scripts/restore_backup.py --operational /caminho/direct-backup-AAAA-MM-DD.json /caminho/ensaio-operacional.db
 ```
 
-O programa pede a senha sem mostrá-la, recusa sobrescrever arquivos, confere as relações entre diaristas, pedidos, escalas, diárias, cobranças e lotes de pagamento e materializa as 15 tabelas em SQLite isolado. Cópias antigas de 11 tabelas continuam aceitas. A saída contém dados pessoais e financeiros **sem criptografia**; mantenha-a com acesso restrito e apague-a após o ensaio. Esta ferramenta verifica que os dados são recuperáveis para consulta e reimportação planejada. Ela não reimporta automaticamente para o Supabase e não inclui usuários do Supabase Auth, senhas nem configurações do projeto. Uma recuperação completa de desastre exigirá um projeto Supabase separado e uma rotina de importação validada para esse ambiente.
+O primeiro comando materializa as 16 tabelas da cópia em registros de consulta. O segundo recria as tabelas operacionais do servidor local em um arquivo novo, verifica contagens, vínculos e integridade e permite conferir pedidos, diárias e cobranças. Cópias antigas continuam aceitas. O programa pede a senha sem mostrá-la e recusa sobrescrever arquivos. A saída contém dados pessoais e financeiros **sem criptografia**; mantenha-a com acesso restrito e apague-a após o ensaio. A recuperação ainda não reimporta automaticamente para o Supabase e não inclui usuários do Supabase Auth, senhas nem configurações do projeto. Para desastre no serviço hospedado, será necessário criar um projeto Supabase separado e validar a importação nele.
+
+## Proteção da publicação
+
+O workflow `.github/workflows/quality.yml` executa testes de backend, regras de negócio, restauração e navegação Chromium/WebKit em cada pull request. A proteção da branch `main` deve exigir o check `test` do GitHub Actions, merge por pull request, branch atualizada e conversas resolvidas. Se a proteção não aparecer em GitHub → Settings → Branches, configure-a antes de publicar novas mudanças.
 
 ## Campos disponíveis
 
@@ -92,7 +97,7 @@ Os indicadores contam como **disponíveis** os cadastros não bloqueados e como 
 
 ## Cópia de segurança
 
-Em Configurações, o administrador pode baixar uma cópia **criptografada** das tabelas operacionais e verificar se o arquivo abre com sua senha. Guarde arquivo e senha separadamente. A cópia contém dados das tabelas, mas não inclui contas do Supabase Auth nem um restaurador automático do banco. Faça a verificação do arquivo após baixar; perder a senha impede a leitura da cópia.
+Em Configurações, o administrador pode baixar uma cópia **criptografada** das 16 tabelas operacionais e verificar se o arquivo abre com sua senha. Guarde arquivo e senha separadamente. O ensaio com `scripts/restore_backup.py --operational` recria uma base SQLite local utilizável e confere vínculos e contagens. A cópia não inclui contas do Supabase Auth nem configuração do projeto; a recuperação do banco hospedado exige um procedimento separado. Faça a verificação do arquivo após baixar; perder a senha impede a leitura da cópia.
 
 ## Redes e lojas
 

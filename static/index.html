@@ -24,6 +24,7 @@
   <script src="/app.js" defer></script>
   <script src="/stores.js" defer></script>
   <script src="/forecast.js" defer></script>
+  <script src="/reconciliation.js" defer></script>
   <script src="/operations.js" defer></script>
   <script src="/workflow.js" defer></script>
   <script src="/finance.js" defer></script>
@@ -146,10 +147,12 @@
           <article class="finance-stat forecast-card"><span>Faturamento previsto</span><strong id="forecast-revenue">R$ 0,00</strong><small id="forecast-revenue-ideal">Cenário ideal: R$ 0,00</small></article>
           <article class="finance-stat forecast-card"><span>Custo previsto com diárias</span><strong id="forecast-cost">R$ 0,00</strong><small id="forecast-cost-ideal">Cenário ideal: R$ 0,00</small></article>
           <article class="finance-stat forecast-card emphasis"><span>Margem bruta prevista</span><strong id="forecast-margin">R$ 0,00</strong><small id="forecast-margin-ideal">Cenário ideal: R$ 0,00</small></article>
+          <article class="finance-stat forecast-card"><span>Custos extras estimados</span><strong id="forecast-extra">R$ 0,00</strong><small>Transporte, taxas e outros por diária</small></article>
+          <article class="finance-stat forecast-card emphasis"><span>Resultado líquido estimado</span><strong id="forecast-net">R$ 0,00</strong><small>Antes de despesas não cadastradas</small></article>
         </div>
         <div id="forecast-warning" class="finance-warning" hidden></div>
         <div class="forecast-visuals">
-          <article class="finance-chart-card"><h3>Composição da previsão</h3><div id="forecast-ring" class="forecast-ring" role="img" aria-label="Custo e margem bruta previstos"><span id="forecast-ring-total">R$ 0,00</span></div><div class="forecast-key"><span>● Custo</span><span>● Margem bruta</span></div><p id="forecast-presence-note">0 presenças · 0 faltas</p></article>
+          <article class="finance-chart-card"><h3>Composição da previsão</h3><div id="forecast-ring" class="forecast-ring" role="img" aria-label="Diárias, custos extras e resultado líquido estimado"><span id="forecast-ring-total">R$ 0,00</span></div><div class="forecast-key"><span>● Diárias</span><span>● Extras</span><span>● Líquido estimado</span></div><p id="forecast-presence-note">0 presenças · 0 faltas</p></article>
           <article class="finance-chart-card"><h3>Previsão por rede</h3><div id="forecast-networks" class="forecast-networks"></div></article>
         </div>
         <details class="forecast-orders"><summary id="forecast-orders-summary">Conferir pedidos incluídos</summary><div id="forecast-orders-list"></div></details>
@@ -162,6 +165,11 @@
       <section class="list-card workflow-section" aria-labelledby="batch-title">
         <div class="list-top"><div><span class="eyebrow">PAGAMENTO DE DIARISTAS</span><h2 id="batch-title">Fechamentos em lote</h2><p>Abra um grupo de diárias abaixo e escolha “Fechar pagamento”. O histórico dos lotes fica aqui.</p></div></div>
         <div id="batch-list" class="workflow-list"></div>
+      </section>
+      <section class="list-card workflow-section" aria-labelledby="reconciliation-title">
+        <div class="list-top"><div><span class="eyebrow">CONFERÊNCIA POR DIÁRIA</span><h2 id="reconciliation-title">Conciliação operacional e financeira</h2><p>Do pedido ao recebimento e pagamento. Recebimentos parciais aparecem no nível da cobrança.</p></div></div>
+        <p id="reconciliation-summary" class="section-help"></p>
+        <div id="reconciliation-list" class="workflow-list"></div>
       </section>
       <section class="finance-dashboard" aria-labelledby="finance-dashboard-title">
         <div class="finance-dashboard-heading"><div><span class="eyebrow">VISÃO GERAL</span><h2 id="finance-dashboard-title">Dashboard financeira</h2><p>Toque em uma fatia ou legenda para filtrar os lançamentos.</p></div><button id="finance-clear-filters" class="button button-quiet" type="button" hidden>Limpar filtros</button></div>
@@ -228,6 +236,10 @@
         <div class="settings-heading"><div><h2 id="settings-sector-title">Valores por setor</h2><p>Preencha o valor de cada setor. Um campo vazio mantém a diária padrão da rede.</p></div><button class="button button-primary" id="new-sector-rate" type="button"><span aria-hidden="true">＋</span> Adicionar setor</button></div>
         <div class="list-card"><div id="settings-sector-empty" class="settings-empty">Nenhum valor por setor cadastrado. As diárias usam os valores padrão das redes.</div><div id="settings-sector-list" class="settings-sector-list"></div></div>
       </section>
+      <section class="settings-section" aria-labelledby="settings-extra-title">
+        <div class="settings-heading"><div><h2 id="settings-extra-title">Custos extras por diária</h2><p>Informe transporte, taxas e outros custos estimados por rede. Zero significa nenhum valor cadastrado.</p></div></div>
+        <div id="settings-extra-grid" class="settings-network-grid"></div>
+      </section>
       <p class="settings-note">Alterações nos valores servem para novos pagamentos. Diárias já registradas mantêm o valor que foi salvo nelas.</p>
       <section id="staff-settings" class="settings-section" aria-labelledby="staff-settings-title" hidden>
         <div class="settings-heading"><div><h2 id="staff-settings-title">Acesso dos funcionários</h2><p>Autorize cada e-mail individualmente. Operação gerencia cadastros e escalas; Financeiro gerencia pagamentos e tarifas; Consulta apenas visualiza.</p></div></div>
@@ -236,7 +248,7 @@
         <div id="staff-list" class="staff-list"></div>
       </section>
       <section id="backup-settings" class="settings-section" aria-labelledby="backup-title" hidden>
-        <div class="settings-heading"><div><h2 id="backup-title">Cópia de segurança dos dados</h2><p>Faça uma cópia toda semana e depois de mudanças importantes. Guarde o arquivo e a senha em lugares separados. A verificação aqui confirma a leitura; a restauração deve ser ensaiada em uma base isolada.</p></div></div>
+        <div class="settings-heading"><div><h2 id="backup-title">Cópia de segurança dos dados</h2><p>Faça uma cópia toda semana e depois de mudanças importantes. Guarde o arquivo e a senha em lugares separados. Verifique o arquivo aqui e ensaie a restauração operacional em uma base local isolada.</p></div></div>
         <div class="staff-form"><label>Senha para criptografar<input id="backup-password" type="password" autocomplete="new-password" minlength="12" placeholder="Mínimo de 12 caracteres"></label><button id="backup-download" class="button button-primary" type="button">Baixar cópia</button><label>Conferir arquivo<input id="backup-file" type="file" accept=".json,application/json"></label><button id="backup-check" class="button button-outline" type="button">Verificar cópia</button></div>
         <p id="backup-feedback" class="section-help" role="status" aria-live="polite"></p><p id="backup-last-check" class="section-help"></p>
       </section>

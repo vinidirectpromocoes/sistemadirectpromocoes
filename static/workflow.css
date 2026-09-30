@@ -28,3 +28,7 @@ html[data-theme="dark"] .workflow-line, html[data-theme="dark"] .workflow-choice
 .reading-result-filter { font-size: .76rem; min-width: 140px; }.reading-result-filter select { display: block; margin-top: 4px; width: 100%; font-size: .85rem; }
 #reading-result-sources { overflow-wrap: anywhere; }
 .reading-item[hidden] { display: none; }
+.reconciliation-entry { display: block; }
+.reconciliation-entry summary { cursor: pointer; font-weight: 650; overflow-wrap: anywhere; }
+.reconciliation-body { display: grid; gap: .65rem; margin-top: .8rem; }
+.reconciliation-issue { margin: 0; color: var(--color-warning, #d27b39); font-size: .875rem; overflow-wrap: anywhere; }

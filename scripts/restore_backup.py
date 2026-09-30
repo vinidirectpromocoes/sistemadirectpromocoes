@@ -19,7 +19,7 @@ TABLES = (
     "diaristas", "diarias", "pedidos", "pedido_escalas", "lojas",
     "financeiro_lancamentos", "tarifas_redes", "tarifas_setores",
     "leituras_pendentes", "direct_staff", "direct_auditoria", "cobrancas",
-    "cobranca_itens", "cobranca_recebimentos", "pagamento_lotes",
+    "cobranca_itens", "cobranca_recebimentos", "pagamento_lotes", "custos_extras",
 )
 LEGACY_TABLES = TABLES[:11]
 
@@ -34,9 +34,9 @@ def decrypt_archive(archive, password):
         raise ValueError("Parâmetros de criptografia inválidos")
     key = __import__("hashlib").pbkdf2_hmac("sha256", password.encode(), salt, 200000, 32)
     payload = json.loads(AESGCM(key).decrypt(iv, ciphertext, None))
-    if payload.get("format") not in ("direct-data-v1", "direct-data-v2") or not isinstance(payload.get("tables"), dict):
+    if payload.get("format") not in ("direct-data-v1", "direct-data-v2", "direct-data-v3") or not isinstance(payload.get("tables"), dict):
         raise ValueError("Conteúdo da cópia não reconhecido")
-    required = TABLES if payload["format"] == "direct-data-v2" else LEGACY_TABLES
+    required = TABLES if payload["format"] == "direct-data-v3" else TABLES[:15] if payload["format"] == "direct-data-v2" else LEGACY_TABLES
     for table in required:
         if not isinstance(payload["tables"].get(table), list):
             raise ValueError(f"Tabela ausente: {table}")
@@ -55,6 +55,7 @@ def relationship_errors(data):
         ("diarias", "pedido_escala_id", "pedido_escalas"),
         ("pedido_escalas", "pedido_id", "pedidos"),
         ("pedido_escalas", "diarista_id", "diaristas"),
+        ("pedido_escalas", "substituida_por_escala_id", "pedido_escalas"),
         ("diarias", "pagamento_lote_id", "pagamento_lotes"),
         ("pagamento_lotes", "diarista_id", "diaristas"),
         ("cobranca_itens", "cobranca_id", "cobrancas"),
@@ -102,12 +103,84 @@ def restore(archive_path, password, output_path):
         raise
 
 
+def restore_operational(archive_path, password, output_path):
+    """Restore an export into a fresh runnable local database, never a live database."""
+    import sys
+    sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+    import server
+
+    archive = json.loads(Path(archive_path).read_text(encoding="utf-8"))
+    payload = decrypt_archive(archive, password)
+    data = payload["tables"]
+    problems = relationship_errors(data)
+    if problems:
+        raise ValueError("Cópia com referências quebradas: " + "; ".join(problems[:5]))
+    destination = Path(output_path).resolve()
+    if destination.exists():
+        raise FileExistsError("A base de destino já existe; escolha um novo arquivo para o ensaio")
+    destination.parent.mkdir(parents=True, exist_ok=True)
+    server.DB_PATH = destination
+    try:
+        server.init_db()
+        os.chmod(destination, 0o600)
+        db = server.connect()
+        try:
+            db.execute("PRAGMA foreign_keys = OFF")
+            order = ("cobranca_recebimentos", "cobranca_itens", "cobrancas", "diarias", "pedido_escalas",
+                     "pagamento_lotes", "financeiro_lancamentos", "leituras_pendentes", "custos_extras",
+                     "tarifas_setores", "tarifas_redes", "lojas", "pedidos", "diaristas", "direct_auditoria")
+            with db:
+                for table in order:
+                    db.execute(f"DELETE FROM {table}")
+                # SQLite is the operational drill target; Auth users are managed separately by Supabase.
+                db.execute("CREATE TABLE IF NOT EXISTS direct_staff (email TEXT PRIMARY KEY, role TEXT, active INTEGER)")
+                db.execute("DELETE FROM direct_staff")
+                insert_order = ("diaristas", "pedidos", "lojas", "tarifas_redes", "tarifas_setores",
+                                "pagamento_lotes", "pedido_escalas", "diarias", "cobrancas", "cobranca_itens",
+                                "cobranca_recebimentos", "financeiro_lancamentos", "leituras_pendentes",
+                                "custos_extras", "direct_staff")
+                for table in insert_order:
+                    columns = {item["name"] for item in db.execute(f"PRAGMA table_info({table})")}
+                    for row in data[table]:
+                        values = {key: json.dumps(value, ensure_ascii=False) if isinstance(value, (dict, list)) else value
+                                  for key, value in row.items() if key in columns}
+                        names = ", ".join(values)
+                        markers = ", ".join("?" for _ in values)
+                        db.execute(f"INSERT INTO {table} ({names}) VALUES ({markers})", tuple(values.values()))
+                db.execute("DELETE FROM direct_auditoria")
+                columns = {item["name"] for item in db.execute("PRAGMA table_info(direct_auditoria)")}
+                for row in data["direct_auditoria"]:
+                    values = {key: json.dumps(value, ensure_ascii=False) if isinstance(value, (dict, list)) else value
+                              for key, value in row.items() if key in columns}
+                    names = ", ".join(values)
+                    markers = ", ".join("?" for _ in values)
+                    db.execute(f"INSERT INTO direct_auditoria ({names}) VALUES ({markers})", tuple(values.values()))
+            db.execute("PRAGMA foreign_keys = ON")
+            invalid = db.execute("PRAGMA foreign_key_check").fetchall()
+            if invalid:
+                raise ValueError(f"Integridade referencial inválida: {len(invalid)} vínculo(s)")
+            if db.execute("PRAGMA integrity_check").fetchone()[0] != "ok":
+                raise ValueError("Falha de integridade da base restaurada")
+            actual = {table: db.execute(f"SELECT count(*) FROM {table}").fetchone()[0] for table in TABLES}
+            expected = {table: len(data[table]) for table in TABLES}
+            if actual != expected:
+                raise ValueError("Contagem divergente após restauração operacional")
+            return actual
+        finally:
+            db.close()
+    except Exception:
+        destination.unlink(missing_ok=True)
+        raise
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("archive", type=Path, help="Arquivo JSON criptografado baixado do sistema")
     parser.add_argument("output", type=Path, help="Novo arquivo SQLite isolado (não pode existir)")
+    parser.add_argument("--operational", action="store_true", help="Restaurar tabelas reais do servidor local, em arquivo novo")
     args = parser.parse_args()
-    counts = restore(args.archive, getpass.getpass("Senha da cópia: "), args.output)
+    action = restore_operational if args.operational else restore
+    counts = action(args.archive, getpass.getpass("Senha da cópia: "), args.output)
     print(f"Restauração isolada concluída: {sum(counts.values())} registros, {len(TABLES)} tabelas. Arquivo: {args.output}")
     print("O arquivo restaurado contém dados sem criptografia; proteja-o e apague-o após a conferência.")
 
