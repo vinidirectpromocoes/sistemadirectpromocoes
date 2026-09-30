@@ -122,12 +122,49 @@ function renderSectorRates() {
   });
 }
 
+function renderExtraCosts() {
+  const grid = document.querySelector('#settings-extra-grid');
+  grid.replaceChildren();
+  for (const network of settingsData.redes) {
+    const saved = (settingsData.extras || []).find(item => item.rede === network.rede) || {};
+    const form = settingsNode('form', 'settings-network-card');
+    form.append(settingsNode('h3', '', network.rede));
+    const fields = settingsNode('div', 'settings-network-fields');
+    const inputs = {};
+    for (const [key, label] of [['transporte', 'Transporte'], ['taxas', 'Taxas'], ['outros', 'Outros custos']]) {
+      const field = settingsNode('label', 'settings-field', `${label} por diária (R$)`);
+      const input = document.createElement('input'); input.type = 'number'; input.min = '0'; input.step = '0.01';
+      input.inputMode = 'decimal'; input.required = true;
+      input.value = ((saved[`${key}_centavos`] || 0) / 100).toFixed(2);
+      inputs[key] = input; field.append(input); fields.append(field);
+    }
+    const save = settingsNode('button', 'button button-outline', 'Salvar custos'); save.type = 'submit';
+    form.append(fields, save);
+    form.addEventListener('submit', async event => {
+      event.preventDefault();
+      const values = Object.fromEntries(Object.entries(inputs).map(([key, input]) => [key, input.value]));
+      if (Object.values(values).some(value => !/^\d+(?:[.,]\d{1,2})?$/.test(value) || Number(value.replace(',', '.')) > 100000))
+        return settingsMessage('Informe custos de zero a R$ 100.000,00 com até duas casas decimais.', true);
+      save.disabled = true;
+      try {
+        await request('/api/custos-extras', { method: 'PUT', headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ rede: network.rede, ...values }) });
+        await loadSettings();
+        settingsMessage(`Custos extras de ${network.rede} atualizados.`);
+        if (typeof loadFinance === 'function') await loadFinance();
+      } catch (error) { settingsMessage(`Não foi possível salvar: ${error.message}`, true); save.disabled = false; }
+    });
+    grid.append(form);
+  }
+}
+
 async function loadSettings() {
   if (settingsLoading) return settingsLoading;
   settingsLoading = (async () => {
     try {
-      settingsData = await request('/api/tarifas');
-      renderNetworkRates(); renderSectorRates();
+      const [rates, extras] = await Promise.all([request('/api/tarifas'), request('/api/custos-extras')]);
+      settingsData = { ...rates, extras };
+      renderNetworkRates(); renderSectorRates(); renderExtraCosts();
       document.querySelector('#staff-settings').hidden = window.directRemote?.role !== 'admin';
       if (window.directRemote?.role === 'admin') await loadStaff();
       const select = document.querySelector('#sector-rate-network');

@@ -173,9 +173,9 @@ async function loadOrders() {
     orderRecords = await request('/api/pedidos');
     renderOrders();
     loadOrderCatalog().catch(() => {});
-    await Promise.all(orderRecords.filter(order => order.situacao !== 'cancelado').map(async order => {
-      weeklyScales[order.id] = await request(`/api/pedidos/${order.id}/escalas`);
-    }));
+    const allScales = await request('/api/escalas');
+    weeklyScales = Object.groupBy ? Object.groupBy(allScales, scale => scale.pedido_id) :
+      allScales.reduce((groups, scale) => ((groups[scale.pedido_id] ||= []).push(scale), groups), {});
     renderWeekly();
   }
   catch (err) { showOrderFeedback(`Não foi possível carregar os pedidos: ${err.message}`, true); }
@@ -360,11 +360,17 @@ async function changeOrderAttendance(scale, status) {
     return orderDetailError('Essa diária já foi paga. Abra Pagamento, retire a data do pagamento e depois corrija para falta.');
   }
   if (scale.status === 'presente' && status === 'falta' && !window.confirm(`Corrigir a presença de ${scale.diarista_nome} para falta? A diária pendente será retirada do Financeiro.`)) return;
+  let motivo = null;
+  if (status === 'falta') {
+    motivo = window.prompt(`Motivo da falta de ${scale.diarista_nome} em ${dateLabel(scale.data)}:`, '')?.trim();
+    if (motivo == null) return;
+    if (motivo.length < 5 || motivo.length > 300) return orderDetailError('Informe o motivo da falta com 5 a 300 caracteres.');
+  }
   orderDetailBusy = true;
   $('#order-detail-error').hidden = true;
   try {
     await request(`/api/pedidos/${orderDetailId}/escalas/${scale.id}`, {
-      method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ status }),
+      method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ status, motivo }),
     });
     await refreshOrderScales();
     if (status === 'falta') {
@@ -417,6 +423,12 @@ function renderOrderShifts() {
       const state = document.createElement('span'); state.className = `order-attendance-status ${scale.status}`;
       state.textContent = { escalada: 'Aguardando', presente: 'Presença', falta: 'Falta' }[scale.status];
       identity.append(name, state); row.append(identity);
+      if (scale.status === 'falta') {
+        const absence = document.createElement('small'); absence.className = 'order-absence-detail';
+        const replacement = scales.find(item => item.id === scale.substituida_por_escala_id);
+        absence.textContent = `${scale.falta_motivo || 'Motivo não registrado (histórico anterior)'} · ${scale.falta_confirmada_por || 'Autor não registrado'}${scale.falta_confirmada_em ? ` · ${new Date(scale.falta_confirmada_em).toLocaleString('pt-BR')}` : ''}${replacement ? ` · Substituta: ${replacement.diarista_nome}` : ' · Substituição pendente'}`;
+        row.append(absence);
+      }
       const actions = document.createElement('div'); actions.className = 'order-worker-actions';
       if (!window.directRemote || window.directRemote.role !== 'consulta') {
         const profile = document.createElement('button'); profile.type = 'button'; profile.className = 'text-button';

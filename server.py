@@ -158,6 +158,12 @@ def init_db():
             atualizado_em TEXT NOT NULL,
             UNIQUE(pedido_id, data, diarista_id)
         )""")
+        scale_columns = {row["name"] for row in db.execute("PRAGMA table_info(pedido_escalas)")}
+        for name, kind in (("falta_motivo", "TEXT"), ("falta_confirmada_por", "TEXT"),
+                           ("falta_confirmada_em", "TEXT"), ("substituida_por_escala_id", "INTEGER")):
+            if name not in scale_columns:
+                db.execute(f"ALTER TABLE pedido_escalas ADD COLUMN {name} {kind}")
+        db.execute("CREATE UNIQUE INDEX IF NOT EXISTS idx_escala_substituta ON pedido_escalas(substituida_por_escala_id) WHERE substituida_por_escala_id IS NOT NULL")
         db.execute("CREATE INDEX IF NOT EXISTS idx_pedido_escalas_pedido_data ON pedido_escalas(pedido_id, data)")
         db.execute("CREATE UNIQUE INDEX IF NOT EXISTS idx_diarias_pedido_escala ON diarias(pedido_escala_id)")
         db.execute("""CREATE TABLE IF NOT EXISTS lojas (
@@ -205,6 +211,12 @@ def init_db():
         db.execute("CREATE UNIQUE INDEX IF NOT EXISTS tarifas_setores_rede_setor_ci ON tarifas_setores(rede, lower(setor)) WHERE rede IS NOT NULL")
         db.execute("CREATE UNIQUE INDEX IF NOT EXISTS tarifas_setores_geral_ci ON tarifas_setores(lower(setor)) WHERE rede IS NULL")
         db.execute("CREATE TABLE IF NOT EXISTS direct_config_meta (chave TEXT PRIMARY KEY, valor TEXT NOT NULL)")
+        db.execute("""CREATE TABLE IF NOT EXISTS custos_extras (
+            rede TEXT PRIMARY KEY REFERENCES tarifas_redes(rede) ON UPDATE CASCADE,
+            transporte_centavos INTEGER NOT NULL DEFAULT 0 CHECK (transporte_centavos BETWEEN 0 AND 10000000),
+            taxas_centavos INTEGER NOT NULL DEFAULT 0 CHECK (taxas_centavos BETWEEN 0 AND 10000000),
+            outros_centavos INTEGER NOT NULL DEFAULT 0 CHECK (outros_centavos BETWEEN 0 AND 10000000),
+            atualizado_em TEXT NOT NULL)""")
         db.execute("""CREATE TABLE IF NOT EXISTS direct_auditoria (
             id INTEGER PRIMARY KEY AUTOINCREMENT, tabela TEXT NOT NULL, registro_id INTEGER NOT NULL,
             operacao TEXT NOT NULL, antes TEXT, depois TEXT, email_autor TEXT NOT NULL DEFAULT 'Servidor local',
@@ -233,6 +245,7 @@ def init_db():
         db.executemany("""INSERT OR IGNORE INTO tarifas_redes
             (rede, valor_recebido_centavos, valor_padrao_centavos, atualizado_em)
             VALUES (?, ?, ?, ?)""", (item + (now,) for item in TARIFAS_INICIAIS))
+        db.execute("INSERT OR IGNORE INTO custos_extras(rede, atualizado_em) SELECT rede, ? FROM tarifas_redes", (now,))
         if not db.execute("SELECT 1 FROM direct_config_meta WHERE chave = 'setores_iniciais_v1'").fetchone():
             db.executemany("""INSERT OR IGNORE INTO tarifas_setores
                 (rede, setor, valor_pago_centavos, atualizado_em) VALUES (NULL, ?, NULL, ?)""",
@@ -354,6 +367,19 @@ def money_cents(value, required=False):
             raise ValueError
     except (InvalidOperation, ValueError):
         raise ValueError("Informe um valor válido maior que zero, com até duas casas decimais.") from None
+    return int(cents)
+
+
+def extra_cost_cents(value):
+    if isinstance(value, bool) or value in (None, ""):
+        raise ValueError("Informe custos válidos a partir de zero.")
+    try:
+        amount = Decimal(str(value).strip().replace(",", "."))
+        cents = amount * 100
+        if not amount.is_finite() or cents != cents.to_integral_value() or not 0 <= cents <= 10000000:
+            raise ValueError
+    except (InvalidOperation, ValueError):
+        raise ValueError("Informe custos de zero a R$ 100.000,00 com até duas casas decimais.") from None
     return int(cents)
 
 
@@ -550,6 +576,15 @@ def order_scale_rows(db, order_id):
         WHERE e.pedido_id = ? ORDER BY e.data, e.id""", (order_id,))]
 
 
+def all_scale_rows(db):
+    return [public_scale(row) for row in db.execute("""SELECT e.*, p.nome AS diarista_nome,
+        d.id AS diaria_id, d.data_pagamento, d.valor_centavos, d.valor_recebido_centavos,
+        d.vencimento_pagamento, d.forma_pagamento, d.pagamento_lote_id
+        FROM pedido_escalas e JOIN diaristas p ON p.id = e.diarista_id
+        LEFT JOIN diarias d ON d.pedido_escala_id = e.id
+        ORDER BY e.pedido_id, e.data, e.id""")]
+
+
 REDES = ("Super do Povo", "Super Lagoa", "Fazendinha", "Hipermarket", "Pinheiro", "Variedades")
 
 
@@ -671,6 +706,14 @@ class Handler(BaseHTTPRequestHandler):
             with connect() as db:
                 rows = db.execute("SELECT * FROM pedidos ORDER BY id DESC").fetchall()
             return self.respond(HTTPStatus.OK, [public_order(row) for row in rows])
+        if path == "/api/escalas":
+            with connect() as db:
+                scales = all_scale_rows(db)
+            return self.respond(HTTPStatus.OK, scales)
+        if path == "/api/custos-extras":
+            with connect() as db:
+                rows = db.execute("SELECT * FROM custos_extras ORDER BY rede COLLATE NOCASE").fetchall()
+            return self.respond(HTTPStatus.OK, [dict(row) for row in rows])
         if path == "/api/leituras-pendentes":
             with connect() as db:
                 rows = db.execute("SELECT * FROM leituras_pendentes ORDER BY id DESC LIMIT 500").fetchall()
@@ -701,6 +744,7 @@ class Handler(BaseHTTPRequestHandler):
         if path == "/":
             path = "/index.html"
         assets = {"/index.html": "text/html; charset=utf-8", "/style.css": "text/css; charset=utf-8", "/brand.css": "text/css; charset=utf-8", "/theme.css": "text/css; charset=utf-8", "/mobile.css": "text/css; charset=utf-8", "/reading.css": "text/css; charset=utf-8", "/motion.css": "text/css; charset=utf-8", "/operations.css": "text/css; charset=utf-8", "/workflow.css": "text/css; charset=utf-8", "/app.js": "text/javascript; charset=utf-8", "/theme.js": "text/javascript; charset=utf-8", "/finance.js": "text/javascript; charset=utf-8", "/forecast.js": "text/javascript; charset=utf-8", "/operations.js": "text/javascript; charset=utf-8", "/workflow.js": "text/javascript; charset=utf-8", "/matching.js": "text/javascript; charset=utf-8", "/backup.js": "text/javascript; charset=utf-8", "/orders.js": "text/javascript; charset=utf-8", "/stores.js": "text/javascript; charset=utf-8", "/settings.js": "text/javascript; charset=utf-8", "/reading.js": "text/javascript; charset=utf-8", "/reading-parser.js": "text/javascript; charset=utf-8", "/remote.js": "text/javascript; charset=utf-8", "/vendor/supabase-2.117.2.js": "text/javascript; charset=utf-8", "/stores.css": "text/css; charset=utf-8", "/settings.css": "text/css; charset=utf-8", "/login.css": "text/css; charset=utf-8", "/favicon.svg": "image/svg+xml", "/logo-direct-promocoes.jpg": "image/jpeg", "/logo-direct-promocoes-transparente.png": "image/png"}
+        assets["/reconciliation.js"] = "text/javascript; charset=utf-8"
         if path in assets:
             return self.respond(HTTPStatus.OK, (STATIC / path[1:]).read_bytes(), assets[path])
         return self.respond(HTTPStatus.NOT_FOUND, {"erro": "Página não encontrada."})
@@ -820,6 +864,11 @@ class Handler(BaseHTTPRequestHandler):
                             raise ValueError(f"A quantidade de diaristas em {day} já foi preenchida.")
                     now = datetime.now(timezone.utc).isoformat()
                     ids = [db.execute("INSERT INTO pedido_escalas (pedido_id, diarista_id, data, status, criado_em, atualizado_em) VALUES (?, ?, ?, 'escalada', ?, ?)", (scale_route[0], payload["diarista_id"], day, now, now)).lastrowid for day in days]
+                    for day, new_id in zip(days, ids):
+                        absence = db.execute("""SELECT id FROM pedido_escalas WHERE pedido_id = ? AND data = ?
+                            AND status = 'falta' AND substituida_por_escala_id IS NULL ORDER BY id LIMIT 1""", (scale_route[0], day)).fetchone()
+                        if absence:
+                            db.execute("UPDATE pedido_escalas SET substituida_por_escala_id = ? WHERE id = ?", (new_id, absence["id"]))
                     saved = [row for row in order_scale_rows(db, scale_route[0]) if row["id"] in ids]
                 return self.respond(HTTPStatus.CREATED, saved if batch else saved[0])
             except (ValueError, json.JSONDecodeError, TypeError) as exc:
@@ -897,6 +946,23 @@ class Handler(BaseHTTPRequestHandler):
     def do_PUT(self):
         if not self._allowed_origin():
             return self.respond(HTTPStatus.FORBIDDEN, {"erro": "Acesso não permitido."})
+        if urlparse(self.path).path == "/api/custos-extras":
+            try:
+                payload = self.read_json()
+                if not isinstance(payload, dict):
+                    raise ValueError("Informe os custos da rede.")
+                rede = clean_text(payload.get("rede"), "a rede", 120)
+                costs = [extra_cost_cents(payload.get(key)) for key in ("transporte", "taxas", "outros")]
+                with connect() as db:
+                    cur = db.execute("""UPDATE custos_extras SET transporte_centavos = ?, taxas_centavos = ?,
+                        outros_centavos = ?, atualizado_em = ? WHERE rede = ?""",
+                        (*costs, datetime.now(timezone.utc).isoformat(), rede))
+                    if not cur.rowcount:
+                        return self.respond(HTTPStatus.NOT_FOUND, {"erro": "Rede não encontrada."})
+                    row = db.execute("SELECT * FROM custos_extras WHERE rede = ?", (rede,)).fetchone()
+                return self.respond(HTTPStatus.OK, dict(row))
+            except (ValueError, json.JSONDecodeError, TypeError) as exc:
+                return self.respond(HTTPStatus.BAD_REQUEST, {"erro": str(exc)})
         network_match = re.fullmatch(r"/api/tarifas/redes/(\d+)", urlparse(self.path).path)
         if network_match:
             try:
@@ -1043,6 +1109,9 @@ class Handler(BaseHTTPRequestHandler):
                         return self.respond(HTTPStatus.NOT_FOUND, {"erro": "Escala não encontrada."})
                     order = db.execute("SELECT * FROM pedidos WHERE id = ?", (scale_route[0],)).fetchone()
                     if status != scale["status"]:
+                        reason = clean_text(payload.get("motivo"), "o motivo da falta", 300) if status == "falta" else None
+                        if reason is not None and len(reason) < 5:
+                            raise ValueError("Informe o motivo da falta com pelo menos 5 caracteres.")
                         if status in {"presente", "falta"} and scale["data"] > datetime.now(FORTALEZA).date().isoformat():
                             raise ValueError("Presença ou falta só pode ser registrada a partir da data da diária.")
                         if scale["status"] == "presente":
@@ -1072,7 +1141,12 @@ class Handler(BaseHTTPRequestHandler):
                                 (scale["diarista_id"], scale["data"], local, order["setor"],
                                  f"Presença no pedido #{scale_route[0]}", scale["id"], paid_rate, received_rate,
                                  scale["data"] if paid_rate is not None else None, datetime.now(timezone.utc).isoformat()))
-                        db.execute("UPDATE pedido_escalas SET status = ?, atualizado_em = ? WHERE id = ?", (status, datetime.now(timezone.utc).isoformat(), scale["id"]))
+                        now = datetime.now(timezone.utc).isoformat()
+                        db.execute("""UPDATE pedido_escalas SET status = ?, atualizado_em = ?,
+                            falta_motivo = ?, falta_confirmada_por = ?, falta_confirmada_em = ?,
+                            substituida_por_escala_id = CASE WHEN ? = 'falta' THEN substituida_por_escala_id ELSE NULL END
+                            WHERE id = ?""", (status, now, reason, "Servidor local" if reason else None,
+                            now if reason else None, status, scale["id"]))
                     row = next(row for row in order_scale_rows(db, scale_route[0]) if row["id"] == scale["id"])
                 return self.respond(HTTPStatus.OK, row)
             except (ValueError, json.JSONDecodeError, TypeError) as exc:
@@ -1151,6 +1225,7 @@ class Handler(BaseHTTPRequestHandler):
                     return self.respond(HTTPStatus.NOT_FOUND, {"erro": "Escala não encontrada."})
                 if scale["status"] != "escalada":
                     return self.respond(HTTPStatus.CONFLICT, {"erro": "Presenças e faltas registradas não podem ser excluídas."})
+                db.execute("UPDATE pedido_escalas SET substituida_por_escala_id = NULL WHERE substituida_por_escala_id = ?", (scale_route[1],))
                 db.execute("DELETE FROM pedido_escalas WHERE id = ?", (scale_route[1],))
             return self.respond(HTTPStatus.OK, {"ok": True})
         order_match = re.fullmatch(r"/api/pedidos/(\d+)", urlparse(self.path).path)

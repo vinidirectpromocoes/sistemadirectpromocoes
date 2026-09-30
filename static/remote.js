@@ -110,8 +110,9 @@
   }
   async function rows(table, select = '*') {
     const all = [];
+    const sortKey = table === 'direct_staff' ? 'email' : table === 'custos_extras' ? 'rede' : 'id';
     for (let start = 0; ; start += 1000) {
-      const page = unwrap(await sb.from(table).select(select).range(start, start + 999));
+      const page = unwrap(await sb.from(table).select(select).order(sortKey).range(start, start + 999));
       all.push(...page);
       if (page.length < 1000) return all;
     }
@@ -292,6 +293,29 @@
       if (method === 'PATCH') return unwrap(await sb.from('leituras_pendentes').update({ status: 'resolvido', atualizado_em: new Date().toISOString() }).eq('id', id).select().single());
       if (method === 'DELETE') { unwrap(await sb.from('leituras_pendentes').delete().eq('id', id)); return { ok: true }; }
     }
+    if (entity === 'custos-extras') {
+      if (!['admin', 'financeiro'].includes(currentRole)) throw new Error('Sem permissão para consultar custos.');
+      if (method === 'GET') return rows('custos_extras');
+      if (method === 'PUT') {
+        const amount = name => {
+          const value = String(p[name] ?? '').replace(',', '.');
+          if (!/^\d+(?:\.\d{1,2})?$/.test(value)) throw new Error(`Confira o custo de ${name}.`);
+          const cents = Math.round(Number(value) * 100);
+          if (cents > 10000000) throw new Error('Custo acima do limite permitido.');
+          return cents;
+        };
+        return unwrap(await sb.from('custos_extras').upsert({ rede: p.rede,
+          transporte_centavos: amount('transporte'), taxas_centavos: amount('taxas'),
+          outros_centavos: amount('outros'), atualizado_em: new Date().toISOString() }, { onConflict: 'rede' }).select().single());
+      }
+    }
+    if (entity === 'escalas' && method === 'GET') {
+      const assignments = await rows('pedido_escalas', '*, diaristas(nome)');
+      const daily = ['admin', 'financeiro'].includes(currentRole)
+        ? await rows('diarias', 'id,pedido_escala_id,data_pagamento,valor_centavos,valor_recebido_centavos,vencimento_pagamento,forma_pagamento,pagamento_lote_id') : [];
+      const byScale = new Map(daily.map(item => [item.pedido_escala_id, item]));
+      return assignments.map(item => ({ ...item, diarista_nome: item.diaristas?.nome || '', diaria: byScale.get(item.id) || null }));
+    }
     if (entity === 'pedidos') {
       if (child === 'escalas') {
         const scaleId = parts[4] ? Number(parts[4]) : null;
@@ -310,7 +334,8 @@
           }
           return unwrap(await sb.from('pedido_escalas').insert({ pedido_id: id, diarista_id: Number(p.diarista_id), data: p.data }).select().single());
         }
-        if (method === 'PATCH') return unwrap(await sb.from('pedido_escalas').update({ status: p.status }).eq('pedido_id', id).eq('id', scaleId).select().single());
+        if (method === 'PATCH') return unwrap(await sb.from('pedido_escalas').update({ status: p.status,
+          ...(p.status === 'falta' ? { falta_motivo: p.motivo } : {}) }).eq('pedido_id', id).eq('id', scaleId).select().single());
         if (method === 'DELETE') { unwrap(await sb.from('pedido_escalas').delete().eq('pedido_id', id).eq('id', scaleId)); return { ok: true }; }
       }
       if (method === 'GET') return (await rows('pedidos')).sort((a,b) => b.id - a.id).map(orderView);

@@ -3,9 +3,9 @@
   const norm = value => String(value || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').trim().toLowerCase();
   function calculate(orders, scalesByOrder, tariffs, month = '') {
     const result = {
-      ideal: { revenue: 0, cost: 0, margin: 0 },
-      expected: { revenue: 0, cost: 0, margin: 0 },
-      confirmed: { revenue: 0, cost: 0, margin: 0 },
+      ideal: { revenue: 0, cost: 0, extras: 0, margin: 0, net: 0 },
+      expected: { revenue: 0, cost: 0, extras: 0, margin: 0, net: 0 },
+      confirmed: { revenue: 0, cost: 0, extras: 0, margin: 0, net: 0 },
       demand: 0, expectedDays: 0, present: 0, absent: 0, open: 0,
       missingRevenue: 0, missingCost: 0, byNetwork: [], byOrder: [],
     };
@@ -17,13 +17,15 @@
       const sectorRate = sectorRates.find(rate => norm(rate.rede) === norm(order.supermercado)) || sectorRates.find(rate => !rate.rede);
       const currentRevenue = network?.valor_recebido_centavos ?? null;
       const currentCost = sectorRate?.valor_pago_centavos ?? network?.valor_padrao_centavos ?? null;
+      const extra = (tariffs?.extras || []).find(rate => norm(rate.rede) === norm(order.supermercado));
+      const extraPerDay = (extra?.transporte_centavos || 0) + (extra?.taxas_centavos || 0) + (extra?.outros_centavos || 0);
       const networkName = network?.rede || order.supermercado;
       const networkKey = norm(networkName);
-      const aggregate = networks.get(networkKey) || { name: networkName, revenue: 0, cost: 0, days: 0 };
+      const aggregate = networks.get(networkKey) || { name: networkName, revenue: 0, cost: 0, extras: 0, days: 0 };
       networks.set(networkKey, aggregate);
       const orderTotal = {
         id: order.id, network: networkName, unit: order.unidade || '', sector: order.setor || '',
-        requested: 0, days: 0, present: 0, absent: 0, revenue: 0, cost: 0, margin: 0,
+        requested: 0, days: 0, present: 0, absent: 0, revenue: 0, cost: 0, extras: 0, margin: 0, net: 0,
       };
       const scales = scalesByOrder?.[order.id] || [];
       for (const shift of order.turnos || []) {
@@ -48,6 +50,7 @@
         orderTotal.absent += absent;
         if (!cancelled && currentRevenue != null) result.ideal.revenue += currentRevenue * requested;
         if (!cancelled && currentCost != null) result.ideal.cost += currentCost * requested;
+        if (!cancelled) result.ideal.extras += extraPerDay * requested;
         const forecastPresent = present.slice(0, expected);
         const remaining = expected - forecastPresent.length;
         if (currentRevenue == null) result.missingRevenue += remaining;
@@ -63,11 +66,15 @@
           orderTotal.cost += currentCost * remaining;
         }
         aggregate.days += expected;
+        result.expected.extras += extraPerDay * expected;
+        aggregate.extras += extraPerDay * expected;
+        orderTotal.extras += extraPerDay * expected;
         for (const scale of present) {
           const revenue = scale.diaria?.valor_recebido_centavos ?? currentRevenue;
           const cost = scale.diaria?.valor_centavos ?? currentCost;
           if (revenue != null) result.confirmed.revenue += revenue;
           if (cost != null) result.confirmed.cost += cost;
+          result.confirmed.extras += extraPerDay;
         }
         for (const scale of forecastPresent) {
           const revenue = scale.diaria?.valor_recebido_centavos ?? currentRevenue;
@@ -80,11 +87,16 @@
       }
       if (orderTotal.requested) {
         orderTotal.margin = orderTotal.revenue - orderTotal.cost;
+        orderTotal.net = orderTotal.margin - orderTotal.extras;
         result.byOrder.push(orderTotal);
       }
     }
-    for (const target of [result.ideal, result.expected, result.confirmed]) target.margin = target.revenue - target.cost;
-    result.byNetwork = [...networks.values()].map(item => ({ ...item, margin: item.revenue - item.cost })).sort((a, b) => b.revenue - a.revenue);
+    for (const target of [result.ideal, result.expected, result.confirmed]) {
+      target.margin = target.revenue - target.cost;
+      target.net = target.margin - target.extras;
+    }
+    result.byNetwork = [...networks.values()].map(item => ({ ...item, margin: item.revenue - item.cost,
+      net: item.revenue - item.cost - item.extras })).sort((a, b) => b.revenue - a.revenue);
     return result;
   }
   if (typeof window !== 'undefined') window.DirectForecast = { calculate };

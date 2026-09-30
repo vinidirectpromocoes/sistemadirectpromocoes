@@ -18,24 +18,29 @@ function renderFinanceForecast() {
     $(`#forecast-${key}`).textContent = moneyLabel(data.expected[field]);
     $(`#forecast-${key}-ideal`).textContent = `Cenário ideal: ${moneyLabel(data.ideal[field])}`;
   }
+  $('#forecast-extra').textContent = moneyLabel(data.expected.extras);
+  $('#forecast-net').textContent = moneyLabel(data.expected.net);
   const warning = $('#forecast-warning');
   warning.hidden = !data.missingRevenue && !data.missingCost;
   warning.textContent = `Há ${data.missingRevenue} diária(s) sem tarifa de faturamento e ${data.missingCost} sem tarifa de pagamento. Complete os valores em Configurações; os totais acima incluem apenas valores conhecidos.`;
   const revenue = Math.max(0, data.expected.revenue);
   const costShare = revenue ? Math.min(100, data.expected.cost / revenue * 100) : 0;
+  const extraEnd = revenue ? Math.min(100, (data.expected.cost + data.expected.extras) / revenue * 100) : 0;
   const ring = $('#forecast-ring');
   ring.style.setProperty('--forecast-cost-share', `${costShare}%`);
-  ring.setAttribute('aria-label', `Faturamento ${moneyLabel(data.expected.revenue)}, custo ${moneyLabel(data.expected.cost)}, margem bruta ${moneyLabel(data.expected.margin)}`);
+  ring.style.setProperty('--forecast-extra-end', `${extraEnd}%`);
+  ring.setAttribute('aria-label', `Faturamento ${moneyLabel(data.expected.revenue)}, diárias ${moneyLabel(data.expected.cost)}, extras ${moneyLabel(data.expected.extras)}, resultado líquido estimado ${moneyLabel(data.expected.net)}`);
   $('#forecast-ring-total').textContent = moneyLabel(data.expected.revenue);
   $('#forecast-presence-note').textContent = `${count(data.byOrder.length, 'pedido', 'pedidos')} · ${count(data.demand, 'diária solicitada', 'diárias solicitadas')} · ${count(data.expectedDays, 'prevista', 'previstas')} · ${count(data.present, 'presença', 'presenças')} · ${count(data.absent, 'falta', 'faltas')}`;
   $('#forecast-orders-summary').textContent = `Conferir ${count(data.byOrder.length, 'pedido incluído', 'pedidos incluídos')}`;
+  if (typeof window.renderReconciliation === 'function') window.renderReconciliation();
   const orderList = $('#forecast-orders-list'); orderList.replaceChildren();
   if (!data.byOrder.length) orderList.textContent = 'Nenhum pedido neste período.';
   data.byOrder.forEach(order => {
     const row = document.createElement('div'); row.className = 'forecast-order';
     const title = document.createElement('strong'); title.textContent = `Pedido #${order.id} · ${order.network}${order.unit ? ` · ${order.unit}` : ''} · ${order.sector}`;
     const detail = document.createElement('span'); detail.textContent = `${order.days}/${order.requested} diárias previstas · ${count(order.present, 'presença', 'presenças')} · ${count(order.absent, 'falta', 'faltas')}`;
-    const values = document.createElement('small'); values.textContent = `Faturamento ${moneyLabel(order.revenue)} · custo ${moneyLabel(order.cost)} · margem ${moneyLabel(order.margin)}`;
+    const values = document.createElement('small'); values.textContent = `Faturamento ${moneyLabel(order.revenue)} · diárias ${moneyLabel(order.cost)} · extras ${moneyLabel(order.extras)} · líquido estimado ${moneyLabel(order.net)}`;
     const open = document.createElement('button'); open.type = 'button'; open.className = 'text-button forecast-order-open'; open.textContent = 'Abrir pedido';
     open.setAttribute('aria-label', `Abrir pedido número ${order.id}`);
     open.addEventListener('click', async () => { location.hash = '#pedidos'; await loadOrders(); openOrderDetail(order.id); });
@@ -53,7 +58,7 @@ function renderFinanceForecast() {
     const track = document.createElement('div'); track.className = 'forecast-network-track';
     const bar = document.createElement('span'); bar.style.width = `${item.revenue / max * 100}%`;
     track.append(bar);
-    const detail = document.createElement('small'); detail.textContent = `${item.days} diária(s) · custo ${moneyLabel(item.cost)} · margem ${moneyLabel(item.margin)}`;
+    const detail = document.createElement('small'); detail.textContent = `${item.days} diária(s) · diárias ${moneyLabel(item.cost)} · extras ${moneyLabel(item.extras)} · líquido estimado ${moneyLabel(item.net)}`;
     row.append(head, track, detail); list.append(row);
   });
 }
@@ -409,16 +414,13 @@ function renderFinance() {
 async function loadFinance() {
   const sequence = ++financeLoadSequence;
   try {
-    const [records, orders, tariffs] = await Promise.all([
-      request('/api/financeiro'), request('/api/pedidos'), request('/api/tarifas'),
+    const [records, orders, tariffs, allScales, extras] = await Promise.all([
+      request('/api/financeiro'), request('/api/pedidos'), request('/api/tarifas'), request('/api/escalas'), request('/api/custos-extras'),
     ]);
-    const scales = {};
-    await Promise.all(orders.map(async order => {
-      scales[order.id] = await request(`/api/pedidos/${order.id}/escalas`);
-    }));
+    const scales = allScales.reduce((groups, scale) => ((groups[scale.pedido_id] ||= []).push(scale), groups), {});
     if (sequence !== financeLoadSequence) return;
     financeRecords = records;
-    financeForecastInput = { orders, tariffs, scales };
+    financeForecastInput = { orders, tariffs: { ...tariffs, extras }, scales };
     renderFinance();
     if (typeof window.renderWorkflow === 'function') await window.renderWorkflow(financeRecords, orders, scales);
   }

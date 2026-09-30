@@ -44,6 +44,8 @@ async function runBrowser(engine, name) {
       for (const tab of ['inicio', 'diaristas', 'pedidos', 'leitura', 'redes', 'financeiro', 'configuracoes']) {
         await page.locator(`#nav-${tab}`).click();
         assert.equal(new URL(page.url()).hash, `#${tab}`, `${name} ${viewport.width}: navegação ${tab}`);
+        const overflow = await page.evaluate(() => document.documentElement.scrollWidth - innerWidth);
+        assert.ok(overflow <= 2, `${name} ${viewport.width}: aba ${tab} excede largura em ${overflow}px`);
       }
       await page.locator('#nav-diaristas').click();
       await page.locator('#new-button').click();
@@ -129,7 +131,12 @@ async function runRoleNavigation() {
           'import sys; sys.path.insert(0,"scripts"); from restore_backup import restore; restore(sys.argv[1],sys.argv[2],sys.argv[3])',
           archive, 'senha-de-teste-12345', output], { cwd: root, encoding: 'utf8' });
         assert.equal(result.status, 0, `Cópia do navegador não restaurou: ${result.stderr}`);
-        console.log('Backup no navegador → verificação → SQLite isolado OK');
+        const operational = path.join(work, 'browser-operational.db');
+        const drill = spawnSync(process.env.PYTHON || 'python3', ['-c',
+          'import sys; sys.path.insert(0,"scripts"); from restore_backup import restore_operational; counts=restore_operational(sys.argv[1],sys.argv[2],sys.argv[3]); assert len(counts) == 16',
+          archive, 'senha-de-teste-12345', operational], { cwd: root, encoding: 'utf8' });
+        assert.equal(drill.status, 0, `Cópia operacional não restaurou: ${drill.stderr}`);
+        console.log('Backup no navegador → verificação → SQLite operacional isolado OK');
       }
       console.log(`Perfil ${role}: navegação e ações visíveis OK`);
       await context.close();
@@ -181,6 +188,7 @@ async function runFinancialWorkflow() {
     trabalhando: false, local_trabalho: '', disponibilidade: [{ dia: 'segunda', inicio: '07:00', fim: '16:00' }],
     pode_se_deslocar: true, transporte: 'Ônibus', observacoes_locomocao: '',
   });
+  await api('PUT', '/api/custos-extras', { rede: 'Super do Povo', transporte: '5.00', taxas: '0', outros: '0' });
   for (const day of ['2026-09-21', '2026-09-28']) {
     const order = await api('POST', '/api/pedidos', {
       supermercado: 'Super do Povo', unidade: 'Meireles', contato: '', setor: 'Operador de caixa',
@@ -195,7 +203,13 @@ async function runFinancialWorkflow() {
     const context = await browser.newContext({ viewport: { width: 390, height: 844 }, isMobile: true, hasTouch: true });
     const page = await context.newPage();
     const errors = []; page.on('pageerror', error => errors.push(error.message));
+    const scaleRequests = [];
+    page.on('request', request => { if (/\/api\/(?:pedidos\/\d+\/)?escalas/.test(request.url())) scaleRequests.push(request.url()); });
     await page.goto(`${url}#financeiro`, { waitUntil: 'domcontentloaded' });
+    await page.getByText('Resultado líquido estimado').waitFor();
+    assert.ok(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth + 2),
+      'Financeiro com dados não deve criar rolagem horizontal no celular');
+    assert.match(await page.locator('#forecast-net').innerText(), /78,00/);
     await page.locator('#invoice-new').click();
     await page.locator('#invoice-network').selectOption('Super do Povo');
     await page.locator('#invoice-start').fill('2026-09-21');
@@ -205,6 +219,8 @@ async function runFinancialWorkflow() {
     await page.getByText('2 presença(s) ainda não cobradas').waitFor();
     await page.locator('#invoice-create-submit').click();
     await page.locator('#invoice-list .workflow-entry').waitFor();
+    await page.waitForFunction(() => document.querySelector('#reconciliation-summary')?.textContent.includes('2 cobradas'));
+    assert.match(await page.locator('#reconciliation-summary').innerText(), /0 em cobranças integralmente recebidas/);
     assert.match(await page.locator('#invoice-billed').innerText(), /268,00/);
     await page.locator('#invoice-list .workflow-entry button').first().click();
     assert.equal(await page.locator('#invoice-detail-items .workflow-line').count(), 2);
@@ -219,6 +235,8 @@ async function runFinancialWorkflow() {
     await page.locator('#batch-submit').click();
     await page.locator('#batch-list .workflow-entry').waitFor();
     assert.match(await page.locator('#finance-out').innerText(), /180,00/);
+    assert.ok(scaleRequests.length > 0 && scaleRequests.every(path => path.endsWith('/api/escalas')),
+      `Carregamento fez chamadas individuais por pedido: ${scaleRequests.join(', ')}`);
     assert.deepEqual(errors, [], 'Fluxo financeiro no navegador teve erro JavaScript');
     console.log('Cobrança por dois pedidos, recebimento parcial e fechamento de diárias no celular OK');
     await context.close();

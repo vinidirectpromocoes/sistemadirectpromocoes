@@ -8,11 +8,11 @@
 .forecast-card.emphasis small { color: #e5efff; opacity: 1; }
 .forecast-visuals { display: grid; grid-template-columns: minmax(220px, 1fr) minmax(280px, 1.4fr); gap: 12px; margin-top: 12px; }
 .forecast-visuals .finance-chart-card { min-width: 0; }
-.forecast-ring { --forecast-cost-share: 0%; display: grid; place-items: center; width: 164px; height: 164px; margin: 16px auto; border-radius: 50%; background: conic-gradient(#e9984b 0 var(--forecast-cost-share), #2378eb var(--forecast-cost-share) 100%); position: relative; }
+.forecast-ring { --forecast-cost-share: 0%; --forecast-extra-end: 0%; display: grid; place-items: center; width: 164px; height: 164px; margin: 16px auto; border-radius: 50%; background: conic-gradient(#e9984b 0 var(--forecast-cost-share), #805ad5 var(--forecast-cost-share) var(--forecast-extra-end), #2378eb var(--forecast-extra-end) 100%); position: relative; }
 .forecast-ring::before { content: ''; position: absolute; inset: 22px; border-radius: 50%; background: var(--surface, #fff); }
 .forecast-ring span { position: relative; z-index: 1; font-weight: 800; font-size: 1.05rem; }
 .forecast-key { display: flex; justify-content: center; flex-wrap: wrap; gap: 14px; font-size: .77rem; }
-.forecast-key span:first-child { color: #e9984b; }.forecast-key span:last-child { color: #2378eb; }
+.forecast-key span:first-child { color: #e9984b; }.forecast-key span:nth-child(2) { color: #805ad5; }.forecast-key span:last-child { color: #2378eb; }
 #forecast-presence-note { text-align: center; font-size: .78rem; }
 .forecast-networks { display: grid; gap: 13px; margin-top: 18px; }
 .forecast-network > div:first-child { display: flex; justify-content: space-between; gap: 10px; font-size: .83rem; }

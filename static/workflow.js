@@ -78,6 +78,44 @@
       entry.append(main, side); list.append(entry);
     }
   }
+  function renderReconciliation() {
+    const month = get('forecast-period').value === 'month' ? get('finance-month').value : '';
+    const result = window.DirectReconciliation.build(orders, scales, finance, invoices, month, financeToday());
+    const total = result.summary;
+    get('reconciliation-summary').textContent = `${total.requested} solicitadas · ${total.present} presenças · ${total.billed} cobradas · ${total.collected} em cobranças integralmente recebidas · ${total.paid} pagas · ${result.issues.length} pendências`;
+    const list = get('reconciliation-list'); list.replaceChildren();
+    if (!result.rows.length) { list.textContent = 'Nenhuma diária no período.'; return; }
+    const ordered = [...result.rows].sort((a, b) => b.date.localeCompare(a.date) || b.orderId - a.orderId);
+    let visible = 0;
+    const more = document.createElement('button'); more.type = 'button'; more.className = 'button button-outline';
+    const appendPage = () => {
+    more.remove();
+    for (const item of ordered.slice(visible, visible + 100)) {
+      const details = document.createElement('details'); details.className = 'workflow-entry reconciliation-entry';
+      const summary = document.createElement('summary');
+      summary.textContent = `${dateLabel(item.date)} · Pedido #${item.orderId} · ${item.network}${item.unit ? ` / ${item.unit}` : ''} · ${item.sector} · ${item.requested} solicitada(s) · ${item.assigned} escalada(s) · ${item.present} presente(s) · ${item.absent} falta(s)${item.issues.length ? ` · ${item.issues.length} pendência(s)` : ''}`;
+      details.append(summary);
+      const body = document.createElement('div'); body.className = 'reconciliation-body';
+      for (const worker of item.workers) {
+        const states = worker.status === 'presente' ? ['Presente',
+          worker.billed ? `Cobrança #${worker.invoiceId}` : 'Sem cobrança',
+          worker.collected ? 'Cobrança recebida' : 'Recebimento pendente',
+          worker.paid ? 'Pago' : 'Pagamento pendente'] : ['Escalada · aguardando confirmação'];
+        body.append(row(worker.name, states.join(' · '), ''));
+      }
+      for (const issue of item.issues) {
+        const notice = document.createElement('p'); notice.className = 'reconciliation-issue'; notice.textContent = `⚠ ${issue}`; body.append(notice);
+      }
+      const open = document.createElement('button'); open.type = 'button'; open.className = 'button button-outline'; open.textContent = 'Abrir pedido';
+      open.addEventListener('click', async () => { location.hash = '#pedidos'; await loadOrders(); openOrderDetail(item.orderId); });
+      body.append(open); details.append(body); list.append(details);
+    }
+    visible = Math.min(visible + 100, ordered.length);
+    if (visible < ordered.length) { more.textContent = `Ver mais dias (${visible} de ${ordered.length})`; list.append(more); }
+    };
+    more.addEventListener('click', appendPage); appendPage();
+  }
+  window.renderReconciliation = renderReconciliation;
   function renderInvoicePreview() {
     const network = get('invoice-network').value.toLocaleLowerCase('pt-BR');
     const start = get('invoice-start').value, end = get('invoice-end').value;
@@ -160,7 +198,7 @@
     // Cobranças canceladas não aparecem no razão, mas permanecem no histórico.
     const [allInvoices, allBatches] = await Promise.all([request('/api/cobrancas'), request('/api/pagamento-lotes')]);
     invoices = allInvoices; batches = allBatches;
-    renderInvoices(); renderBatches();
+    renderInvoices(); renderBatches(); renderReconciliation();
     if (get('invoice-detail-dialog').open) renderInvoiceDetail();
   };
 

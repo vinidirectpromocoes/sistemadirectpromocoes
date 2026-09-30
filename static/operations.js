@@ -15,14 +15,11 @@ async function loadHome() {
     const canOperate = ['admin', 'operacao'].includes(role);
     document.querySelector('#home-reading').parentElement.hidden = !canReadings;
     document.querySelector('#home-overdue').parentElement.hidden = !canFinance;
-    const [orders, finance, readings] = await Promise.all([
+    const [orders, finance, readings, allScales] = await Promise.all([
       request('/api/pedidos'), canFinance ? request('/api/financeiro') : [],
-      canReadings ? request('/api/leituras-pendentes') : [],
+      canReadings ? request('/api/leituras-pendentes') : [], request('/api/escalas'),
     ]);
-    const scales = {};
-    await Promise.all(orders.filter(order => order.situacao !== 'cancelado').map(async order => {
-      scales[order.id] = await request(`/api/pedidos/${order.id}/escalas`);
-    }));
+    const scales = allScales.reduce((groups, scale) => ((groups[scale.pedido_id] ||= []).push(scale), groups), {});
     const today = homeToday();
     let open = 0, attendance = 0;
     const queue = [];

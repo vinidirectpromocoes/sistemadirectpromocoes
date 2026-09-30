@@ -4,7 +4,7 @@
   const tables = ['diaristas', 'diarias', 'pedidos', 'pedido_escalas', 'lojas',
     'financeiro_lancamentos', 'tarifas_redes', 'tarifas_setores', 'leituras_pendentes',
     'direct_staff', 'direct_auditoria', 'cobrancas', 'cobranca_itens',
-    'cobranca_recebimentos', 'pagamento_lotes'];
+    'cobranca_recebimentos', 'pagamento_lotes', 'custos_extras'];
   const legacyTables = tables.slice(0, 11);
   const output = document.querySelector('#backup-feedback');
   const lastCheck = document.querySelector('#backup-last-check');
@@ -35,7 +35,7 @@
   async function fetchTable(table) {
     const all = [];
     let expected = null;
-    const sortKey = table === 'direct_staff' ? 'email' : 'id';
+    const sortKey = table === 'direct_staff' ? 'email' : table === 'custos_extras' ? 'rede' : 'id';
     for (let start = 0; ; start += 1000) {
       const { data, error, count } = await window.directRemote.client.from(table)
         .select('*', { count: 'exact' }).order(sortKey).range(start, start + 999);
@@ -57,7 +57,7 @@
         output.textContent = `Copiando ${table}...`;
         data[table] = await fetchTable(table);
       }
-      const payload = { format: 'direct-data-v2', exportedAt: new Date().toISOString(), tables: data };
+      const payload = { format: 'direct-data-v3', exportedAt: new Date().toISOString(), tables: data };
       const salt = crypto.getRandomValues(new Uint8Array(16));
       const iv = crypto.getRandomValues(new Uint8Array(12));
       const encrypted = await crypto.subtle.encrypt({ name: 'AES-GCM', iv }, await key(pass, salt), encoder.encode(JSON.stringify(payload)));
@@ -82,10 +82,12 @@
       const plain = await crypto.subtle.decrypt({ name: 'AES-GCM', iv: fromBase64(archive.iv) },
         await key(password(), fromBase64(archive.salt)), fromBase64(archive.data));
       const payload = JSON.parse(decoder.decode(plain));
-      const required = payload.format === 'direct-data-v2' ? tables : payload.format === 'direct-data-v1' ? legacyTables : null;
+      const required = payload.format === 'direct-data-v3' ? tables : payload.format === 'direct-data-v2' ? tables.slice(0, 15) : payload.format === 'direct-data-v1' ? legacyTables : null;
       if (!required || !required.every(table => Array.isArray(payload.tables?.[table]))) throw new Error('Arquivo incompleto.');
       const count = required.reduce((sum, table) => sum + payload.tables[table].length, 0);
-      output.textContent = `Cópia legível e íntegra: ${count} registro(s) em ${required.length} tabelas, criada em ${new Date(payload.exportedAt).toLocaleString('pt-BR')}.${required.length < tables.length ? ' Esta cópia antiga não inclui cobranças e fechamentos.' : ''}`;
+      const missing = payload.format === 'direct-data-v1' ? ' Esta cópia antiga não inclui cobranças, fechamentos e custos extras.' :
+        payload.format === 'direct-data-v2' ? ' Esta cópia antiga não inclui custos extras.' : '';
+      output.textContent = `Cópia legível e íntegra: ${count} registro(s) em ${required.length} tabelas, criada em ${new Date(payload.exportedAt).toLocaleString('pt-BR')}.${missing}`;
       localStorage.setItem('direct-backup-verified-at', new Date().toISOString());
       showLastCheck();
     } catch (error) { output.textContent = `Não foi possível verificar: ${error.message}. Confira a senha e o arquivo.`; }

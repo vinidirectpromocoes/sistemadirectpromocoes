@@ -137,7 +137,7 @@ class CadastroTest(unittest.TestCase):
         self.assertEqual(len(invoice["itens"]), 2)
         self.assertEqual(self.call("POST", "/api/cobrancas", payload)[0], 400)
         first_order, first_scale = scales[0]
-        status, result = self.call("PATCH", f"/api/pedidos/{first_order['id']}/escalas/{first_scale['id']}", {"status": "falta"})
+        status, result = self.call("PATCH", f"/api/pedidos/{first_order['id']}/escalas/{first_scale['id']}", {"status": "falta", "motivo": "Não compareceu"})
         self.assertEqual(status, 400)
         self.assertIn("cobrança", result["erro"])
         invoice_id = invoice["id"]
@@ -149,7 +149,7 @@ class CadastroTest(unittest.TestCase):
         self.assertEqual(self.call("PATCH", f"/api/recebimentos/{receipt_id}/estornar", {"motivo": "Valor lançado por engano"})[0], 200)
         self.assertEqual(self.call("GET", "/api/cobrancas")[1][0]["valor_recebido_centavos"], 0)
         self.assertEqual(self.call("PATCH", f"/api/cobrancas/{invoice_id}/cancelar", {"motivo": "Corrigir presença registrada"})[0], 200)
-        self.assertEqual(self.call("PATCH", f"/api/pedidos/{first_order['id']}/escalas/{first_scale['id']}", {"status": "falta"})[0], 200)
+        self.assertEqual(self.call("PATCH", f"/api/pedidos/{first_order['id']}/escalas/{first_scale['id']}", {"status": "falta", "motivo": "Não compareceu"})[0], 200)
         status, corrected = self.call("POST", "/api/cobrancas", payload)
         self.assertEqual(status, 201)
         self.assertEqual(corrected["valor_centavos"], 13400)
@@ -395,7 +395,7 @@ class CadastroTest(unittest.TestCase):
         self.assertEqual(self.call("POST", f"/api/pedidos/{unavailable['id']}/escalas", {**assignment, "data": next_tuesday.isoformat()})[0], 400)
         path = f"/api/pedidos/{first['id']}/escalas/{scale['id']}"
         self.assertEqual(self.call("PATCH", path, {"status": "presente"})[0], 400)
-        self.assertEqual(self.call("PATCH", path, {"status": "falta"})[0], 400)
+        self.assertEqual(self.call("PATCH", path, {"status": "falta", "motivo": "Não compareceu"})[0], 400)
 
     def test_batch_assignment_is_atomic_when_one_day_is_full(self):
         _, worker = self.call("POST", "/api/diaristas", SAMPLE)
@@ -451,8 +451,28 @@ class CadastroTest(unittest.TestCase):
         })[0], 200)
         frozen = self.call("GET", f"/api/pedidos/{order['id']}/escalas")[1][0]["diaria"]
         self.assertEqual((frozen["valor_centavos"], frozen["valor_recebido_centavos"]), (9000, 13400))
-        self.assertEqual(self.call("PATCH", path, {"status": "falta"})[0], 200)
+        self.assertEqual(self.call("PATCH", path, {"status": "falta"})[0], 400)
+        self.assertEqual(self.call("PATCH", path, {"status": "falta", "motivo": "Não compareceu"})[0], 200)
         self.assertEqual(self.call("GET", "/api/financeiro")[1], [])
+        _, replacement_worker = self.call("POST", "/api/diaristas", {**worker_data,
+            "nome": "Substituta de Teste", "cpf": "111.444.777-35"})
+        status, replacement = self.call("POST", f"/api/pedidos/{order['id']}/escalas", {
+            "diarista_id": replacement_worker["id"], "data": today.isoformat()})
+        self.assertEqual(status, 201)
+        linked = next(item for item in self.call("GET", "/api/escalas")[1] if item["id"] == scale["id"])
+        self.assertEqual(linked["substituida_por_escala_id"], replacement["id"])
+        self.assertEqual(linked["falta_motivo"], "Não compareceu")
+        self.assertTrue(linked["falta_confirmada_em"])
+
+    def test_extra_costs_accept_zero_and_reject_invalid_values(self):
+        rows = self.call("GET", "/api/custos-extras")[1]
+        self.assertEqual(len(rows), 6)
+        status, updated = self.call("PUT", "/api/custos-extras", {
+            "rede": "Super do Povo", "transporte": "5,50", "taxas": "0.0", "outros": 0})
+        self.assertEqual(status, 200)
+        self.assertEqual((updated["transporte_centavos"], updated["taxas_centavos"], updated["outros_centavos"]), (550, 0, 0))
+        self.assertEqual(self.call("PUT", "/api/custos-extras", {
+            "rede": "Super do Povo", "transporte": "-1", "taxas": 0, "outros": 0})[0], 400)
 
     def test_store_catalog_seed_edit_and_persistence(self):
         status, stores = self.call("GET", "/api/lojas")
