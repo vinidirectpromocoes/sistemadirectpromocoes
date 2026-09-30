@@ -19,7 +19,7 @@ TABLES = (
     "diaristas", "diarias", "pedidos", "pedido_escalas", "lojas",
     "financeiro_lancamentos", "tarifas_redes", "tarifas_setores",
     "leituras_pendentes", "direct_staff", "direct_auditoria", "cobrancas",
-    "cobranca_itens", "cobranca_recebimentos", "pagamento_lotes", "custos_extras",
+    "cobranca_itens", "cobranca_recebimentos", "pagamento_lotes", "custos_extras", "contratos", "ocorrencias",
 )
 LEGACY_TABLES = TABLES[:11]
 
@@ -34,9 +34,9 @@ def decrypt_archive(archive, password):
         raise ValueError("Parâmetros de criptografia inválidos")
     key = __import__("hashlib").pbkdf2_hmac("sha256", password.encode(), salt, 200000, 32)
     payload = json.loads(AESGCM(key).decrypt(iv, ciphertext, None))
-    if payload.get("format") not in ("direct-data-v1", "direct-data-v2", "direct-data-v3") or not isinstance(payload.get("tables"), dict):
+    if payload.get("format") not in ("direct-data-v1", "direct-data-v2", "direct-data-v3", "direct-data-v4") or not isinstance(payload.get("tables"), dict):
         raise ValueError("Conteúdo da cópia não reconhecido")
-    required = TABLES if payload["format"] == "direct-data-v3" else TABLES[:15] if payload["format"] == "direct-data-v2" else LEGACY_TABLES
+    required = TABLES if payload["format"] == "direct-data-v4" else TABLES[:16] if payload["format"] == "direct-data-v3" else TABLES[:15] if payload["format"] == "direct-data-v2" else LEGACY_TABLES
     for table in required:
         if not isinstance(payload["tables"].get(table), list):
             raise ValueError(f"Tabela ausente: {table}")
@@ -49,8 +49,12 @@ def decrypt_archive(archive, password):
 
 def relationship_errors(data):
     ids = {table: {str(row["id"]) for row in data[table] if row.get("id") is not None}
-           for table in ("diaristas", "pedidos", "pedido_escalas", "diarias", "cobrancas", "pagamento_lotes")}
+           for table in ("diaristas", "pedidos", "pedido_escalas", "diarias", "cobrancas", "pagamento_lotes", "contratos")}
     links = (
+        ("diarias", "contrato_id", "contratos"),
+        ("contratos", "versao_anterior_id", "contratos"),
+        ("ocorrencias", "pedido_id", "pedidos"),
+        ("ocorrencias", "escala_id", "pedido_escalas"),
         ("diarias", "diarista_id", "diaristas"),
         ("diarias", "pedido_escala_id", "pedido_escalas"),
         ("pedido_escalas", "pedido_id", "pedidos"),
@@ -126,7 +130,7 @@ def restore_operational(archive_path, password, output_path):
         db = server.connect()
         try:
             db.execute("PRAGMA foreign_keys = OFF")
-            order = ("cobranca_recebimentos", "cobranca_itens", "cobrancas", "diarias", "pedido_escalas",
+            order = ("ocorrencias", "contratos", "cobranca_recebimentos", "cobranca_itens", "cobrancas", "diarias", "pedido_escalas",
                      "pagamento_lotes", "financeiro_lancamentos", "leituras_pendentes", "custos_extras",
                      "tarifas_setores", "tarifas_redes", "lojas", "pedidos", "diaristas", "direct_auditoria")
             with db:
@@ -136,7 +140,7 @@ def restore_operational(archive_path, password, output_path):
                 db.execute("CREATE TABLE IF NOT EXISTS direct_staff (email TEXT PRIMARY KEY, role TEXT, active INTEGER)")
                 db.execute("DELETE FROM direct_staff")
                 insert_order = ("diaristas", "pedidos", "lojas", "tarifas_redes", "tarifas_setores",
-                                "pagamento_lotes", "pedido_escalas", "diarias", "cobrancas", "cobranca_itens",
+                                "contratos", "pagamento_lotes", "pedido_escalas", "diarias", "ocorrencias", "cobrancas", "cobranca_itens",
                                 "cobranca_recebimentos", "financeiro_lancamentos", "leituras_pendentes",
                                 "custos_extras", "direct_staff")
                 for table in insert_order:

@@ -87,11 +87,12 @@ async function runRoleNavigation() {
   const browser = await chromium.launch({ headless: true });
   try {
     for (const role of ['admin', 'operacao', 'financeiro', 'consulta']) {
-      const context = await browser.newContext({ acceptDownloads: true });
+      let closing=false;
+      const context = await browser.newContext({ acceptDownloads: true, serviceWorkers:'block' });
       await context.route(`https://direct.test:${port}/**`, async route => {
         const target = route.request().url().replace(`https://direct.test:${port}`, url.slice(0, -1));
         const response = await route.fetch({ url: target });
-        await route.fulfill({ response });
+        try { await route.fulfill({ response }); } catch (error) { if (!closing) throw error; }
       });
       await context.route('**/vendor/supabase-2.117.2.js', route => route.fulfill({
         contentType: 'text/javascript', body: `window.supabase={createClient:()=>({
@@ -133,15 +134,36 @@ async function runRoleNavigation() {
         assert.equal(result.status, 0, `Cópia do navegador não restaurou: ${result.stderr}`);
         const operational = path.join(work, 'browser-operational.db');
         const drill = spawnSync(process.env.PYTHON || 'python3', ['-c',
-          'import sys; sys.path.insert(0,"scripts"); from restore_backup import restore_operational; counts=restore_operational(sys.argv[1],sys.argv[2],sys.argv[3]); assert len(counts) == 16',
+          'import sys; sys.path.insert(0,"scripts"); from restore_backup import restore_operational; counts=restore_operational(sys.argv[1],sys.argv[2],sys.argv[3]); assert len(counts) == 18',
           archive, 'senha-de-teste-12345', operational], { cwd: root, encoding: 'utf8' });
         assert.equal(drill.status, 0, `Cópia operacional não restaurou: ${drill.stderr}`);
         console.log('Backup no navegador → verificação → SQLite operacional isolado OK');
       }
       console.log(`Perfil ${role}: navegação e ações visíveis OK`);
-      await context.close();
+      closing=true;await context.close();
     }
   } finally { await browser.close(); }
+}
+
+async function runRealReading() {
+  const browser=await chromium.launch({headless:true});
+  try {
+    const context=await browser.newContext({serviceWorkers:'block'});const make=await context.newPage();
+    const source=['Rede: Super do Povo','Loja: Meireles','Função: Operador de caixa','Horário: 07:00 as 15:20','Data de inicio: 29/09/2026 a 05/10/2026','Quantidade de dias: 7'];
+    const png=await make.evaluate(lines=>{const c=document.createElement('canvas');c.width=1500;c.height=720;const x=c.getContext('2d');x.fillStyle='#fff';x.fillRect(0,0,c.width,c.height);x.fillStyle='#000';x.font='36px Arial';lines.forEach((line,i)=>x.fillText(line,40,80+i*90));return c.toDataURL('image/png');},source);
+    const imagePath=path.join(work,'ocr-clear.png');await (await import('node:fs/promises')).writeFile(imagePath,Buffer.from(png.split(',')[1],'base64'));
+    await make.setContent('<html lang="pt-BR"><body>'+source.map(line=>'<p>'+line+'</p>').join('')+'</body></html>');const digital=path.join(work,'ocr-digital.pdf');await make.pdf({path:digital,format:'A4'});
+    await make.setContent('<html><body><img width="700" src="'+png+'"></body></html>');const scanned=path.join(work,'ocr-scanned.pdf');await make.pdf({path:scanned,format:'A4'});
+    const page=await context.newPage();const errors=[];page.on('pageerror',e=>errors.push(e.message));
+    for(const file of [imagePath,digital,scanned]) {
+      await page.goto(url+'#leitura');await page.locator('#reading-file').setInputFiles(file);await page.locator('#reading-submit').click();
+      await page.locator('#reading-result-items .reading-item').waitFor({timeout:90000});
+      const text=await page.locator('#reading-result-items').innerText();assert.match(text,/Super do Povo/);assert.match(text,/Meireles/);
+      const undo=page.getByRole('button',{name:'Desfazer este registro'});if(await undo.count()){await undo.click();await page.getByText('Desfeito').waitFor();}else assert.match(text,/revis|pend|confir/i);
+      console.log('Reconhecimento real de '+path.basename(file)+': leitura de conteúdo e tratamento da revisão OK');
+    }
+    assert.deepEqual(errors,[],'OCR/PDF real: erro JavaScript');await context.close();
+  }finally{await browser.close();}
 }
 
 async function runReadingFlow() {
@@ -243,13 +265,55 @@ async function runFinancialWorkflow() {
   } finally { await browser.close(); }
 }
 
+async function runExtendedWorkflow() {
+  const api=async(method,route,body)=>{const r=await fetch(url.slice(0,-1)+route,{method,headers:{'Content-Type':'application/json'},body:body?JSON.stringify(body):undefined});const value=await r.json();assert.ok(r.ok,JSON.stringify(value));return value;};
+  const worker=(await api('GET','/api/diaristas'))[0];
+  await api('PUT',`/api/diaristas/${worker.id}`,{...worker,disponibilidade:['segunda','terca','quarta','quinta','sexta','sabado','domingo'].map(dia=>({dia,inicio:'00:00',fim:'23:59'}))});
+  const prior=new Date();prior.setDate(prior.getDate()-1);const day=prior.toISOString().slice(0,10);
+  const source={supermercado:'Super do Povo',unidade:'Meireles',setor:'Operador de caixa',quantidade_diaristas:1,turnos:[{data:day,inicio:'07:00',fim:'15:20'}],situacao:'confirmado',observacoes:'TESTE INTERLIGAÇÃO'};
+  const order=await api('POST','/api/pedidos',source);const scale=await api('POST',`/api/pedidos/${order.id}/escalas`,{diarista_id:worker.id,data:day});
+  const browser=await chromium.launch({headless:true});
+  try{
+    const context=await browser.newContext({viewport:{width:320,height:640},isMobile:true,hasTouch:true});const page=await context.newPage();const errors=[];page.on('pageerror',e=>errors.push(e.message));
+    await page.goto(url+'#diaristas');await page.evaluate(id=>openDetail(id),worker.id);
+    await page.locator('#worker-reserve-button').click();await page.locator('#ext-telefone').fill('85999991234');await page.locator('#ext-reserva').selectOption('sim');await page.locator('#extended-save').click();await page.locator('#extended-dialog').waitFor({state:'hidden'});await page.locator('#detail-dialog').evaluate(e=>e.close());
+    await page.locator('#nav-inicio').click();await page.getByText('85999991234').waitFor();
+    await page.locator('#nav-pedidos').click();await page.waitForFunction(id=>orderRecords.some(x=>x.id===id),order.id);await page.evaluate(id=>openOrderDetail(id),order.id);
+    await page.getByRole('button',{name:'✓ Confirmou',exact:true}).click();await page.getByText('Resposta: confirmada').waitFor();
+    await page.getByRole('button',{name:/^Presença de/}).click();await page.getByRole('button',{name:'✓ Validar atendimento',exact:true}).waitFor();
+    await page.getByRole('button',{name:'✓ Validar atendimento',exact:true}).click();await page.locator('#ext-loja_responsavel').fill('Ana da loja');await page.locator('#ext-chegada').fill('07:05');await page.locator('#ext-saida').fill('15:20');await page.locator('#extended-save').click();await page.locator('#extended-dialog').waitFor({state:'hidden'});await page.getByText('Loja: validado · Ana da loja').waitFor();
+    await page.getByRole('button',{name:'⚑ Ocorrência',exact:true}).click();await page.locator('#ext-tipo').selectOption('elogio');await page.locator('#ext-descricao').fill('Atendimento bem avaliado na loja');await page.locator('#extended-save').click();await page.locator('#extended-dialog').waitFor({state:'hidden'});await page.locator('#order-detail-dialog').evaluate(e=>e.close());
+    await page.locator('#occurrence-list').getByRole('button',{name:'✓ Resolver'}).click();await page.locator('#ext-resolucao').fill('Informado à equipe na conferência');await page.locator('#extended-save').click();await page.locator('#extended-dialog').waitFor({state:'hidden'});await page.locator('#occurrence-list').getByText(/resolvida/).waitFor();
+    await page.locator('#nav-configuracoes').click();await page.locator('#contract-section').getByRole('button',{name:'+ Contrato',exact:true}).click();await page.locator('#ext-rede').selectOption('Super do Povo');await page.locator('#ext-loja').selectOption('Meireles');await page.locator('#ext-setor').selectOption('Operador de caixa');await page.locator('#ext-inicio').fill(day);await page.locator('#ext-valor_recebido').fill('150');await page.locator('#ext-valor_pago').fill('95');
+    const width=await page.evaluate(()=>document.documentElement.scrollWidth-innerWidth);assert.ok(width<=2,'Contrato não pode transbordar');
+    const font=await page.locator('#ext-valor_recebido').evaluate(e=>parseFloat(getComputedStyle(e).fontSize));assert.ok(font>=16,'Campo de contrato pode causar zoom');
+    await page.locator('#extended-save').click();await page.locator('#extended-dialog').waitFor({state:'hidden'});await page.locator('#contract-list').getByText(/150,00/).waitFor();
+    await page.locator('#theme-toggle').click();assert.equal(await page.locator('html').getAttribute('data-theme'),'dark');
+    await page.locator('#contract-list').getByRole('button',{name:'↗ Nova versão'}).click();await page.locator('#extended-cancel').click();
+    await page.locator('#device-section').getByRole('button',{name:'▶ Executar diagnóstico'}).click();assert.match(await page.locator('#device-result').innerText(),/serviceWorker/);
+    await page.locator('#nav-financeiro').click();await page.locator('#invoice-review-list .extended-entry').waitFor();
+    await page.locator('#invoice-review-list').getByRole('button',{name:'✓ Conferir'}).first().click();await page.locator('#ext-conferencia').selectOption('contestada');await page.locator('#ext-responsavel').fill('Marcos');await page.locator('#ext-motivo').fill('Conferir horário solicitado pela loja');await page.locator('#extended-save').click();await page.locator('#extended-dialog').waitFor({state:'hidden'});await page.locator('#invoice-review-list').getByText(/contestada/).waitFor();
+    await page.evaluate(()=>{window.print=()=>{window.qaPrinted=document.getElementById('print-demonstrative').innerText;};});await page.locator('#invoice-review-list').getByRole('button',{name:'▤ PDF / imprimir'}).first().click();assert.match(await page.evaluate(()=>window.qaPrinted),/Pessoa Financeira de Teste/);assert.match(await page.evaluate(()=>window.qaPrinted),/Total: R\$\s*268,00/);
+    await page.locator('#nav-pedidos').click();await page.waitForFunction(id=>orderRecords.some(x=>x.id===id),order.id);await page.evaluate(id=>openOrderDetail(id),order.id);await page.locator('#order-repeat-button').click();await page.locator('#ext-inicio').fill('2026-10-12');await page.locator('#extended-save').click();await page.getByText('Conferir pedido repetido').waitFor();assert.equal(await page.locator('.order-shift-date').first().inputValue(),'2026-10-12');
+    // Guardar rascunho com a conexão cortada; nenhum pedido é gravado nessa etapa.
+    await page.evaluate(async()=>{await navigator.serviceWorker.ready;});await context.setOffline(true);await page.locator('#order-save-draft').click();await page.locator('#order-dialog').waitFor({state:'hidden'});await page.locator('#nav-inicio').click();await page.locator('#offline-drafts .extended-entry').waitFor();
+    const encrypted=await page.evaluate(()=>new Promise((resolve,reject)=>{const r=indexedDB.open('direct-offline-v1');r.onsuccess=()=>{const q=r.result.transaction('records').objectStore('records').getAll();q.onsuccess=()=>resolve(q.result.every(row=>row.blob instanceof ArrayBuffer&&!JSON.stringify(row).includes('Pessoa Financeira')));q.onerror=reject;};r.onerror=reject;}));assert.equal(encrypted,true,'Agenda e rascunho devem estar cifrados');
+    await context.setOffline(false);const before=(await api('GET','/api/pedidos')).length;await page.locator('#offline-drafts').getByRole('button',{name:'↗ Revisar'}).click();await page.locator('#order-save-button').click();await page.locator('#order-dialog').waitFor({state:'hidden'});assert.equal((await api('GET','/api/pedidos')).length,before+1);await page.locator('#nav-inicio').click();await page.getByText('Nenhum rascunho guardado.').waitFor();
+    const cached=await page.evaluate(async()=>{const keys=await caches.keys();const paths=[];for(const key of keys)for(const r of await(await caches.open(key)).keys())paths.push(new URL(r.url).pathname);return paths;});assert.ok(cached.length>10);assert.ok(cached.every(p=>!p.startsWith('/api/')),'Cache não deve armazenar respostas da API');
+    await page.screenshot({path:path.join(root,'.design-qa/operacao-mobile-dark.png'),fullPage:true,animations:'disabled'});assert.deepEqual(errors,[],'Fluxos integrados com erro JavaScript');
+    console.log('Operação ampliada: reserva, confirmação, validação, ocorrência, contrato, contestação, PDF, repetição e rascunho offline OK');await context.close();
+  }finally{await browser.close();}
+}
+
 try {
   await ready();
   await runBrowser(chromium, 'Chromium');
   await runBrowser(webkit, 'WebKit');
   await runRoleNavigation();
+  if(process.env.DIRECT_REAL_OCR==='1')await runRealReading();
   await runReadingFlow();
   await runFinancialWorkflow();
+  await runExtendedWorkflow();
 } finally {
   child.kill();
   await rm(work, { recursive: true, force: true });

@@ -95,13 +95,18 @@ class BackupRestoreTests(unittest.TestCase):
                                 '2026-09-29', '2026-09-29')""").lastrowid
                     db.execute("""INSERT INTO cobranca_itens (cobranca_id, diaria_id, pedido_id, data, valor_centavos)
                         VALUES (?, ?, ?, '2026-09-29', 13400)""", (invoice_id, daily_id, order_id))
+                    contract_id=db.execute("INSERT INTO contratos(rede,loja,setor,inicio,valor_recebido_centavos,valor_pago_centavos,criado_em) VALUES('Super do Povo','Meireles','Operador de caixa','2026-09-01',13400,9000,'2026-09-29')").lastrowid
+                    db.execute("UPDATE diarias SET contrato_id=? WHERE id=?",(contract_id,daily_id))
+                    db.execute("INSERT INTO ocorrencias(pedido_id,escala_id,tipo,descricao,autor,criado_em) VALUES(?,?,'elogio','Atendimento bem avaliado','Teste','2026-09-29')",(order_id,scale_id))
                     db.execute("CREATE TABLE direct_staff (email TEXT PRIMARY KEY, role TEXT, active INTEGER)")
                     data = {table: [dict(row) for row in db.execute(f"SELECT * FROM {table}")] for table in TABLES}
                 archive, target = root / "source.json", root / "recovered.db"
-                self.archive(archive, data, "direct-data-v3")
+                self.archive(archive, data, "direct-data-v4")
                 counts = restore_operational(archive, self.password, target)
                 self.assertEqual(counts["diaristas"], 1)
                 self.assertEqual(counts["cobranca_itens"], 1)
+                self.assertEqual(counts["contratos"],1)
+                self.assertEqual(counts["ocorrencias"],1)
                 with sqlite3.connect(target) as db:
                     self.assertEqual(db.execute("PRAGMA foreign_key_check").fetchall(), [])
                     self.assertEqual(db.execute("SELECT count(*) FROM diarias WHERE pedido_escala_id = ?", (scale_id,)).fetchone()[0], 1)

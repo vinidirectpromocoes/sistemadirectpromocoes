@@ -30,6 +30,7 @@
   function showApp(role) {
     authorized = true;
     currentRole = role;
+    setTimeout(()=>window.dispatchEvent(new Event('direct:authorized')),0);
     document.body.dataset.role = role;
     screen.hidden = true;
     shell.hidden = false;
@@ -57,6 +58,10 @@
     if (error) { showLogin(); message(`Não foi possível conferir sua sessão: ${error.message}`, true); return false; }
     if (!session) { showLogin(); return false; }
     const result = await sb.from('direct_admins').select('email').eq('email', session.user.email).maybeSingle();
+    if (result.error && !navigator.onLine) {
+      let grant; try {grant=JSON.parse(sessionStorage.getItem('direct-offline-grant'));}catch{}
+      if(grant?.email===session.user.email&&grant.expires*1000>Date.now()){showApp(grant.role);return true;}
+    }
     if (result.error) { showLogin(); message(`Não foi possível conferir seu acesso: ${result.error.message}`, true); return false; }
     const staff = result.data ? null : await sb.from('direct_staff').select('role,active').eq('email', session.user.email).maybeSingle();
     if (staff?.error) { showLogin(); message(`Não foi possível conferir seu acesso: ${staff.error.message}`, true); return false; }
@@ -67,6 +72,7 @@
       message('Esta conta não tem permissão para acessar o sistema.', true);
       return false;
     }
+    sessionStorage.setItem('direct-offline-grant',JSON.stringify({email:session.user.email,role,expires:session.expires_at}));
     showApp(role);
     if (reload) {
       if (typeof load === 'function') await load();
@@ -99,6 +105,8 @@
     } finally { button.disabled = false; }
   });
   document.querySelector('#logout-button').addEventListener('click', async () => {
+    await window.DirectOffline?.clear();
+    sessionStorage.removeItem('direct-offline-grant');
     await sb.auth.signOut();
     showLogin();
     passwordInput.value = '';
@@ -147,7 +155,7 @@
     return {
       supermercado: p.supermercado, unidade: p.unidade || '', contato: p.contato || '',
       setor: p.setor, quantidade_diaristas: p.quantidade_diaristas, turnos: p.turnos,
-      situacao: p.situacao || 'novo', observacoes: p.observacoes || ''
+      situacao: p.situacao || 'novo', observacoes: p.observacoes || '', ...(p.chave_operacao ? {chave_operacao:p.chave_operacao}: {})
     };
   }
   function storePayload(p) {
@@ -201,6 +209,7 @@
   async function run(url, options = {}) {
     await booting;
     if (!authorized) throw new Error('Entre na sua conta para continuar.');
+    if (!navigator.onLine) throw new Error('Sem conexão. Consulte a agenda salva e revise os rascunhos quando voltar.');
     const method = (options.method || 'GET').toUpperCase();
     const p = options.body ? JSON.parse(options.body) : {};
     const parts = url.split('/').filter(Boolean);
@@ -293,6 +302,33 @@
       if (method === 'PATCH') return unwrap(await sb.from('leituras_pendentes').update({ status: 'resolvido', atualizado_em: new Date().toISOString() }).eq('id', id).select().single());
       if (method === 'DELETE') { unwrap(await sb.from('leituras_pendentes').delete().eq('id', id)); return { ok: true }; }
     }
+    if (entity === 'contratos') {
+      if (!['admin','financeiro'].includes(currentRole)) throw new Error('Sem permissão para contratos.');
+      if (method === 'GET') return rows('contratos');
+      if (method === 'POST') return unwrap(await sb.rpc('direct_create_contract', { p: { ...p,
+        valor_recebido_centavos: money(p.valor_recebido), valor_pago_centavos: money(p.valor_pago) } }));
+    }
+    if (entity === 'ocorrencias') {
+      if (method === 'GET') return rows('ocorrencias');
+      if (!['admin','operacao'].includes(currentRole)) throw new Error('Sem permissão para ocorrências.');
+      if (method === 'POST') return unwrap(await sb.from('ocorrencias').insert({ pedido_id:p.pedido_id, escala_id:p.escala_id||null,tipo:p.tipo,descricao:p.descricao }).select().single());
+      if (method === 'PATCH') return unwrap(await sb.from('ocorrencias').update({ estado:'resolvida',resolucao:p.resolucao }).eq('id',id).select().single());
+    }
+    if (entity === 'operacao' && method === 'PATCH') {
+      const kind=parts[2], target=Number(parts[3]);
+      if (kind==='cobrancas') {
+        if (!['admin','financeiro'].includes(currentRole)) throw new Error('Sem permissão para conferir cobrança.');
+        unwrap(await sb.rpc('direct_review_invoice',{p_id:target,p})); return {ok:true};
+      }
+      if (!['admin','operacao'].includes(currentRole)) throw new Error('Sem permissão para operação.');
+      if (kind==='diaristas') return unwrap(await sb.from('diaristas').update({telefone:p.telefone,reserva:p.reserva,disponibilidade_confirmada_em:new Date().toISOString(),atualizado_em:new Date().toISOString()}).eq('id',target).select().single());
+      if (kind==='escalas') {
+        const values=p.acao==='confirmacao'?{confirmacao:p.confirmacao}:
+          p.acao==='validacao'?{chegada_em:p.chegada_em||null,saida_em:p.saida_em||null,loja_validacao:p.loja_validacao,loja_responsavel:p.loja_responsavel,loja_observacao:p.loja_observacao||''}:null;
+        if (!values) throw new Error('Ação inválida.');
+        return unwrap(await sb.from('pedido_escalas').update({...values,atualizado_em:new Date().toISOString()}).eq('id',target).select().single());
+      }
+    }
     if (entity === 'custos-extras') {
       if (!['admin', 'financeiro'].includes(currentRole)) throw new Error('Sem permissão para consultar custos.');
       if (method === 'GET') return rows('custos_extras');
@@ -339,7 +375,16 @@
         if (method === 'DELETE') { unwrap(await sb.from('pedido_escalas').delete().eq('pedido_id', id).eq('id', scaleId)); return { ok: true }; }
       }
       if (method === 'GET') return (await rows('pedidos')).sort((a,b) => b.id - a.id).map(orderView);
-      if (method === 'POST') return orderView(unwrap(await sb.from('pedidos').insert(orderPayload(p)).select().single()));
+      if (method === 'POST') {
+        const response=await sb.from('pedidos').insert(orderPayload(p)).select().single();
+        if (response.error?.code==='23505' && p.chave_operacao) {
+          const existing=unwrap(await sb.from('pedidos').select('*').eq('chave_operacao',p.chave_operacao).single());const sent=orderPayload(p);
+          const shifts=v=>JSON.stringify(v.map(t=>[t.data,t.inicio,t.fim]));
+          if(Object.keys(sent).some(k=>k!=='chave_operacao'&&(k==='turnos'?shifts(existing[k])!==shifts(sent[k]):existing[k]!==sent[k])))throw Error('Esse rascunho já foi enviado com outros dados. Confira o pedido existente antes de repetir.');
+          return orderView(existing);
+        }
+        return orderView(unwrap(response));
+      }
       if (method === 'PUT') return orderView(unwrap(await sb.from('pedidos').update({ ...orderPayload(p), atualizado_em: new Date().toISOString() }).eq('id', id).select().single()));
       if (method === 'DELETE') { unwrap(await sb.from('pedidos').delete().eq('id', id)); return { ok: true }; }
     }

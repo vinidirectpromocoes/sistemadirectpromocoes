@@ -52,9 +52,9 @@
     }
     const documentTask = pdfLibrary.getDocument({ data: new Uint8Array(await file.arrayBuffer()) });
     const pdf = await documentTask.promise;
-    if (pdf.numPages > 20) throw new Error(`${file.name}: o PDF ultrapassa 20 páginas.`);
     const pages = [];
     try {
+      if (pdf.numPages > 20) throw new Error(`${file.name}: o PDF ultrapassa 20 páginas.`);
       for (let index = 1; index <= pdf.numPages; index++) {
         feedback(`Lendo ${file.name} · página ${index} de ${pdf.numPages}...`);
         const page = await pdf.getPage(index);

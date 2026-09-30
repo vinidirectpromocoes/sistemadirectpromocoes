@@ -1,59 +1,77 @@
-# Relatório de qualidade — Direct Promoções
+# Entrega e verificação — operação Direct Promoções
 
-Data: 30/09/2026. Avaliação técnica: **9,0/10**, considerando o uso interno e o escopo testado. A nota é uma avaliação de engenharia, não certificação nem garantia de ausência de falhas.
+Data: 30/09/2026. Avaliação técnica provisória: **9,2/10** para o uso interno e o escopo verificado. É uma avaliação de engenharia; não é uma certificação ou garantia de ausência de falhas.
 
-## Melhorias entregues
+## Funcionalidades entregues
 
-| Frente | Resultado | Onde conferir |
+| Recurso | Onde usar | Integração e comportamento |
 | --- | --- | --- |
-| Conciliação operacional e financeira | Conferência por pedido e dia: vagas, escala, presença/falta, cobrança, recebimento e pagamento; alertas de divergência; carregamento de mais dias em lotes de 100 | Financeiro → Conciliação operacional e financeira |
-| Recuperação de backup | Exportação criptografada de 16 tabelas, compatível com cópias anteriores; ensaio que recria as tabelas reais do servidor local, confere contagens, vínculos e integridade; recusa sobrescrever uma base existente | Configurações → Cópia de segurança; scripts/restore_backup.py --operational |
-| Faltas e substituições | Justificativa obrigatória, autoria e horário definidos no banco publicado; histórico protegido contra alteração direta; nova escala vinculada à falta do mesmo pedido/dia | Pedidos → Ficha → Presença/falta |
-| Custos e resultado | Transporte, taxas e outros custos estimados por diária e rede; cards e gráfico incluem custos extras e resultado líquido estimado, além da margem bruta | Configurações → Custos extras; Financeiro → Previsão operacional |
-| Validação da publicação | Novos testes de conciliação incluídos no GitHub Actions, junto com backend, restauração e navegação | GitHub → Actions |
-| Uso móvel e carregamento | Leitura das escalas em lote, eliminando consultas individuais por pedido; paginação com ordenação estável; telas pequenas e orientação horizontal verificadas | Início, Pedidos e Financeiro |
+| Confirmação antecipada | Pedidos → abrir pedido → diarista escalada | Aguardando, confirmou ou recusou; autoria/hora no servidor; convite com endereço para copiar ao WhatsApp. Confirmar não registra presença nem gera pagamento. Recusa exige retirada explícita para liberar a vaga. |
+| Plantão e reservas | Início | Vagas, respostas e chegadas a conferir nos próximos sete dias. Reservas por setor/bairro; telefone e disponibilidade reconfirmada na ficha. Recomendações existentes continuam conferindo disponibilidade e conflitos. |
+| Validação da loja | Pedido → pessoa com presença → Validar atendimento | Responsável, resultado, observação, chegada/saída opcionais. Horários precisam pertencer ao dia e não podem estar no futuro. Validação é registrada pela equipe Direct, não por um novo login externo da loja. |
+| Contratos com versões | Configurações → Contratos e versões | Rede, loja opcional, setor opcional, vigência, valores, prazo e condições. Uma nova versão encerra a anterior quando necessário. Sobreposição da mesma abrangência é rejeitada; diárias já confirmadas preservam valor e contrato de origem. |
+| Ocorrências e qualidade | Pedido / Início | Atrasos, troca de setor, saída antecipada, reclamação, elogio e outros fatos; resolução separada, sem alterar descrição original. Vínculos protegidos contra exclusão do histórico. |
+| Demonstrativo e contestação | Financeiro → Demonstrativos e conferência | Itens por pedido, loja, pessoa, data, horário, substituição e validação; imprimir/salvar PDF; conferida/contestada com responsável e motivo. Não altera valor nem registra recebimento automaticamente. |
+| Repetição de pedidos | Abrir pedido → Repetir pedido | Escolhe nova data inicial e abre cadastro para revisão. Mantém intervalo e horários; não copia pessoas, presença nem pagamentos. |
+| Agenda e rascunhos offline | Início / novo pedido → Guardar rascunho | Shell estático e agenda mínima pré-carregada. Dados locais cifrados com AES-GCM e chave por sessão. Rascunho só é enviado depois de revisão e Salvar pedido; UUID evita duplicação por reenvio. Não há gravação financeira/presença offline. |
 
-Os custos extras iniciam em zero. Nenhum gasto da empresa foi presumido. O resultado líquido exibido é estimado e não inclui despesas ou impostos que não tenham sido cadastrados. Presenças mantêm os valores históricos de faturamento e diária; os extras usam a estimativa atual da rede.
+## Indicadores
 
-## Correções e comportamento conferido
+- Cobertura efetiva das diárias até hoje; vagas futuras não entram como atendimento realizado.
+- Confirmação antecipada no período escolhido.
+- Pontualidade apenas quando há chegada efetiva, mostrando separadamente horários desconhecidos.
+- Tempo médio de substituição somente quando existem horários válidos de falta e criação da substituta.
+- Presenças validadas e ocorrências abertas.
+- Histórico individual de presença, falta, atraso registrado, elogio e reclamação.
+- Cadastros sem telefone e disponibilidade sem reconfirmação há 30 dias.
+- Saldo vencido/contestado de cobranças, descontando recebimentos parciais.
+- Faturamento, custo de diárias, extras e líquido estimado por loja/setor, mantendo os cenários ideal e atualizado do financeiro.
 
-- Pedido e datas entram individualmente na previsão; exclusão, cancelamento, falta e substituição recalculam os cenários.
-- Cenário ideal conserva a hipótese de atendimento de todas as vagas; previsão atual desconta faltas sem atendimento substituto.
-- Recebimento parcial continua no nível da cobrança, sem afirmar que uma diária específica foi integralmente recebida.
-- Escala sem confirmação aparece como aguardando presença, sem afirmar que já existe obrigação financeira realizada.
-- Motivo/autoria da falta não podem ser adulterados junto com a atualização da substituta.
-- Custos aceitam zero e decimais; valores negativos, inválidos ou acima do limite são rejeitados.
-- Exportação/restauração inclui cobranças, recebimentos, lotes de pagamento e os novos custos extras.
-- Mais de 100 dias de conciliação podem ser consultados pelo botão de carregar mais.
+A projeção não substitui recebimento. Custos extras continuam sendo estimativas atuais por rede. Dados de presença/falta, pagamentos e recebimentos precisam ser registrados pela equipe. Sem esses registros, o sistema não presume pontualidade, presença ou quitação.
 
-## Testes executados
+## Testes e evidências
 
 | Verificação | Resultado e alcance |
 | --- | --- |
-| Backend e backup em Python | 22 testes aprovados: validações, conflitos de escala, bloqueio, presença/falta, tarifas, financeiro, cobranças, lotes, leitura pendente e restauração |
-| Regras em JavaScript | 12 testes aprovados: previsão, leitura, recomendação e conciliação |
-| Navegação automatizada | Chromium e WebKit: 1280×800, 390×844, 320×640 e 844×390; formulário, navegação e largura sem transbordamento nos cenários testados |
-| Perfis na interface | Admin, operação, financeiro e consulta em ambiente de teste com autenticação simulada; não equivale a sessões reais de cada perfil na produção |
-| Financeiro no navegador | Dois pedidos, cobrança, recebimento parcial, pagamento agrupado e custos extras; consultas de escala em lote |
-| Leitura/OCR | Revisão obrigatória com confiança simulada de 31%; registro e desfazer com 95%; parser de textos reais de pedidos. Não valida a precisão do OCR em toda foto/PDF real |
-| Recuperação | Cópia criptografada do navegador verificada e restaurada em SQLite isolado; teste separado com registros vinculados não vazios e consulta financeira após restauração |
-| Regras no Supabase publicado | Ensaios em transação com rollback: recusa falta sem motivo, associação de substituta e recusa adulteração do histórico. Sem registros fictícios mantidos |
-| Auditoria Supabase | Uma advertência de senha vazada desativada; sete informações de índices sem uso registrado. Sem novo aviso de RLS no relatório obtido |
+| Python/backend/backup | 27 testes aprovados: cadastro, CPF, disponibilidade, bloqueios, conflitos, escala em lote, presença/falta, valores, pagamentos, cobrança/recebimento, contratos, ocorrências e restauração. |
+| JavaScript/regras | 15 testes aprovados: previsão, conciliação, recomendação, leitura, contratos e indicadores. |
+| Navegação | Chromium e WebKit, 1280×800, 390×844, 320×640 e 844×390; sete abas, formulário, largura, foco e botão com altura reduzida simulando teclado. Não são aparelhos físicos. |
+| Perfis na interface | Admin, operação, financeiro e consulta com autenticação simulada no ambiente de teste. |
+| Perfis no banco publicado | Admin, operação, financeiro, consulta e visitante anônimo usando papéis Postgres/claims controladas. Permissões de leitura/escrita e RPC, autoria/horário, snapshot contratual, validação, ocorrência e conferência passaram em transação com rollback. Não equivale a entrar em contas Auth reais de cada perfil. |
+| Fluxo financeiro | Dois pedidos, cobrança conjunta, recebimento parcial e pagamento agrupado; projeções incluem custos extras e escalas em lote. |
+| Fluxo operacional ampliado | Botões de reserva, confirmação, validação, ocorrência/resolução, contrato, conferência/contestação, impressão, repetição e rascunho offline/revisão/envio passaram no navegador em 320px. |
+| Leitura real de arquivos | Tesseract/PDF.js sem simulação: PNG claro, PDF com texto e PDF digitalizado de teste foram processados. Arquivos sintéticos; não substituem documentos/fotos reais difíceis. |
+| OCR com pouca confiança | Testes controlados de 31% exigem revisão; 95% permitem registro e desfazer. Nenhuma afirmação de precisão universal. |
+| Backup v4 | 18 tabelas; restauração operacional local com contratos, ocorrências, escalas, diárias e cobrança vinculados. Senha incorreta e referência ausente rejeitadas. Cópias v1–v3 continuam aceitas. |
+| Offline | Rascunho guardado sem conexão, revisão/envio após reconexão, um pedido criado; IndexedDB contém dados cifrados; cache do service worker não contém respostas de API. |
+| Dependências | Auditoria pnpm executada; resultado sem vulnerabilidades registradas para as dependências instaladas. Não é auditoria formal de toda a cadeia de CDN. |
+| Supabase Security Advisor | Apenas aviso de proteção de senha vazada desativada; avisos novos das RPC privilegiadas eliminados com implementação privada e wrappers públicos sem privilégios elevados. |
+| Supabase Performance Advisor | 12 avisos informativos de índices sem uso observado. Índices recentes e de vínculos foram preservados. |
 
-A execução inicial do teste de recuperação no Mac falhou porque selecionou o Python do sistema sem a biblioteca cryptography. A repetição com o Python configurado passou; o CI instala a dependência explicitamente.
+Os ensaios no Supabase terminaram com **8 pedidos e zero diaristas, escalas, diárias, cobranças, contratos e ocorrências**, igual ao estado operacional anterior. Nenhuma conta fictícia de Auth foi criada. Três registros temporários de perfil também foram revertidos.
 
-## Limites e pendências verificáveis
+## Correções durante a verificação
 
-1. **Proteção obrigatória da branch main:** formulário preparado com PR obrigatório, teste `test`, branch atualizada e sem bypass administrativo. O GitHub pediu verificação de identidade por e-mail e não salvou a regra. Os testes rodam, mas a obrigatoriedade ainda não está ativa.
-2. **Aparelhos físicos:** testes usam Chromium/WebKit automatizados. Safari de iPhone e Chrome de Android reais, teclado do aparelho, rotação física e acessibilidade ainda não foram homologados. Os campos móveis usam tamanho apropriado para evitar zoom de foco, preservando o zoom manual de acessibilidade.
-3. **Recuperação integral do Supabase:** o ensaio recupera dados operacionais em base local utilizável. Ainda não foi ensaiada recriação de projeto Supabase, contas Auth e importação em Postgres hospedado isolado.
-4. **OCR real difícil:** fotos pouco legíveis, manuscritos e PDFs digitalizados podem precisar de revisão. Confiança do OCR não garante correção de todos os campos.
-5. **Senhas vazadas:** o recurso do Supabase permanece desativado. A documentação o limita ao plano Pro ou superior; nenhum plano pago foi contratado. Referência: https://supabase.com/docs/guides/auth/password-security#password-strength-and-leaked-password-protection
-6. **Volume:** removido o padrão de consulta individual por pedido; não há benchmark de milhares de pedidos nem ensaio de carga concorrente em produção.
-7. **Índices:** os sete avisos são informativos de ausência de uso observado; os índices foram preservados para evitar perda de desempenho em fluxos ainda pouco usados. Referência: https://supabase.com/docs/guides/database/database-linter?lint=0005_unused_index
+- Validação da loja é limpa quando a presença é revertida.
+- Timestamp de confirmação/disponibilidade é definido no servidor; contrato da diária não pode ser trocado por atualização direta.
+- Nova ocorrência não pode apontar uma escala de outro pedido; resolução preserva o registro original.
+- Recarregamento após gravação espera consultas anteriores para não conservar um painel desatualizado.
+- Salvamento do rascunho espera a conclusão da transação IndexedDB.
+- Valores, vigências, lojas, setores, telefone e horários recebem validação no servidor.
+- Layout dos novos cards e rodapés ajustado em telas estreitas, com campos de 16px no celular e redução de movimento respeitada.
+- Falha de conexão informa o uso da agenda anterior e mantém rascunhos para revisão.
+- PDF acima do limite também libera recursos do leitor ao ser rejeitado.
 
-## Avaliação
+## Limites que permanecem
 
-O sistema cobre os fluxos operacionais e financeiros testados e ganhou rastreabilidade e recuperação de dados mais úteis. Nenhum erro bloqueante permaneceu nos testes finais executados. Para sustentar uma avaliação maior, faltam sobretudo homologação em aparelhos reais, recuperação integral do ambiente hospedado, sessões reais de todos os perfis e proteção obrigatória do fluxo de publicação. Não é correto afirmar que todos os cenários possíveis funcionam perfeitamente.
+1. **iPhone físico:** o macOS recusou controle do Espelhamento. O usuário aceitou conferir no iPhone. Após a publicação: entrar no Safari, abrir Configurações → Conferência neste aparelho → Executar diagnóstico/baixar; conferir temas, teclado, rotação, formulário e escala. Resultado físico ainda pendente até receber a conferência.
+2. **Android físico:** nenhum aparelho conectado estava disponível. Emulação Chromium passou; homologação física permanece pendente.
+3. **Rascunhos:** a chave é por sessão. Revise/envie antes de sair ou fechar o navegador. Logout elimina dados locais; o recurso não é backup persistente.
+4. **Recuperação integral hospedada:** restauração operacional foi ensaiada em SQLite isolado. Não foram recriados projeto Supabase, contas Auth nem configurações de infraestrutura.
+5. **Branch main:** testes de CI existem, mas a proteção obrigatória depende da verificação de identidade solicitada pelo GitHub anteriormente. Não foi informada como ativada.
+6. **Senhas vazadas:** o recurso exige plano elegível do Supabase; não foi contratado serviço pago. [Referência](https://supabase.com/docs/guides/auth/password-security#password-strength-and-leaked-password-protection).
+7. **Volume e arquivos difíceis:** não houve carga de milhares de pedidos simultâneos nem validação de todos os tipos de fotos/manuscritos. O OCR local pode precisar de revisão e depende da internet para baixar os componentes na primeira leitura.
 
-Não foram contratados serviços pagos nem APIs de IA com cobrança por créditos.
+Não foram contratados serviços pagos ou créditos de IA. Nenhum erro bloqueante permaneceu nos cenários finais que foram executados. A nota pode ser revista após homologação física, recuperação integral hospedada e uso real com maior volume.
+
+Referências técnicas: [RLS e permissões](https://supabase.com/docs/guides/database/postgres/row-level-security), [Advisor de índices](https://supabase.com/docs/guides/database/database-linter?lint=0005_unused_index).

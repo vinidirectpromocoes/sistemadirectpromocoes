@@ -221,6 +221,7 @@ function openOrderForm(item = null) {
   window.directPendingForm = null;
   if ($('#order-detail-dialog').open) $('#order-detail-dialog').close();
   orderEditingId = item?.id ?? null;
+  window.directDraftId = null;
   $('#order-form').reset();
   $('#order-form-error').hidden = true;
   $('#order-form-title').textContent = item ? 'Editar pedido' : 'Novo pedido';
@@ -246,6 +247,7 @@ function orderFormData() {
     contato: $('#order-contact').value.trim(), setor: $('#order-sector').value.trim(),
     quantidade_diaristas: Number($('#order-quantity').value), situacao: $('#order-status').value,
     observacoes: $('#order-notes').value.trim(),
+    ...(window.directDraftId ? { chave_operacao: window.directDraftId } : {}),
     turnos: [...$('#order-shifts').children].map(row => ({
       data: row.querySelector('.order-shift-date').value,
       inicio: row.querySelector('.order-shift-start').value,
@@ -275,9 +277,11 @@ async function saveOrder(event) {
       method: orderEditingId ? 'PUT' : 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(data),
     });
     const edited = Boolean(orderEditingId);
+    await window.DirectOffline?.saved(window.directDraftId); window.directDraftId = null;
     const pendingError = await window.directResolvePendingForm?.('pedido');
     $('#order-dialog').close();
     await loadOrders();
+    if (typeof loadHome === 'function') loadHome().catch(() => {});
     showOrderFeedback(pendingError || (edited ? 'Pedido atualizado.' : 'Pedido registrado.'));
   } catch (err) { showOrderFormError(err.message); }
   finally { save.disabled = false; }
@@ -455,6 +459,7 @@ function renderOrderShifts() {
         remove.addEventListener('click', () => removeOrderWorker(scale)); actions.append(remove);
       }
       row.append(actions);
+      window.DirectOperations?.appendScale(row, scale);
       if (scale.status === 'presente' && (!window.directRemote || ['admin', 'financeiro'].includes(window.directRemote.role))) {
         const payment = document.createElement('div'); payment.className = 'order-payment-line';
         const label = document.createElement('span');
