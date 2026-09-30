@@ -87,12 +87,11 @@ async function runRoleNavigation() {
   const browser = await chromium.launch({ headless: true });
   try {
     for (const role of ['admin', 'operacao', 'financeiro', 'consulta']) {
-      let closing=false;
       const context = await browser.newContext({ acceptDownloads: true, serviceWorkers:'block' });
       await context.route(`https://direct.test:${port}/**`, async route => {
         const target = route.request().url().replace(`https://direct.test:${port}`, url.slice(0, -1));
         const response = await route.fetch({ url: target });
-        try { await route.fulfill({ response }); } catch (error) { if (!closing) throw error; }
+        await route.fulfill({ response });
       });
       await context.route('**/vendor/supabase-2.117.2.js', route => route.fulfill({
         contentType: 'text/javascript', body: `window.supabase={createClient:()=>({
@@ -140,7 +139,9 @@ async function runRoleNavigation() {
         console.log('Backup no navegador → verificação → SQLite operacional isolado OK');
       }
       console.log(`Perfil ${role}: navegação e ações visíveis OK`);
-      closing=true;await context.close();
+      await page.waitForLoadState('networkidle');
+      await context.unrouteAll({behavior:'wait'});
+      await context.close();
     }
   } finally { await browser.close(); }
 }

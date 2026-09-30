@@ -20,7 +20,7 @@ Atualização de 30/09/2026.
 - 27 testes Python: aprovação integral.
 - Suíte de navegação: Chromium e WebKit em 1280, 390, 320 e 844 pixels; sete abas, formulários, quatro perfis, leitura automática e backup.
 - Financeiro em navegador com dados isolados: duas diárias, filtros de dia/semana/mês/todos, período vazio, posição dos gráficos, largura em 320 pixels, temas, cobrança, recebimento parcial e pagamento em lote.
-- O teste de recarga aguarda requisições auxiliares antes da navegação, evitando interrupções de fetch no WebKit/Linux; a verificação de erros JavaScript segue ativa.
+- O teste de recarga aguarda requisições auxiliares antes da navegação, evitando interrupções de fetch no WebKit/Linux; os testes de perfis também encerram seus interceptadores só após terminar as requisições, sem ignorar erros. A verificação de erros JavaScript segue ativa.
 - Regressão de escala: um dia/todos os dias, cancelamento, botão visível com nome longo e persistência após recarregar em Chromium/WebKit, desktop e celular.
 - Inspeção visual de screenshots do financeiro no desktop e celular em tema escuro.
 
