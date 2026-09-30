@@ -9,11 +9,28 @@ let financeOpenGroupId = null;
 let financeForecastInput = null;
 let financeLoadSequence = 0;
 
+function financeForecastPeriod() {
+  const mode = $('#forecast-period').value;
+  return window.DirectForecast.periodRange(mode, mode === 'month' ? $('#finance-month').value : $('#forecast-date').value || financeToday());
+}
+
 function renderFinanceForecast() {
   if (!financeForecastInput) return;
-  const period = $('#forecast-period').value === 'month' ? $('#finance-month').value : '';
+  const period = financeForecastPeriod();
   const data = window.DirectForecast.calculate(financeForecastInput.orders, financeForecastInput.scales, financeForecastInput.tariffs, period);
   const count = (value, singular, plural) => `${value} ${value === 1 ? singular : plural}`;
+  const mode = $('#forecast-period').value;
+  $('#forecast-date-wrap').hidden = !['day', 'week'].includes(mode);
+  $('#forecast-period-note').textContent = typeof period === 'string'
+    ? period ? `Mês de referência: ${period.split('-').reverse().join('/')}` : 'Todos os pedidos registrados'
+    : period.start === period.end ? `Dia ${dateLabel(period.start)}` : `Semana de ${dateLabel(period.start)} a ${dateLabel(period.end)} · segunda a domingo`;
+  for (const [key, value] of [['revenue', data.confirmed.revenue], ['cost', data.confirmed.cost], ['profit', data.confirmed.net]])
+    $(`#confirmed-${key}`).textContent = moneyLabel(value);
+  $('#confirmed-count').textContent = count(data.present, 'diária com presença', 'diárias com presença');
+  $('#confirmed-extra-note').textContent = `Após ${moneyLabel(data.confirmed.extras)} de extras estimados`;
+  const confirmedWarning = $('#confirmed-warning');
+  confirmedWarning.hidden = !data.confirmedMissingRevenue && !data.confirmedMissingCost;
+  confirmedWarning.textContent = `${data.confirmedMissingRevenue} presença(s) sem faturamento e ${data.confirmedMissingCost} sem custo informado. Totais confirmados incluem apenas valores conhecidos.`;
   for (const [key, field] of [['revenue', 'revenue'], ['cost', 'cost'], ['margin', 'margin']]) {
     $(`#forecast-${key}`).textContent = moneyLabel(data.expected[field]);
     $(`#forecast-${key}-ideal`).textContent = `Cenário ideal: ${moneyLabel(data.ideal[field])}`;
@@ -34,6 +51,7 @@ function renderFinanceForecast() {
   $('#forecast-presence-note').textContent = `${count(data.byOrder.length, 'pedido', 'pedidos')} · ${count(data.demand, 'diária solicitada', 'diárias solicitadas')} · ${count(data.expectedDays, 'prevista', 'previstas')} · ${count(data.present, 'presença', 'presenças')} · ${count(data.absent, 'falta', 'faltas')}`;
   $('#forecast-orders-summary').textContent = `Conferir ${count(data.byOrder.length, 'pedido incluído', 'pedidos incluídos')}`;
   if (typeof window.renderReconciliation === 'function') window.renderReconciliation();
+  window.DirectOperations?.renderStoreResults(financeForecastInput);
   const orderList = $('#forecast-orders-list'); orderList.replaceChildren();
   if (!data.byOrder.length) orderList.textContent = 'Nenhum pedido neste período.';
   data.byOrder.forEach(order => {
@@ -576,6 +594,7 @@ function showPage() {
 }
 
 $('#finance-month').value = financeToday().slice(0, 7);
+$('#forecast-date').value = financeToday();
 $('#new-finance-button').addEventListener('click', () => openFinanceForm());
 $('#finance-close-button').addEventListener('click', () => $('#finance-dialog').close());
 $('#finance-cancel-button').addEventListener('click', () => $('#finance-dialog').close());
@@ -589,6 +608,14 @@ $('#finance-type').addEventListener('change', updateFinanceType);
 $('#finance-month').addEventListener('change', renderFinance);
 $('#finance-all-months').addEventListener('change', renderFinance);
 $('#forecast-period').addEventListener('change', renderFinanceForecast);
+$('#forecast-date').addEventListener('change', renderFinanceForecast);
+for (const [id, mode] of [['forecast-today', 'day'], ['forecast-week', 'week']]) {
+  $(`#${id}`).addEventListener('click', () => {
+    $('#forecast-date').value = financeToday();
+    $('#forecast-period').value = mode;
+    renderFinanceForecast();
+  });
+}
 window.addEventListener('focus', () => { if (!$('#financeiro-page').hidden) loadFinance(); });
 document.addEventListener('visibilitychange', () => { if (!document.hidden && !$('#financeiro-page').hidden) loadFinance(); });
 $('#finance-search').addEventListener('input', renderFinance);

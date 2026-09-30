@@ -138,7 +138,7 @@
         <div><div class="eyebrow">GESTÃO <span>/</span> FINANCEIRO</div><h1>Financeiro</h1><p>Acompanhe entradas, pagamentos e pendências da empresa.</p></div>
         <div class="finance-header-actions"><button class="button button-outline" id="finance-audit-button" type="button" aria-label="Histórico de alterações" title="Histórico de alterações"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 12a9 9 0 1 0 2.6-6.4M3 4v4h4M12 7v5l3 2"/></svg><span class="button-label">Histórico de alterações</span></button><button class="button button-primary" id="new-finance-button" type="button" aria-label="Novo lançamento" title="Novo lançamento"><span aria-hidden="true">＋</span><span class="button-label">Novo lançamento</span></button></div>
       </header>
-      <div class="finance-period-bar"><label for="finance-month">Mês de referência</label><input id="finance-month" type="month"><label class="finance-all-months"><input id="finance-all-months" type="checkbox"> Ver todos os meses</label></div>
+      <div class="finance-period-bar"><label for="finance-month">Caixa e lançamentos · mês</label><input id="finance-month" type="month"><label class="finance-all-months"><input id="finance-all-months" type="checkbox"> Ver todos os meses</label></div>
       <section class="finance-stats" aria-label="Resumo financeiro">
         <div class="finance-stat"><span>Entradas no mês</span><strong id="finance-in">R$ 0,00</strong></div>
         <div class="finance-stat"><span>Saídas no mês</span><strong id="finance-out">R$ 0,00</strong></div>
@@ -147,19 +147,37 @@
         <div class="finance-stat"><span>A pagar · total</span><strong id="finance-payable">R$ 0,00</strong></div>
       </section>
       <section class="forecast-section" aria-labelledby="forecast-title">
-        <div class="finance-dashboard-heading"><div><span class="eyebrow">PEDIDOS E PRESENÇAS</span><h2 id="forecast-title">Previsão operacional</h2><p>Cada pedido e cada diária solicitada entram na previsão. Faltas sem substituição reduzem a previsão atual. Margem bruta antes de outros custos.</p></div><label class="forecast-period-label">Período da previsão<select id="forecast-period"><option value="all">Todos os pedidos</option><option value="month">Mês selecionado</option></select></label></div>
+        <div class="finance-dashboard-heading"><div><span class="eyebrow">PEDIDOS E PRESENÇAS</span><h2 id="forecast-title">Faturamento e lucro</h2><p>Presenças confirmadas e previsão de atendimento. Faltas sem substituição reduzem a previsão; pedidos excluídos saem do cálculo.</p></div><div class="forecast-controls"><label class="forecast-period-label">Período operacional<select id="forecast-period"><option value="all">Todos os pedidos</option><option value="day">Dia selecionado</option><option value="week">Semana selecionada</option><option value="month">Mês do caixa</option></select></label><label id="forecast-date-wrap" class="forecast-period-label" hidden>Data de referência<input id="forecast-date" type="date"></label><div class="forecast-shortcuts"><button id="forecast-today" class="button button-outline" type="button">Hoje</button><button id="forecast-week" class="button button-outline" type="button">Esta semana</button></div></div></div>
+        <p id="forecast-period-note" class="forecast-period-note" aria-live="polite">Todos os pedidos registrados</p>
+        <div class="forecast-cards confirmed-cards" aria-label="Valores das presenças confirmadas">
+          <article class="finance-stat forecast-card"><span>Faturamento confirmado</span><strong id="confirmed-revenue">R$ 0,00</strong><small>Serviços com presença registrada</small></article>
+          <article class="finance-stat forecast-card"><span>Custo das diárias confirmadas</span><strong id="confirmed-cost">R$ 0,00</strong><small id="confirmed-count">0 diárias com presença</small></article>
+          <article class="finance-stat forecast-card emphasis"><span>Lucro confirmado · estimado</span><strong id="confirmed-profit">R$ 0,00</strong><small id="confirmed-extra-note">Após extras estimados</small></article>
+        </div>
+        <p class="section-help confirmed-help">Confirmado significa presença registrada, mesmo antes do recebimento ou pagamento. O lucro desconta diárias e extras estimados, antes de outras despesas da empresa. O caixa realizado aparece no resumo acima.</p>
+        <div id="confirmed-warning" class="finance-warning" role="status" hidden></div>
+        <h3 class="forecast-subtitle">Previsão para o período</h3>
         <div class="forecast-cards">
           <article class="finance-stat forecast-card"><span>Faturamento previsto</span><strong id="forecast-revenue">R$ 0,00</strong><small id="forecast-revenue-ideal">Cenário ideal: R$ 0,00</small></article>
           <article class="finance-stat forecast-card"><span>Custo previsto com diárias</span><strong id="forecast-cost">R$ 0,00</strong><small id="forecast-cost-ideal">Cenário ideal: R$ 0,00</small></article>
-          <article class="finance-stat forecast-card emphasis"><span>Margem bruta prevista</span><strong id="forecast-margin">R$ 0,00</strong><small id="forecast-margin-ideal">Cenário ideal: R$ 0,00</small></article>
+          <article class="finance-stat forecast-card emphasis"><span>Lucro bruto previsto</span><strong id="forecast-margin">R$ 0,00</strong><small id="forecast-margin-ideal">Cenário ideal: R$ 0,00</small></article>
           <article class="finance-stat forecast-card"><span>Custos extras estimados</span><strong id="forecast-extra">R$ 0,00</strong><small>Transporte, taxas e outros por diária</small></article>
-          <article class="finance-stat forecast-card emphasis"><span>Resultado líquido estimado</span><strong id="forecast-net">R$ 0,00</strong><small>Antes de despesas não cadastradas</small></article>
+          <article class="finance-stat forecast-card emphasis"><span>Lucro previsto · após extras</span><strong id="forecast-net">R$ 0,00</strong><small>Antes de despesas não cadastradas</small></article>
         </div>
         <div id="forecast-warning" class="finance-warning" hidden></div>
         <div class="forecast-visuals">
           <article class="finance-chart-card"><h3>Composição da previsão</h3><div id="forecast-ring" class="forecast-ring" role="img" aria-label="Diárias, custos extras e resultado líquido estimado"><span id="forecast-ring-total">R$ 0,00</span></div><div class="forecast-key"><span>● Diárias</span><span>● Extras</span><span>● Líquido estimado</span></div><p id="forecast-presence-note">0 presenças · 0 faltas</p></article>
           <article class="finance-chart-card"><h3>Previsão por rede</h3><div id="forecast-networks" class="forecast-networks"></div></article>
         </div>
+      </section>
+      <section class="finance-dashboard" aria-labelledby="finance-dashboard-title">
+        <div class="finance-dashboard-heading"><div><span class="eyebrow">VISÃO GERAL</span><h2 id="finance-dashboard-title">Dashboard financeira</h2><p>Toque em uma fatia ou legenda para filtrar os lançamentos.</p></div><button id="finance-clear-filters" class="button button-quiet" type="button" hidden>Limpar filtros</button></div>
+        <div class="finance-chart-grid">
+          <article class="finance-chart-card"><div><h3>Entradas e saídas</h3><p>Valores conhecidos no período</p></div><div class="finance-chart-body"><div id="finance-type-chart" class="finance-donut" aria-label="Distribuição de entradas e saídas"></div><div id="finance-type-legend" class="finance-chart-legend"></div></div></article>
+          <article class="finance-chart-card"><div><h3>Pagamentos</h3><p>Quantidade de lançamentos</p></div><div class="finance-chart-body"><div id="finance-status-chart" class="finance-donut" aria-label="Distribuição de pagamentos"></div><div id="finance-status-legend" class="finance-chart-legend"></div></div></article>
+        </div>
+      </section>
+      <section class="list-card forecast-order-section" aria-label="Pedidos incluídos na previsão">
         <details class="forecast-orders"><summary id="forecast-orders-summary">Conferir pedidos incluídos</summary><div id="forecast-orders-list"></div></details>
       </section>
       <section class="list-card workflow-section" aria-labelledby="invoice-title">
@@ -175,13 +193,6 @@
         <div class="list-top"><div><span class="eyebrow">CONFERÊNCIA POR DIÁRIA</span><h2 id="reconciliation-title">Conciliação operacional e financeira</h2><p>Do pedido ao recebimento e pagamento. Recebimentos parciais aparecem no nível da cobrança.</p></div></div>
         <p id="reconciliation-summary" class="section-help"></p>
         <div id="reconciliation-list" class="workflow-list"></div>
-      </section>
-      <section class="finance-dashboard" aria-labelledby="finance-dashboard-title">
-        <div class="finance-dashboard-heading"><div><span class="eyebrow">VISÃO GERAL</span><h2 id="finance-dashboard-title">Dashboard financeira</h2><p>Toque em uma fatia ou legenda para filtrar os lançamentos.</p></div><button id="finance-clear-filters" class="button button-quiet" type="button" hidden>Limpar filtros</button></div>
-        <div class="finance-chart-grid">
-          <article class="finance-chart-card"><div><h3>Entradas e saídas</h3><p>Valores conhecidos no período</p></div><div class="finance-chart-body"><div id="finance-type-chart" class="finance-donut" aria-label="Distribuição de entradas e saídas"></div><div id="finance-type-legend" class="finance-chart-legend"></div></div></article>
-          <article class="finance-chart-card"><div><h3>Pagamentos</h3><p>Quantidade de lançamentos</p></div><div class="finance-chart-body"><div id="finance-status-chart" class="finance-donut" aria-label="Distribuição de pagamentos"></div><div id="finance-status-legend" class="finance-chart-legend"></div></div></article>
-        </div>
       </section>
       <div id="finance-warning" class="finance-warning" hidden></div>
       <section class="list-card finance-list" aria-labelledby="finance-list-title">

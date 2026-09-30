@@ -11,7 +11,8 @@
     for (const order of orders || []) {
       const scales = scalesByOrder?.[order.id] || [];
       for (const shift of order.turnos || []) {
-        if (month && !shift.data.startsWith(month)) continue;
+        if (typeof month === 'string' ? month && !shift.data.startsWith(month)
+          : (month.start && shift.data < month.start) || (month.end && shift.data > month.end)) continue;
         const dayScales = scales.filter(item => item.data === shift.data);
         const active = dayScales.filter(item => item.status !== 'falta');
         const present = dayScales.filter(item => item.status === 'presente');

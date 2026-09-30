@@ -1,5 +1,5 @@
 const assert = require('node:assert/strict');
-const { calculate } = require('../static/forecast.js');
+const { calculate, periodRange, includesDate } = require('../static/forecast.js');
 
 const tariffs = { redes: [{ rede: 'Super do Povo', valor_recebido_centavos: 13400, valor_padrao_centavos: 9000 }],
   setores: [{ rede: 'Super do Povo', setor: 'FLV', valor_pago_centavos: 9500 }] };
@@ -59,3 +59,31 @@ assert.equal(result.expected.revenue, 54 * 13400, 'falta reduz o faturamento pre
 assert.equal(calculate([secondOrder], { 11: [scale(1, '2026-10-01', 'falta')] }, tariffs).demand, 48, 'pedido excluído sai do total');
 assert.equal(calculate([{ ...secondOrder, situacao: 'cancelado' }], {}, tariffs).demand, 0, 'pedido cancelado sai do total');
 console.log('Forecast: cenários de pedidos, exclusão, falta e período passaram.');
+
+// Dia e semana usam datas do serviço, inclusive semanas entre dois meses/anos.
+assert.deepEqual(periodRange('day', '2026-09-30'), {start:'2026-09-30', end:'2026-09-30'});
+assert.deepEqual(periodRange('week', '2026-09-30'), {start:'2026-09-28', end:'2026-10-04'});
+assert.deepEqual(periodRange('week', '2026-10-04'), {start:'2026-09-28', end:'2026-10-04'});
+assert.deepEqual(periodRange('week', '2027-01-01'), {start:'2026-12-28', end:'2027-01-03'});
+assert.equal(includesDate('2026-10-05', periodRange('week','2026-09-30')), false);
+const confirmedOrder = {...firstOrder, id:20};
+const confirmedRates = {redes:[{rede:'Super do Povo',valor_recebido_centavos:13400,valor_padrao_centavos:9000}]};
+const confirmedScales = {20:['2026-09-29','2026-09-30'].map((data,index)=>scale(index+1,data,'presente',{valor_recebido_centavos:13400,valor_centavos:9000}))};
+result = calculate([confirmedOrder],confirmedScales,confirmedRates);
+assert.deepEqual(result.confirmed,{revenue:26800,cost:18000,extras:0,margin:8800,net:8800});
+result = calculate([confirmedOrder],confirmedScales,confirmedRates,periodRange('day','2026-09-30'));
+assert.deepEqual(result.confirmed,{revenue:13400,cost:9000,extras:0,margin:4400,net:4400});
+assert.equal(result.expected.revenue,13400);
+result = calculate([confirmedOrder],confirmedScales,confirmedRates,periodRange('week','2026-09-30'));
+assert.equal(result.demand,6);
+assert.equal(result.confirmed.net,8800);
+assert.equal(result.expected.revenue,80400);
+const absentScales={20:[confirmedScales[20][0],scale(2,'2026-09-30','falta')]};
+result=calculate([confirmedOrder],absentScales,confirmedRates,periodRange('week','2026-09-30'));
+assert.equal(result.confirmed.net,4400);
+assert.equal(result.expected.revenue,67000);
+assert.equal(calculate([],confirmedScales,confirmedRates).confirmed.revenue,0);
+result=calculate([confirmedOrder],{20:[scale(1,'2026-09-30','presente')]},{},periodRange('day','2026-09-30'));
+assert.equal(result.confirmedMissingRevenue,1);
+assert.equal(result.confirmedMissingCost,1);
+console.log('Cards confirmados e períodos dia/semana: OK');

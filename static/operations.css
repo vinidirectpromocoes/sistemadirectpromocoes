@@ -72,3 +72,15 @@ html[data-theme="dark"] .staff-form, html[data-theme="dark"] .staff-row { border
 .day-times[hidden] { display: none; }
 .reading-identified pre { max-height: 230px; overflow: auto; margin: 8px 0 0; padding: 10px; border-radius: 9px; background: #d8e7fa66; white-space: pre-wrap; overflow-wrap: anywhere; }
 html[data-theme="dark"] .reading-identified pre { background: var(--dark-field); color: var(--dark-text); }
+
+.forecast-controls { display: flex; flex-wrap: wrap; align-items: end; justify-content: flex-end; gap: 10px; max-width: 430px; }
+.forecast-controls .forecast-period-label { flex: 1 1 180px; min-width: 0; }
+.forecast-period-label input { display: block; width: 100%; min-width: 0; margin-top: 5px; border: 1px solid var(--line, #dce5f2); border-radius: 9px; padding: 8px 10px; background: var(--surface, #fff); color: inherit; font-size: 16px; }
+.forecast-shortcuts { display: flex; flex-wrap: wrap; gap: 8px; }
+.forecast-period-note { color: inherit; font-size: .86rem; font-weight: 700; margin: 0 0 14px; }
+.confirmed-cards { margin-bottom: 10px; }
+.confirmed-help { margin-bottom: 20px; }
+.forecast-subtitle { font-size: 1rem; margin: 20px 0 12px; }
+.forecast-order-section .forecast-orders { margin-top: 0; border-top: 0; padding-top: 0; }
+html[data-theme="dark"] .forecast-period-label input { background: var(--dark-field); color: var(--dark-text); border-color: var(--dark-border); color-scheme: dark; }
+@media (max-width: 720px) { .forecast-controls { max-width: none; width: 100%; justify-content: flex-start; } .forecast-controls select { font-size: 16px; } .forecast-shortcuts { width: 100%; } }

@@ -1,13 +1,28 @@
 /* Cálculos puros: pedidos, escalas e tarifas. Valores sempre em centavos. */
 (() => {
   const norm = value => String(value || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').trim().toLowerCase();
-  function calculate(orders, scalesByOrder, tariffs, month = '') {
+  function periodRange(mode, anchor) {
+    if (mode === 'all') return '';
+    if (mode === 'month') return anchor.slice(0, 7);
+    const date = new Date(`${anchor}T12:00:00Z`);
+    if (!Number.isFinite(date.getTime())) return '';
+    if (mode === 'day') return { start: anchor, end: anchor };
+    date.setUTCDate(date.getUTCDate() - (date.getUTCDay() + 6) % 7);
+    const start = date.toISOString().slice(0, 10);
+    date.setUTCDate(date.getUTCDate() + 6);
+    return { start, end: date.toISOString().slice(0, 10) };
+  }
+  function includesDate(day, period = '') {
+    return typeof period === 'string' ? !period || day.startsWith(period)
+      : (!period.start || day >= period.start) && (!period.end || day <= period.end);
+  }
+  function calculate(orders, scalesByOrder, tariffs, period = '') {
     const result = {
       ideal: { revenue: 0, cost: 0, extras: 0, margin: 0, net: 0 },
       expected: { revenue: 0, cost: 0, extras: 0, margin: 0, net: 0 },
       confirmed: { revenue: 0, cost: 0, extras: 0, margin: 0, net: 0 },
       demand: 0, expectedDays: 0, present: 0, absent: 0, open: 0,
-      missingRevenue: 0, missingCost: 0, byNetwork: [], byOrder: [],
+      missingRevenue: 0, missingCost: 0, confirmedMissingRevenue: 0, confirmedMissingCost: 0, byNetwork: [], byOrder: [],
     };
     const networks = new Map();
     for (const order of orders || []) {
@@ -29,7 +44,7 @@
       };
       const scales = scalesByOrder?.[order.id] || [];
       for (const shift of order.turnos || []) {
-        if (month && !shift.data.startsWith(month)) continue;
+        if (!includesDate(shift.data, period)) continue;
         const chosenContract = (typeof window !== 'undefined' ? window.DirectInsights : require('./insights.js'))?.contract(tariffs?.contratos, order, shift.data);
         const currentRevenue = chosenContract?.valor_recebido_centavos ?? baseRevenue;
         const currentCost = chosenContract?.valor_pago_centavos ?? baseCost;
@@ -76,7 +91,9 @@
           const revenue = scale.diaria?.valor_recebido_centavos ?? currentRevenue;
           const cost = scale.diaria?.valor_centavos ?? currentCost;
           if (revenue != null) result.confirmed.revenue += revenue;
+          else result.confirmedMissingRevenue++;
           if (cost != null) result.confirmed.cost += cost;
+          else result.confirmedMissingCost++;
           result.confirmed.extras += extraPerDay;
         }
         for (const scale of forecastPresent) {
@@ -102,6 +119,6 @@
       net: item.revenue - item.cost - item.extras })).sort((a, b) => b.revenue - a.revenue);
     return result;
   }
-  if (typeof window !== 'undefined') window.DirectForecast = { calculate };
-  if (typeof module !== 'undefined') module.exports = { calculate };
+  if (typeof window !== 'undefined') window.DirectForecast = { calculate, periodRange, includesDate };
+  if (typeof module !== 'undefined') module.exports = { calculate, periodRange, includesDate };
 })();
