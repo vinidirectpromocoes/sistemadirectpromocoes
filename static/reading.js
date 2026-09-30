@@ -313,6 +313,7 @@
     } catch (error) { const area = pick('#reading-pending-items'); area.textContent = `Não foi possível carregar as pendências: ${error.message}`; }
     finally { loadingPending = false; }
   }
+  window.DirectReading={complete:item=>item.tipo==='diarista'?fillDiarista(item.dados,item.id):fillPedido(item.dados,item.id)};
   window.directResolvePendingForm = async tipo => {
     const current = window.directPendingForm;
     if (!current || current.tipo !== tipo) return null;

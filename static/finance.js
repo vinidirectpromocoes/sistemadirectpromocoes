@@ -570,13 +570,13 @@ async function openFinanceAudit() {
 }
 
 function showPage() {
-  let page = ['inicio', 'diaristas', 'financeiro', 'pedidos', 'leitura', 'redes', 'configuracoes'].includes(window.location.hash.slice(1)) ? window.location.hash.slice(1) : 'inicio';
+  let page = ['inicio', 'crm', 'diaristas', 'financeiro', 'pedidos', 'leitura', 'redes', 'configuracoes'].includes(window.location.hash.slice(1)) ? window.location.hash.slice(1) : 'inicio';
   const role = window.directRemote?.role;
   if (role && ({ financeiro: ['admin', 'financeiro'], configuracoes: ['admin', 'financeiro'], leitura: ['admin', 'operacao'], diaristas: ['admin', 'financeiro', 'operacao'] }[page] || ['admin', 'financeiro', 'operacao', 'consulta']).includes(role) === false) {
     page = 'inicio';
     if (location.hash !== '#inicio') location.hash = '#inicio';
   }
-  for (const name of ['inicio', 'diaristas', 'pedidos', 'leitura', 'redes', 'financeiro', 'configuracoes']) {
+  for (const name of ['inicio', 'crm', 'diaristas', 'pedidos', 'leitura', 'redes', 'financeiro', 'configuracoes']) {
     const active = name === page;
     $(`#${name}-page`).hidden = !active;
     const link = $(`#nav-${name}`);
@@ -584,9 +584,9 @@ function showPage() {
     if (active) link.setAttribute('aria-current', 'page');
     else link.removeAttribute('aria-current');
   }
-  document.title = `${{ inicio: 'Início', diaristas: 'Diaristas', pedidos: 'Pedidos', leitura: 'Leitura IA', redes: 'Redes e lojas', financeiro: 'Financeiro', configuracoes: 'Configurações' }[page]} | Direct Promoções`;
+  document.title = `${{ inicio: 'Início', crm: 'CRM', diaristas: 'Diaristas', pedidos: 'Pedidos', leitura: 'Leitura IA', redes: 'Redes e lojas', financeiro: 'Financeiro', configuracoes: 'Configurações' }[page]} | Direct Promoções`;
   window.scrollTo(0, 0);
-  if (page === 'inicio') loadHome();
+  if (page === 'inicio' || page === 'crm') loadHome();
   if (page === 'financeiro') loadFinance();
   if (page === 'pedidos' && typeof loadOrders === 'function') loadOrders();
   if (page === 'redes' && typeof loadStores === 'function') loadStores();

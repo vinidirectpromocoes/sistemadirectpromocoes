@@ -30,6 +30,7 @@
   function showApp(role) {
     authorized = true;
     currentRole = role;
+    window.DirectHub?.prepare();
     setTimeout(()=>window.dispatchEvent(new Event('direct:authorized')),0);
     document.body.dataset.role = role;
     screen.hidden = true;
@@ -294,7 +295,7 @@
       }, { onConflict: 'email' }).select().single());
     }
     if (entity === 'leituras-pendentes') {
-      if (method === 'GET') return unwrap(await sb.from('leituras_pendentes').select('*').order('id', { ascending: false }).limit(500));
+      if (method === 'GET') return (await rows('leituras_pendentes')).sort((a,b)=>b.id-a.id);
       if (method === 'POST') return unwrap(await sb.from('leituras_pendentes').upsert({
         tipo: p.tipo, chave: p.chave, dados: p.dados, texto: p.texto, faltando: p.faltando,
         avisos: p.avisos || [], status: 'pendente', atualizado_em: new Date().toISOString()
