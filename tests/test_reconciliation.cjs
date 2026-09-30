@@ -37,3 +37,10 @@ result = build([order], shifts, finance, [invoice], '', '2026-09-30');
 assert.equal(result.summary.collected, 1);
 assert.equal(result.summary.paid, 1);
 console.log('Conciliação, substituição, recebimento parcial e líquido: OK');
+
+result = build([order], shifts, finance, [invoice], {start:'2026-09-30',end:'2026-09-30'}, '2026-09-30');
+assert.equal(result.rows.length,1);
+assert.equal(result.summary.present,0);
+result = build([order], shifts, finance, [invoice], {start:'2026-09-28',end:'2026-10-04'}, '2026-09-30');
+assert.equal(result.summary.present,1);
+assert.equal(result.summary.paid,1);

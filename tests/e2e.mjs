@@ -87,12 +87,11 @@ async function runRoleNavigation() {
   const browser = await chromium.launch({ headless: true });
   try {
     for (const role of ['admin', 'operacao', 'financeiro', 'consulta']) {
-      let closing=false;
       const context = await browser.newContext({ acceptDownloads: true, serviceWorkers:'block' });
       await context.route(`https://direct.test:${port}/**`, async route => {
         const target = route.request().url().replace(`https://direct.test:${port}`, url.slice(0, -1));
         const response = await route.fetch({ url: target });
-        try { await route.fulfill({ response }); } catch (error) { if (!closing) throw error; }
+        await route.fulfill({ response });
       });
       await context.route('**/vendor/supabase-2.117.2.js', route => route.fulfill({
         contentType: 'text/javascript', body: `window.supabase={createClient:()=>({
@@ -140,7 +139,9 @@ async function runRoleNavigation() {
         console.log('Backup no navegador → verificação → SQLite operacional isolado OK');
       }
       console.log(`Perfil ${role}: navegação e ações visíveis OK`);
-      closing=true;await context.close();
+      await page.waitForLoadState('networkidle');
+      await context.unrouteAll({behavior:'wait'});
+      await context.close();
     }
   } finally { await browser.close(); }
 }
@@ -228,10 +229,50 @@ async function runFinancialWorkflow() {
     const scaleRequests = [];
     page.on('request', request => { if (/\/api\/(?:pedidos\/\d+\/)?escalas/.test(request.url())) scaleRequests.push(request.url()); });
     await page.goto(`${url}#financeiro`, { waitUntil: 'domcontentloaded' });
-    await page.getByText('Resultado líquido estimado').waitFor();
+    await page.getByText('Lucro previsto · após extras', {exact:true}).waitFor();
     assert.ok(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth + 2),
       'Financeiro com dados não deve criar rolagem horizontal no celular');
     assert.match(await page.locator('#forecast-net').innerText(), /78,00/);
+    assert.match(await page.locator('#confirmed-revenue').innerText(), /268,00/);
+    assert.match(await page.locator('#confirmed-cost').innerText(), /180,00/);
+    assert.match(await page.locator('#confirmed-profit').innerText(), /78,00/);
+    assert.equal(await page.evaluate(() => {
+      const charts = [...document.querySelectorAll('#financeiro-page .finance-dashboard, #financeiro-page .forecast-visuals')];
+      const lists = [...document.querySelectorAll('#financeiro-page .workflow-section, #financeiro-page .forecast-order-section, #financeiro-page .finance-list')];
+      return charts.every(chart => lists.every(list => Boolean(chart.compareDocumentPosition(list) & Node.DOCUMENT_POSITION_FOLLOWING)));
+    }), true, 'Todos os gráficos devem aparecer antes das listas');
+    await page.locator('#forecast-period').selectOption('day');
+    await page.locator('#forecast-date').fill('2026-09-28');
+    assert.match(await page.locator('#confirmed-revenue').innerText(), /134,00/);
+    assert.match(await page.locator('#confirmed-cost').innerText(), /90,00/);
+    assert.match(await page.locator('#confirmed-profit').innerText(), /39,00/);
+    assert.match(await page.locator('#forecast-net').innerText(), /39,00/);
+    assert.match(await page.locator('#reconciliation-summary').innerText(), /1 presença/);
+    await page.locator('#forecast-period').selectOption('week');
+    assert.match(await page.locator('#forecast-period-note').innerText(), /28\/09\/2026 a 04\/10\/2026/);
+    assert.match(await page.locator('#confirmed-revenue').innerText(), /134,00/);
+    await page.locator('#forecast-period').selectOption('day');
+    await page.locator('#forecast-date').fill('2026-09-27');
+    assert.match(await page.locator('#confirmed-revenue').innerText(), /0,00/);
+    assert.match(await page.locator('#forecast-net').innerText(), /0,00/);
+    await page.locator('#forecast-today').click();
+    assert.equal(await page.locator('#forecast-period').inputValue(), 'day');
+    await page.locator('#forecast-week').click();
+    assert.equal(await page.locator('#forecast-period').inputValue(), 'week');
+    await page.locator('#forecast-period').selectOption('month');
+    await page.locator('#finance-month').fill('2026-09');
+    assert.match(await page.locator('#confirmed-revenue').innerText(), /268,00/);
+    await page.locator('#forecast-period').selectOption('all');
+    await page.setViewportSize({width:320,height:700});
+    assert.ok(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth + 2), 'Cards confirmados não devem transbordar em 320px');
+    assert.ok(await page.locator('#forecast-date').evaluate(e => parseFloat(getComputedStyle(e).fontSize)) >= 16, 'Campo de data não deve induzir zoom');
+    await page.locator('#theme-toggle').click();
+    await page.screenshot({path:path.join(root,'.design-qa/financeiro-dashboard-mobile-dark.png'),fullPage:true,animations:'disabled'});
+    await page.locator('#theme-toggle').click();
+    await page.setViewportSize({width:1280,height:900});
+    await page.screenshot({path:path.join(root,'.design-qa/financeiro-dashboard-desktop.png'),fullPage:true,animations:'disabled'});
+    await page.setViewportSize({width:390,height:844});
+
     await page.locator('#invoice-new').click();
     await page.locator('#invoice-network').selectOption('Super do Povo');
     await page.locator('#invoice-start').fill('2026-09-21');
@@ -357,6 +398,8 @@ async function runAssignmentPersistence() {
         } else await page.locator('#order-detail-success').waitFor({state:'visible'});
         assert.equal((await api('GET',`/api/pedidos/${order.id}/escalas`)).length,1);
         if (simulateRefreshFailure) {
+          // Aguarda os controles auxiliares para não abortar fetches no WebKit/Linux ao recarregar.
+          await page.waitForLoadState('networkidle');
           await page.reload(); await page.locator('#orders-rows tr').filter({hasText:'Repositor de FLV'}).filter({hasText:firstDateLabel}).getByRole('button').click();
           await cards.first().locator('.order-worker-row').waitFor();
         }
@@ -364,7 +407,9 @@ async function runAssignmentPersistence() {
         await page.getByRole('button',{name:'Todos os dias possíveis (6)',exact:true}).click();
         await page.getByText('Diarista escalada em 6 dias deste pedido.',{exact:true}).waitFor();
         assert.equal((await api('GET',`/api/pedidos/${order.id}/escalas`)).length,7);
-        await page.reload(); await page.locator('#orders-rows tr').filter({hasText:'Repositor de FLV'}).filter({hasText:firstDateLabel}).getByRole('button').click();
+        // Aguarda os controles auxiliares para não abortar fetches no WebKit/Linux ao recarregar.
+          await page.waitForLoadState('networkidle');
+          await page.reload(); await page.locator('#orders-rows tr').filter({hasText:'Repositor de FLV'}).filter({hasText:firstDateLabel}).getByRole('button').click();
         await page.locator('#order-detail-shifts .order-worker-row').nth(6).waitFor();
         assert.equal(await page.locator('#order-detail-shifts .order-worker-row').count(),7,'Escalas persistem ao recarregar e reabrir');
         assert.deepEqual(errors,[]); console.log(`${name} ${width}: Escalar visível, confirmação, cancelamento e persistência de 7 dias OK`);

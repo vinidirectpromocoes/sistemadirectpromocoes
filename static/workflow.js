@@ -79,7 +79,7 @@
     }
   }
   function renderReconciliation() {
-    const month = get('forecast-period').value === 'month' ? get('finance-month').value : '';
+    const month = financeForecastPeriod();
     const result = window.DirectReconciliation.build(orders, scales, finance, invoices, month, financeToday());
     const total = result.summary;
     get('reconciliation-summary').textContent = `${total.requested} solicitadas · ${total.present} presenças · ${total.billed} cobradas · ${total.collected} em cobranças integralmente recebidas · ${total.paid} pagas · ${result.issues.length} pendências`;
