@@ -31,7 +31,7 @@
     const billed=new Set(invoices.filter(i=>i.status!=='cancelada').flatMap(i=>(i.itens||[]).map(x=>x.diaria_id)));
     for(const f of finance.filter(f=>f.origem!=='cobranca')){
       const s=scaleById.get(f.pedido_escala_id), o=s?orderById.get(s.pedido_id):null;
-      add({...context(o),key:`finance:${f.origem}:${f.id}`,kind:'pagamento',stage:f.data_pagamento?'concluido':'aberto',date:f.vencimento||f.data_referencia||'',overdue:!f.data_pagamento&&!!f.vencimento&&f.vencimento<today,title:f.contraparte||f.descricao,detail:`${f.tipo==='receita'?'Entrada':'Pagamento'} · ${f.descricao}${f.valor_centavos==null?' · valor não informado':''}`,amount:f.valor_centavos,action:'finance',id:f.id,origin:f.origem});
+      add({...context(o),key:`finance:${f.origem}:${f.id}`,kind:'pagamento',stage:f.data_pagamento?'concluido':'aberto',date:f.vencimento||f.referencia||f.data_referencia||'',overdue:!f.data_pagamento&&!!f.vencimento&&f.vencimento<today,title:f.contraparte||f.descricao,detail:`${f.tipo==='receita'?'Entrada':'Pagamento'} · ${f.descricao}${f.valor_centavos==null?' · valor não informado':''}`,amount:f.valor_centavos,action:'finance',id:f.id,origin:f.origem});
       if(f.origem==='diaria'&&s?.status==='presente'&&!billed.has(f.id))add({...context(o),key:`faturar:${f.id}`,kind:'cobranca',stage:'aberto',date:s.data,title:`Cobrar presença · ${f.contraparte}`,detail:`Pedido #${o?.id} · ${o?.unidade||''} · ${o?.setor||''} · ainda sem cobrança`,amount:f.valor_recebido_centavos,action:'bill',id:f.id});
     }
     for(const i of invoices){const balance=Math.max(0,i.valor_centavos-(i.valor_recebido_centavos||0));const stage=i.status==='cancelada'?'cancelado':balance===0?'concluido':i.conferencia==='conferida'?'confirmado':'aberto';
@@ -48,7 +48,8 @@
   function filter(rows,{search='',stage='all',kind='all',network='all',start='',end='',overdue=false}={}){
     return rows.filter(r=>(stage==='all'||r.stage===stage)&&(kind==='all'||r.kind===kind)&&(network==='all'||norm(r.network)===norm(network))&&(!overdue||r.overdue)&&(!start||(r.date&&r.date>=start))&&(!end||(r.date&&r.date<=end))&&(!search||norm(`${r.title} ${r.detail} ${r.network} ${r.unit} ${r.sector}`).includes(norm(search))));
   }
+  function networkNames(rows,stores=[]){const preferred=new Map(stores.map(s=>[norm(s.rede),s.rede]));const names=new Map();for(const r of rows)if(r.network)names.set(norm(r.network),preferred.get(norm(r.network))||r.network);return [...names.values()].sort((a,b)=>a.localeCompare(b,'pt-BR'));}
   const counts=rows=>Object.fromEntries(['aberto','confirmado','concluido','cancelado'].map(stage=>[stage,rows.filter(r=>r.stage===stage).length]));
-  if(typeof window!=='undefined')window.DirectCRM={build,filter,counts};
-  if(typeof module!=='undefined')module.exports={build,filter,counts};
+  if(typeof window!=='undefined')window.DirectCRM={build,filter,counts,networkNames};
+  if(typeof module!=='undefined')module.exports={build,filter,counts,networkNames};
 })();

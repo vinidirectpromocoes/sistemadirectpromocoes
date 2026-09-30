@@ -38,6 +38,8 @@ Os testes de gravação usam uma base SQLite isolada e dados fictícios. Chromiu
 - Limpeza da visualização de CRM ao mudar de perfil e restrição imediata das ferramentas.
 - Atualização dos testes que apontavam para listas antes localizadas no Início.
 
+- Filtro de rede unificado para variações de maiúsculas/minúsculas, usando o nome do catálogo; lançamentos sem vencimento usam a data de referência.
+
 ## Limites
 
 O CRM acompanha atividades registradas no sistema. Não faz envio automático de WhatsApp, não inventa confirmação de disponibilidade, presença ou pagamento e não transforma confirmação de pedido em receita recebida. A atualização depende das alterações gravadas nos módulos de origem; também existe o botão Atualizar.
