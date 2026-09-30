@@ -11,16 +11,17 @@
   const b=node('button',label,cls);b.type='button';b.addEventListener('click',async()=>{b.disabled=true;try{await fn();}catch(e){notice(e.message,true);}finally{b.disabled=false;}});return b;
  }
  function section(target,title,subtitle,id){const s=node('section','','list-card extended-section');s.id=id;s.append(node('h2',title),node('p',subtitle,'section-help'));$(target).append(s);return s;}
- const feedback=node('div','','feedback');feedback.id='extended-feedback';feedback.role='status';feedback.hidden=true;$('inicio-page').append(feedback);
+ const feedback=node('div','','feedback');feedback.id='extended-feedback';feedback.role='status';feedback.hidden=true;$('crm-tools').prepend(feedback);
  const metrics=section('inicio-page','Indicadores da operação','Cobertura considera dias até hoje. Confirmação considera as escalas do período escolhido.','insights-section');
  const filters=node('div','','extended-filters');filters.innerHTML='<label>De<input id="insights-start" type="date"></label><label>Até<input id="insights-end" type="date"></label><button id="insights-refresh" type="button" class="button button-outline" aria-label="Atualizar indicadores">↻ Atualizar</button>';
  const metricsGrid=node('div','','extended-metrics');metricsGrid.id='insights-grid';metrics.append(filters,metricsGrid);
  const today=homeToday();$('insights-start').value=today.slice(0,7)+'-01';$('insights-end').value=today;
- const shift=section('inicio-page','Central de plantão','Vagas, respostas e chegadas pendentes de hoje e dos próximos sete dias. Recusas precisam ser retiradas da escala para liberar a vaga.','oncall-section');
+ const shift=section('crm-tools','Central de plantão','Vagas, respostas e chegadas pendentes de hoje e dos próximos sete dias. Recusas precisam ser retiradas da escala para liberar a vaga.','oncall-section');
  shift.append(button('↻ Atualizar plantão',()=>refresh()));const queue=node('div','','extended-list');queue.id='oncall-list';shift.append(queue);
- const reserves=section('inicio-page','Reservas por setor e região','Selecione uma vaga no plantão para abrir o pedido e conferir pessoas compatíveis. Confirme disponibilidade antes de escalar.','reserves-section');
+ const reserves=section('crm-tools','Reservas por setor e região','Selecione uma vaga no plantão para abrir o pedido e conferir pessoas compatíveis. Confirme disponibilidade antes de escalar.','reserves-section');
  reserves.insertAdjacentHTML('beforeend','<div class="extended-filters"><label>Setor ou bairro<input id="reserve-search" type="search" placeholder="Ex.: caixa, Meireles"></label></div><div id="reserve-list" class="extended-list"></div>');
- const quality=section('inicio-page','Qualidade dos cadastros e atendimentos','Disponibilidade sem confirmação ou confirmada há mais de 30 dias exige nova conferência. Indicadores individuais usam registros do período selecionado.','quality-section');quality.insertAdjacentHTML('beforeend','<p id="quality-summary"></p><div id="quality-list" class="extended-list"></div>');
+ const quality=section('crm-tools','Qualidade dos cadastros e atendimentos','Disponibilidade sem confirmação ou confirmada há mais de 30 dias exige nova conferência. Indicadores individuais usam registros do período selecionado.','quality-section');quality.insertAdjacentHTML('beforeend','<p id="quality-summary"></p><div id="quality-list" class="extended-list"></div>');
+ for(const panel of [shift,reserves,quality]){const details=node('details','','list-card crm-tool');const heading=panel.querySelector('h2');details.append(node('summary',heading.textContent));heading.remove();panel.classList.remove('list-card');panel.before(details);details.append(panel);}
  const occurrenceSection=section('pedidos-page','Ocorrências e acompanhamento','Registre fatos, elogios e resolução vinculados ao pedido e, quando aplicável, à pessoa escalada.','occurrence-section');
  occurrenceSection.append(button('+ Ocorrência',()=>openOccurrence()));occurrenceSection.insertAdjacentHTML('beforeend','<div id="occurrence-list" class="extended-list"></div>');
  const contracts=section('configuracoes-page','Contratos e versões','Condições por rede, loja e setor. A nova versão preserva as tarifas de diárias já confirmadas. Campos de valor em branco seguem as tarifas gerais.','contract-section');
@@ -75,7 +76,7 @@
   }
   for(const x of rows.sort((a,b)=>a.key.localeCompare(b.key)))queue.append(x.r);
   if(!rows.length)queue.textContent='Nenhum pedido em plantão nos próximos sete dias.';
-  shift.hidden=!canOperate();reserves.hidden=!canOperate();quality.hidden=window.directRemote?.role==='consulta';
+  shift.parentElement.hidden=!canOperate();reserves.parentElement.hidden=!canOperate();quality.parentElement.hidden=window.directRemote?.role==='consulta';
  }
  function renderReserves(){
   const query=$('reserve-search').value.trim().toLocaleLowerCase('pt-BR');const list=$('reserve-list');list.replaceChildren();
@@ -135,7 +136,7 @@
   const role=window.directRemote?.role;const [orders,scales,workers,stores,occurrences,invoices,contracts]=await Promise.all([request('/api/pedidos'),request('/api/escalas'),role==='consulta'?[]:request('/api/diaristas'),request('/api/lojas'),role==='consulta'?[]:request('/api/ocorrencias'),canFinance()?request('/api/cobrancas'):[],canFinance()?request('/api/contratos'):[]]);data={orders,scales,workers,stores,occurrences,invoices,contracts};if($('extended-feedback').textContent.startsWith('Não foi possível atualizar os controles:'))$('extended-feedback').hidden=true;renderMetrics();renderOnCall();renderReserves();renderOccurrences();renderContracts();renderReviews();renderStoreResults(typeof financeForecastInput!=='undefined'?financeForecastInput:null);window.DirectOffline?.remember(orders,scales);
  }catch(e){if(!navigator.onLine){$('offline-status').textContent='Sem conexão. Agenda da última carga; revise os rascunhos após reconectar.';}else notice(`Não foi possível atualizar os controles: ${e.message}`,true);}finally{loading=null;}})();return loading;}
  function diagnose(){const visible=[...document.querySelectorAll('input,select,textarea')].filter(e=>e.getClientRects().length&&!['checkbox','radio','hidden','button','submit','file'].includes(e.type));const result={data:new Date().toISOString(),navegador:navigator.userAgent,tela:{largura:innerWidth,altura:innerHeight,dpr:devicePixelRatio,visualViewport:window.visualViewport?{largura:visualViewport.width,altura:visualViewport.height,escala:visualViewport.scale}:null},toque:navigator.maxTouchPoints,online:navigator.onLine,transbordamento:document.documentElement.scrollWidth-innerWidth,camposPequenos:visible.filter(e=>parseFloat(getComputedStyle(e).fontSize)<16).map(e=>e.id),movimentoReduzido:matchMedia('(prefers-reduced-motion: reduce)').matches,serviceWorker:!!navigator.serviceWorker?.controller};$('device-result').textContent=JSON.stringify(result,null,2);$('device-download').hidden=false;$('device-download').onclick=()=>{const link=document.createElement('a');link.href=URL.createObjectURL(new Blob([JSON.stringify(result,null,2)],{type:'application/json'}));link.download='direct-diagnostico-aparelho.json';link.click();setTimeout(()=>URL.revokeObjectURL(link.href),1000);};}
- $('reserve-search').oninput=renderReserves;$('insights-refresh').onclick=()=>refresh();$('insights-start').onchange=$('insights-end').onchange=renderMetrics;
+ $('reserve-search').oninput=renderReserves;$('insights-refresh').onclick=()=>{loadHome();};$('insights-start').onchange=$('insights-end').onchange=renderMetrics;
  const recurring=button('↗ Repetir pedido',()=>{const source=orderRecords.find(o=>o.id===orderDetailId);if(!source)return;
   open('Repetir pedido #'+source.id,()=>{const d=new Date(source.turnos[0].data+'T12:00:00Z');d.setUTCDate(d.getUTCDate()+7);field('inicio','Primeiro dia do novo pedido',d.toISOString().slice(0,10),'date',null,true);$('extended-fields').append(node('p','O próximo formulário permite conferir todas as datas, horários e quantidades. Nenhuma pessoa ou presença será copiada.','section-help'));},async p=>{const delta=Date.parse(p.inicio+'T12:00:00Z')-Date.parse(source.turnos[0].data+'T12:00:00Z');const clone={...source,id:null,situacao:'novo',turnos:source.turnos.map(t=>({...t,data:new Date(Date.parse(t.data+'T12:00:00Z')+delta).toISOString().slice(0,10)}))};dialog.close();openOrderForm(clone);getFormTitle();});
  });
@@ -154,6 +155,6 @@
   }};
  for(const id of ['forecast-period','finance-month'])$(id).addEventListener('change',()=>renderStoreResults(financeForecastInput));
  window.addEventListener('direct:authorized',()=>refresh());
- window.addEventListener('hashchange',()=>{if(['#inicio','#pedidos','#configuracoes','#financeiro'].includes(location.hash))refresh();});
+ window.addEventListener('hashchange',()=>{if(['#inicio','#crm','#pedidos','#configuracoes','#financeiro'].includes(location.hash))refresh();});
  refresh();
 })();

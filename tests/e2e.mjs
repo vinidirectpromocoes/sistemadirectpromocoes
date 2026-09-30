@@ -23,7 +23,7 @@ child.stderr.on('data', chunk => { serverErrors += chunk.toString(); });
 
 async function ready() {
   for (let attempt = 0; attempt < 50; attempt++) {
-    try { if ((await fetch(url)).ok) return; } catch { /* server is starting */ }
+    try { const response=await fetch(url); await response.arrayBuffer(); if(response.ok)return; } catch { /* server is starting */ }
     await new Promise(resolve => setTimeout(resolve, 100));
   }
   throw new Error(`Servidor local não iniciou: ${serverErrors}`);
@@ -41,7 +41,7 @@ async function runBrowser(engine, name) {
       page.on('pageerror', error => errors.push(error.message));
       await page.goto(url, { waitUntil: 'domcontentloaded' });
       await page.locator('#nav-diaristas').waitFor({ state: 'visible' });
-      for (const tab of ['inicio', 'diaristas', 'pedidos', 'leitura', 'redes', 'financeiro', 'configuracoes']) {
+      for (const tab of ['inicio', 'crm', 'diaristas', 'pedidos', 'leitura', 'redes', 'financeiro', 'configuracoes']) {
         await page.locator(`#nav-${tab}`).click();
         assert.equal(new URL(page.url()).hash, `#${tab}`, `${name} ${viewport.width}: navegação ${tab}`);
         const overflow = await page.evaluate(() => document.documentElement.scrollWidth - innerWidth);
@@ -138,6 +138,13 @@ async function runRoleNavigation() {
         assert.equal(drill.status, 0, `Cópia operacional não restaurou: ${drill.stderr}`);
         console.log('Backup no navegador → verificação → SQLite operacional isolado OK');
       }
+      await page.locator('#nav-inicio').click();
+      await page.locator('#inicio-page').waitFor({state:'visible'});
+      assert.equal(await page.locator('#home-finance-cards').isVisible(), ['admin','financeiro'].includes(role), 'Dashboard respeita o perfil financeiro');
+      assert.equal(await page.locator('#home-workers-card').isVisible(), role!=='consulta', 'Consulta não recebe fichas de diaristas');
+      await page.locator('#nav-crm').click();
+      await page.locator('#crm-page').waitFor({state:'visible'});
+      assert.equal(await page.locator('#crm-kind option[value=pagamento]').evaluate(e=>e.hidden), !['admin','financeiro'].includes(role));
       console.log(`Perfil ${role}: navegação e ações visíveis OK`);
       await page.waitForLoadState('networkidle');
       await context.unrouteAll({behavior:'wait'});
@@ -229,7 +236,7 @@ async function runFinancialWorkflow() {
     const scaleRequests = [];
     page.on('request', request => { if (/\/api\/(?:pedidos\/\d+\/)?escalas/.test(request.url())) scaleRequests.push(request.url()); });
     await page.goto(`${url}#financeiro`, { waitUntil: 'domcontentloaded' });
-    await page.getByText('Lucro previsto · após extras', {exact:true}).waitFor();
+    await page.locator('#financeiro-page').getByText('Lucro previsto · após extras', {exact:true}).waitFor();
     assert.ok(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth + 2),
       'Financeiro com dados não deve criar rolagem horizontal no celular');
     assert.match(await page.locator('#forecast-net').innerText(), /78,00/);
@@ -318,7 +325,7 @@ async function runExtendedWorkflow() {
     const context=await browser.newContext({viewport:{width:320,height:640},isMobile:true,hasTouch:true});const page=await context.newPage();const errors=[];page.on('pageerror',e=>errors.push(e.message));
     await page.goto(url+'#diaristas');await page.evaluate(id=>openDetail(id),worker.id);
     await page.locator('#worker-reserve-button').click();await page.locator('#ext-telefone').fill('85999991234');await page.locator('#ext-reserva').selectOption('sim');await page.locator('#extended-save').click();await page.locator('#extended-dialog').waitFor({state:'hidden'});await page.locator('#detail-dialog').evaluate(e=>e.close());
-    await page.locator('#nav-inicio').click();await page.getByText('85999991234').waitFor();
+    await page.locator('#nav-crm').click();await page.locator('details.crm-tool').filter({has:page.locator('#reserves-section')}).locator('summary').click();await page.getByText('85999991234').waitFor();
     await page.locator('#nav-pedidos').click();await page.waitForFunction(id=>orderRecords.some(x=>x.id===id),order.id);await page.evaluate(id=>openOrderDetail(id),order.id);
     await page.getByRole('button',{name:'✓ Confirmou',exact:true}).click();await page.getByText('Resposta: confirmada').waitFor();
     await page.getByRole('button',{name:/^Presença de/}).click();await page.getByRole('button',{name:'✓ Validar atendimento',exact:true}).waitFor();
@@ -337,13 +344,45 @@ async function runExtendedWorkflow() {
     await page.evaluate(()=>{window.print=()=>{window.qaPrinted=document.getElementById('print-demonstrative').innerText;};});await page.locator('#invoice-review-list').getByRole('button',{name:'▤ PDF / imprimir'}).first().click();assert.match(await page.evaluate(()=>window.qaPrinted),/Pessoa Financeira de Teste/);assert.match(await page.evaluate(()=>window.qaPrinted),/Total: R\$\s*268,00/);
     await page.locator('#nav-pedidos').click();await page.waitForFunction(id=>orderRecords.some(x=>x.id===id),order.id);await page.evaluate(id=>openOrderDetail(id),order.id);await page.locator('#order-repeat-button').click();await page.locator('#ext-inicio').fill('2026-10-12');await page.locator('#extended-save').click();await page.getByText('Conferir pedido repetido').waitFor();assert.equal(await page.locator('.order-shift-date').first().inputValue(),'2026-10-12');
     // Guardar rascunho com a conexão cortada; nenhum pedido é gravado nessa etapa.
-    await page.evaluate(async()=>{await navigator.serviceWorker.ready;});await context.setOffline(true);await page.locator('#order-save-draft').click();await page.locator('#order-dialog').waitFor({state:'hidden'});await page.locator('#nav-inicio').click();await page.locator('#offline-drafts .extended-entry').waitFor();
+    await page.evaluate(async()=>{await navigator.serviceWorker.ready;});await context.setOffline(true);await page.locator('#order-save-draft').click();await page.locator('#order-dialog').waitFor({state:'hidden'});await page.locator('#nav-crm').click();await page.locator('details.crm-tool').filter({has:page.locator('#offline-panel')}).locator('summary').click();await page.locator('#offline-drafts .extended-entry').waitFor();
     const encrypted=await page.evaluate(()=>new Promise((resolve,reject)=>{const r=indexedDB.open('direct-offline-v1');r.onsuccess=()=>{const q=r.result.transaction('records').objectStore('records').getAll();q.onsuccess=()=>resolve(q.result.every(row=>row.blob instanceof ArrayBuffer&&!JSON.stringify(row).includes('Pessoa Financeira')));q.onerror=reject;};r.onerror=reject;}));assert.equal(encrypted,true,'Agenda e rascunho devem estar cifrados');
-    await context.setOffline(false);const before=(await api('GET','/api/pedidos')).length;await page.locator('#offline-drafts').getByRole('button',{name:'↗ Revisar'}).click();await page.locator('#order-save-button').click();await page.locator('#order-dialog').waitFor({state:'hidden'});assert.equal((await api('GET','/api/pedidos')).length,before+1);await page.locator('#nav-inicio').click();await page.getByText('Nenhum rascunho guardado.').waitFor();
+    await context.setOffline(false);const before=(await api('GET','/api/pedidos')).length;await page.locator('#offline-drafts').getByRole('button',{name:'↗ Revisar'}).click();await page.locator('#order-save-button').click();await page.locator('#order-dialog').waitFor({state:'hidden'});assert.equal((await api('GET','/api/pedidos')).length,before+1);await page.locator('#nav-crm').click();await page.getByText('Nenhum rascunho guardado.').waitFor();
     const cached=await page.evaluate(async()=>{const keys=await caches.keys();const paths=[];for(const key of keys)for(const r of await(await caches.open(key)).keys())paths.push(new URL(r.url).pathname);return paths;});assert.ok(cached.length>10);assert.ok(cached.every(p=>!p.startsWith('/api/')),'Cache não deve armazenar respostas da API');
     await page.screenshot({path:path.join(root,'.design-qa/operacao-mobile-dark.png'),fullPage:true,animations:'disabled'});assert.deepEqual(errors,[],'Fluxos integrados com erro JavaScript');
     console.log('Operação ampliada: reserva, confirmação, validação, ocorrência, contrato, contestação, PDF, repetição e rascunho offline OK');await context.close();
   }finally{await browser.close();}
+}
+
+async function runCRMWorkflow() {
+  const api=async(method,route,body)=>{const r=await fetch(new URL(route,url),{method,headers:{'Content-Type':'application/json'},...(body?{body:JSON.stringify(body)}:{})});const data=await r.json();assert.ok(r.ok,JSON.stringify(data));return data;};
+  const future='2035-01-01';
+  const disposable=await api('POST','/api/pedidos',{supermercado:'Super do Povo',unidade:'CRM Teste Excluir',setor:'FLV',quantidade_diaristas:1,turnos:[{data:future,inicio:'07:00',fim:'15:20'}],situacao:'novo'});
+  for(const [name,engine] of [['Chromium',chromium],['WebKit',webkit]]) {
+    const browser=await engine.launch();try{for(const width of [1280,390,320]){
+      const context=await browser.newContext({viewport:{width,height:844},isMobile:width<500,hasTouch:width<500});const page=await context.newPage();const errors=[];page.on('pageerror',e=>errors.push(e.message));
+      await page.goto(url+'#inicio');await page.waitForFunction(()=>Number(document.getElementById('home-stores').textContent)>0);await page.waitForLoadState('networkidle');
+      assert.equal(await page.locator('#inicio-page .extended-list, #inicio-page .home-actions, #inicio-page .offline-panel').count(),0,'Início deve conter apenas resumo e dashboards');
+      assert.equal(await page.locator('#inicio-page .hub-charts .finance-chart-card').count(),4);
+      assert.ok(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth+2),'Início com dados não deve transbordar');
+      await page.locator('#nav-crm').click();await page.locator('.crm-record').first().waitFor();await page.waitForLoadState('networkidle');
+      assert.ok(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth+2),'CRM com dados não deve transbordar');
+      const open=page.getByRole('region',{name:'Em aberto',exact:true});const before=await open.locator('.crm-record').count();await open.getByRole('button',{name:/Ver mais/}).click();assert.ok(await open.locator('.crm-record').count()>before,'Ver mais revela etapas sem perder registros');
+      await page.locator('[data-crm-stage="confirmado"]').click();assert.equal(await page.locator('#crm-stage').inputValue(),'confirmado');assert.equal(await page.locator('.crm-column').count(),1);assert.ok(await page.locator('.crm-record').count()>0);
+      await page.locator('#crm-clear').click();await page.locator('#crm-kind').selectOption('pagamento');assert.ok(await page.locator('.crm-record').count()>0);assert.equal(await page.locator('.crm-record').evaluateAll(items=>items.every(x=>x.dataset.crmKey.startsWith('finance:'))),true);
+      await page.locator('#crm-clear').click();await page.locator('#crm-search').fill('Pessoa Financeira');assert.ok(await page.locator('.crm-record').count()>0);assert.equal(await page.locator('.crm-record').evaluateAll(items=>items.every(x=>x.textContent.includes('Pessoa Financeira'))),true);
+      await page.locator('#crm-clear').click();await page.locator('#crm-kind').selectOption('pedido');const first=page.locator('.crm-record').first();await first.getByRole('button',{name:'↗ Pedido',exact:true}).click();await page.locator('#order-detail-dialog').waitFor({state:'visible'});await page.locator('#order-detail-close').click();await page.locator('#nav-crm').click();
+      if(name==='Chromium'&&width===1280){
+        await page.locator('#crm-clear').click();await page.locator('#crm-kind').selectOption('leitura');
+        await page.locator('.crm-record').first().getByRole('button',{name:'↗ Leitura',exact:true}).click();
+        await page.locator('#crm-reading-dialog').waitFor({state:'visible'});assert.match(await page.locator('#crm-reading-text').innerText(),/Meireles/);
+        await page.locator('#crm-reading-complete').click();await page.locator('#order-dialog').waitFor({state:'visible'});await page.locator('#order-close-button').click();await page.locator('#nav-crm').click();
+      }
+      await page.locator('#crm-clear').click();await page.locator('#theme-toggle').click();await page.screenshot({path:path.join(root,`.design-qa/crm-${name}-${width}-dark.png`),fullPage:true,animations:'disabled'});await page.locator('#theme-toggle').click();
+      if(name==='Chromium'&&width===1280){await page.locator('#crm-search').fill('CRM Teste Excluir');await page.locator(`[data-crm-key="pedido:${disposable.id}"]`).waitFor();await api('PUT',`/api/pedidos/${disposable.id}`,{...disposable,situacao:'confirmado'});await page.locator('#crm-refresh').click();await page.waitForFunction(id=>document.querySelector(`[data-crm-key="pedido:${id}"]`)?.closest('.crm-column').getAttribute('aria-label')==='Confirmadas',disposable.id);await api('DELETE',`/api/pedidos/${disposable.id}`);await page.locator('#crm-refresh').click();await page.locator(`[data-crm-key="pedido:${disposable.id}"]`).waitFor({state:'detached'});assert.equal(await page.locator('.crm-record').count(),0);await page.locator('#crm-clear').click();await page.locator('#nav-inicio').click();await page.screenshot({path:path.join(root,'.design-qa/inicio-geral-desktop.png'),fullPage:true,animations:'disabled'});}
+      if(width<500){const inputs=await page.locator('#crm-page input:not([type=checkbox]), #crm-page select').evaluateAll(items=>items.filter(x=>x.getClientRects().length).map(x=>parseFloat(getComputedStyle(x).fontSize)));assert.ok(inputs.every(n=>n>=16),'Filtros do CRM não devem induzir zoom');}
+      await page.waitForLoadState('networkidle');assert.deepEqual(errors,[],`${name} ${width}: CRM sem erros JavaScript`);console.log(`${name} ${width}: Início geral, CRM, filtros, confirmações, acesso ao pedido e largura OK`);await context.close();
+    }}finally{await browser.close();}
+  }
 }
 
 async function runAssignmentPersistence() {
@@ -429,6 +468,7 @@ try {
   await runFinancialWorkflow();
   await runExtendedWorkflow();
   await runAssignmentPersistence();
+  await runCRMWorkflow();
 } finally {
   child.kill();
   await rm(work, { recursive: true, force: true });
