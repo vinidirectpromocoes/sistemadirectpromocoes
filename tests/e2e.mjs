@@ -305,6 +305,75 @@ async function runExtendedWorkflow() {
   }finally{await browser.close();}
 }
 
+async function runAssignmentPersistence() {
+  const api = async (method, route, body) => {
+    const response = await fetch(new URL(route, url), {method, headers: {'Content-Type':'application/json'}, ...(body ? {body:JSON.stringify(body)} : {})});
+    const data = await response.json(); assert.ok(response.ok, JSON.stringify(data)); return data;
+  };
+  const worker = await api('POST','/api/diaristas', {
+    nome:'Pessoa com nome longo para escala de teste', cpf:'11144477735', setores:['FLV'],
+    cep:'60000000', logradouro:'Rua de Teste', numero:'1', bairro:'Meireles', trabalhando:false,
+    disponibilidade:['segunda','terca','quarta','quinta','sexta','sabado','domingo'].map(dia=>({dia,inicio:'00:00',fim:'23:59'})),
+    pode_se_deslocar:true, transporte:'Ônibus', observacoes_locomocao:'',
+  });
+  let week = 0;
+  for (const [name,engine] of [['Chromium',chromium],['WebKit',webkit]]) {
+    const browser = await engine.launch({headless:true});
+    try {
+      for (const width of [1280,390,320]) {
+        const shifts = Array.from({length:7},(_,index)=>({data:new Date(Date.UTC(2030,0,1+7*week+index)).toISOString().slice(0,10),inicio:'07:00',fim:'15:20'})); week++;
+        const order = await api('POST','/api/pedidos',{supermercado:'Super do Povo',unidade:'Meireles',setor:'Repositor de FLV',quantidade_diaristas:1,turnos:shifts,situacao:'confirmado'});
+        const context = await browser.newContext({viewport:{width,height:844},serviceWorkers:'block'});
+        const page = await context.newPage(); const errors=[]; page.on('pageerror',error=>errors.push(error.message));
+        await page.goto(`${url}#pedidos`);
+        const firstDateLabel = shifts[0].data.split('-').reverse().join('/');
+        const row = page.locator('#orders-rows tr').filter({hasText:'Repositor de FLV'}).filter({hasText:firstDateLabel});
+        await row.getByRole('button').click();
+        const cards = page.locator('#order-detail-shifts .order-day-card');
+        try {await cards.first().getByRole('combobox').waitFor();}
+        catch(error) {console.error(`${name} ${width}: pedido ${order.id}: ${await page.locator('#order-detail-dialog').innerText()}`);throw error;}
+        const clipped = await cards.first().evaluate(card=>{
+          const button=card.querySelector('.order-worker-picker button').getBoundingClientRect(), bounds=card.getBoundingClientRect();
+          return button.left<bounds.left || button.right>bounds.right+1;
+        });
+        assert.equal(clipped,false,`${name} ${width}: botão Escalar escondido fora do card`);
+        await cards.first().getByRole('combobox').selectOption(String(worker.id));
+        await page.getByRole('button',{name:'Todos os dias possíveis (7)',exact:true}).waitFor();
+        assert.equal((await api('GET',`/api/pedidos/${order.id}/escalas`)).length,0,'Selecionar exige confirmação antes de gravar');
+        await page.getByRole('button',{name:'Cancelar',exact:true}).click();
+        assert.equal(await cards.first().getByRole('combobox').inputValue(),'');
+        await cards.first().getByRole('combobox').selectOption(String(worker.id));
+        let failRefresh = name==='Chromium' && width===1280;
+        const simulateRefreshFailure = failRefresh;
+        if (simulateRefreshFailure) await page.route(`**/api/pedidos/${order.id}/escalas`,async route=>{
+          if (route.request().method()==='GET' && failRefresh) {
+            failRefresh=false; await route.fulfill({status:503,contentType:'application/json',body:JSON.stringify({erro:'Falha simulada de atualização'})});
+          } else await route.continue();
+        });
+        await page.getByRole('button',{name:'Só este dia',exact:true}).click();
+        if (simulateRefreshFailure) {
+          await page.locator('#order-detail-error').waitFor({state:'visible'});
+          assert.match(await page.locator('#order-detail-error').innerText(),/A escala foi salva/,'Falha de atualização não deve informar que uma gravação confirmada falhou');
+        } else await page.locator('#order-detail-success').waitFor({state:'visible'});
+        assert.equal((await api('GET',`/api/pedidos/${order.id}/escalas`)).length,1);
+        if (simulateRefreshFailure) {
+          await page.reload(); await page.locator('#orders-rows tr').filter({hasText:'Repositor de FLV'}).filter({hasText:firstDateLabel}).getByRole('button').click();
+          await cards.first().locator('.order-worker-row').waitFor();
+        }
+        await cards.nth(1).getByRole('combobox').selectOption(String(worker.id));
+        await page.getByRole('button',{name:'Todos os dias possíveis (6)',exact:true}).click();
+        await page.getByText('Diarista escalada em 6 dias deste pedido.',{exact:true}).waitFor();
+        assert.equal((await api('GET',`/api/pedidos/${order.id}/escalas`)).length,7);
+        await page.reload(); await page.locator('#orders-rows tr').filter({hasText:'Repositor de FLV'}).filter({hasText:firstDateLabel}).getByRole('button').click();
+        await page.locator('#order-detail-shifts .order-worker-row').nth(6).waitFor();
+        assert.equal(await page.locator('#order-detail-shifts .order-worker-row').count(),7,'Escalas persistem ao recarregar e reabrir');
+        assert.deepEqual(errors,[]); console.log(`${name} ${width}: Escalar visível, confirmação, cancelamento e persistência de 7 dias OK`);
+        await context.close();
+      }
+    } finally {await browser.close();}
+  }
+}
+
 try {
   await ready();
   await runBrowser(chromium, 'Chromium');
@@ -314,6 +383,7 @@ try {
   await runReadingFlow();
   await runFinancialWorkflow();
   await runExtendedWorkflow();
+  await runAssignmentPersistence();
 } finally {
   child.kill();
   await rm(work, { recursive: true, force: true });

@@ -296,8 +296,11 @@ function orderDetailError(message) {
 
 async function refreshOrderScales() {
   if (!orderDetailId) return;
-  orderScales = await request(`/api/pedidos/${orderDetailId}/escalas`);
-  weeklyScales[orderDetailId] = orderScales;
+  const id = orderDetailId;
+  const savedScales = await request(`/api/pedidos/${id}/escalas`);
+  weeklyScales[id] = savedScales;
+  if (orderDetailId !== id) return;
+  orderScales = savedScales;
   renderOrderShifts();
   renderWeekly();
   if (typeof loadHome === 'function') loadHome().catch(() => {});
@@ -306,6 +309,7 @@ async function refreshOrderScales() {
 async function addOrderWorker(dates, workerId) {
   if (!dates.length || !workerId || orderDetailBusy) return;
   const id = orderDetailId;
+  let saved = false;
   orderDetailBusy = true;
   $('#order-detail-error').hidden = true;
   $('#order-detail-success').hidden = true;
@@ -314,13 +318,20 @@ async function addOrderWorker(dates, workerId) {
       method: 'POST', headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(dates.length === 1 ? { data: dates[0], diarista_id: workerId } : { datas: dates, diarista_id: workerId }),
     });
+    saved = true;
     if (orderDetailId === id) {
       await refreshOrderScales();
+      if (orderDetailId !== id) return;
       const notice = $('#order-detail-success');
       notice.textContent = dates.length === 1 ? 'Diarista escalada neste dia.' : `Diarista escalada em ${dates.length} dias deste pedido.`;
       notice.hidden = false;
+      notice.scrollIntoView({ block: 'nearest' });
     }
-  } catch (err) { orderDetailError(`${dates.length > 1 ? 'Nenhum dos dias foi salvo. ' : ''}${err.message}`); }
+  } catch (err) {
+    if (orderDetailId === id) orderDetailError(saved
+      ? `A escala foi salva, mas não foi possível atualizar a tela. Reabra o pedido para conferir. ${err.message}`
+      : `Não foi possível confirmar a escala. Reabra o pedido antes de tentar novamente. ${err.message}`);
+  }
   finally { orderDetailBusy = false; }
 }
 
@@ -353,8 +364,9 @@ function chooseOrderWorker(data, select, picker) {
   const all = document.createElement('button'); all.type = 'button'; all.className = 'button button-primary'; all.textContent = `Todos os dias possíveis (${dates.length})`; all.disabled = dates.length < 2;
   all.addEventListener('click', () => addOrderWorker(dates, worker.id));
   const cancel = document.createElement('button'); cancel.type = 'button'; cancel.className = 'button button-quiet'; cancel.textContent = 'Cancelar';
-  cancel.addEventListener('click', () => panel.remove());
+  cancel.addEventListener('click', () => { select.value = ''; panel.remove(); });
   actions.append(single, all, cancel); panel.append(actions); picker.after(panel);
+  panel.scrollIntoView({ block: 'nearest' });
 }
 
 async function changeOrderAttendance(scale, status) {
@@ -495,6 +507,7 @@ function renderOrderShifts() {
       if (!candidates.length) placeholder.textContent = 'Nenhuma diarista compatível';
       const add = document.createElement('button'); add.type = 'button'; add.className = 'button button-outline'; add.textContent = 'Escalar';
       add.disabled = !candidates.length;
+      select.addEventListener('change', () => chooseOrderWorker(shift.data, select, picker));
       add.addEventListener('click', () => chooseOrderWorker(shift.data, select, picker));
       picker.append(select, add); body.append(picker);
     }
