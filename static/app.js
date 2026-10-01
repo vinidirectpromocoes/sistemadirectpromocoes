@@ -10,6 +10,7 @@ let paymentDailyId = null;
 let paymentDiaristaId = null;
 let paymentOrigin = 'detail';
 let paymentWasPaid = false;
+let paymentCalendarUnknown = false;
 let financeRecords = [];
 let financeEditingId = null;
 
@@ -463,6 +464,8 @@ function startPayment(item, origin = 'detail') {
   paymentDiaristaId = item.diarista_id || detailId;
   paymentOrigin = origin;
   paymentWasPaid = Boolean(item.data_pagamento);
+  paymentCalendarUnknown = Boolean(item.pedido_escala_id && item.vencimento_origem === 'nao_informado');
+  $('#payment-dialog .payment-help').textContent = paymentCalendarUnknown ? 'Prazo da rede não informado. Configure o calendário ou informe um vencimento manual. Sem prazo, esta diária não é classificada como atrasada.' : 'Informe valor e vencimento para uma diária pendente; para marcar como paga, informe o valor.';
   if ($('#detail-dialog').open) $('#detail-dialog').close();
   $('#payment-form').reset();
   $('#payment-error').hidden = true;
@@ -497,7 +500,7 @@ function cancelPayment() {
 
 async function savePayment(event) {
   event.preventDefault();
-  if ($('#payment-date').value && !$('#payment-value').value || $('#payment-value').value && !$('#payment-date').value && !$('#payment-due').value) {
+  if ($('#payment-date').value && !$('#payment-value').value || $('#payment-value').value && !$('#payment-date').value && !$('#payment-due').value && !paymentCalendarUnknown) {
     $('#payment-error').textContent = 'Informe valor para um pagamento feito e vencimento para uma diária pendente com valor.'; $('#payment-error').hidden = false; return;
   }
   if (paymentWasPaid && $('#payment-reason').value.trim().length < 8) {

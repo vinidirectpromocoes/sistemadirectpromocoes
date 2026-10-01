@@ -143,6 +143,7 @@ class CadastroTest(unittest.TestCase):
             ("/stores.js", "text/javascript; charset=utf-8"),
             ("/stores.css", "text/css; charset=utf-8"),
             ("/settings.js", "text/javascript; charset=utf-8"),
+            ("/payment-calendar.js", "text/javascript; charset=utf-8"),
             ("/settings.css", "text/css; charset=utf-8"),
             ("/reading.js", "text/javascript; charset=utf-8"),
             ("/reading-parser.js", "text/javascript; charset=utf-8"),
@@ -280,7 +281,7 @@ class CadastroTest(unittest.TestCase):
         server.init_db()
         self.assertEqual(len(self.call("GET", "/api/tarifas")[1]["setores"]), 9)
         with server.connect() as db:
-            self.assertEqual(db.execute("SELECT count(*) FROM direct_auditoria WHERE tabela LIKE 'tarifas_%'").fetchone()[0], 17)
+            self.assertEqual(db.execute("SELECT count(*) FROM direct_auditoria WHERE tabela LIKE 'tarifas_%'").fetchone()[0], 21)  # Includes four audited calendar seeds.
 
     def test_blocking_and_daily_history(self):
         _, created = self.call("POST", "/api/diaristas", SAMPLE)
@@ -482,7 +483,7 @@ class CadastroTest(unittest.TestCase):
         self.assertEqual(status, 200)
         self.assertEqual(updated["diaria"]["valor_centavos"], 9000)
         self.assertEqual(updated["diaria"]["valor_recebido_centavos"], 13400)
-        self.assertEqual(updated["diaria"]["vencimento_pagamento"], today.isoformat())
+        self.assertEqual(updated["diaria"]["vencimento_pagamento"], server.calendar.payment_due(today.isoformat(), 30, 15))
         self.assertEqual(self.call("GET", "/api/financeiro")[1][0]["valor_centavos"], 9000)
         network = next(row for row in self.call("GET", "/api/tarifas")[1]["redes"] if row["rede"] == "Super do Povo")
         self.assertEqual(self.call("PUT", f"/api/tarifas/redes/{network['id']}", {

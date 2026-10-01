@@ -15,6 +15,7 @@ from urllib.parse import urlparse
 from zoneinfo import ZoneInfo
 
 from catalogo_lojas import LOJAS
+import payment_calendar as calendar
 import workflow_local as workflow
 import operations_extended as extended
 import sys
@@ -134,6 +135,8 @@ def init_db():
             "motivo_ajuste": "TEXT NOT NULL DEFAULT ''",
             "pedido_escala_id": "INTEGER",
             "valor_recebido_centavos": "INTEGER",
+            "vencimento_recebimento": "TEXT",
+            "vencimento_origem": "TEXT NOT NULL DEFAULT 'manual'",
         }.items():
             if column not in daily_columns:
                 db.execute(f"ALTER TABLE diarias ADD COLUMN {column} {definition}")
@@ -224,6 +227,10 @@ def init_db():
             valor_padrao_centavos INTEGER NOT NULL CHECK (valor_padrao_centavos > 0),
             atualizado_em TEXT NOT NULL
         )""")
+        rate_columns = {row["name"] for row in db.execute("PRAGMA table_info(tarifas_redes)")}
+        for column in ("pagamento_primeira_quinzena", "pagamento_segunda_quinzena"):
+            if column not in rate_columns:
+                db.execute(f"ALTER TABLE tarifas_redes ADD COLUMN {column} INTEGER CHECK ({column} BETWEEN 1 AND 31)")
         db.execute("""CREATE TABLE IF NOT EXISTS tarifas_setores (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             rede TEXT REFERENCES tarifas_redes(rede) ON UPDATE CASCADE,
@@ -258,16 +265,17 @@ def init_db():
             alterado_em TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
         )""")
         for table, fields in {
-            "diarias": ("id", "diarista_id", "data", "local", "setor", "valor_centavos", "vencimento_pagamento", "data_pagamento", "forma_pagamento", "motivo_ajuste"),
+            "diarias": ("id", "diarista_id", "data", "local", "setor", "valor_centavos", "vencimento_pagamento", "vencimento_recebimento", "vencimento_origem", "data_pagamento", "forma_pagamento", "motivo_ajuste"),
             "financeiro_lancamentos": ("id", "tipo", "descricao", "contraparte", "valor_centavos", "vencimento", "data_pagamento", "forma_pagamento", "motivo_ajuste"),
             "pedido_escalas": ("id", "pedido_id", "diarista_id", "data", "status"),
-            "tarifas_redes": ("id", "rede", "valor_recebido_centavos", "valor_padrao_centavos"),
+            "tarifas_redes": ("id", "rede", "valor_recebido_centavos", "valor_padrao_centavos", "pagamento_primeira_quinzena", "pagamento_segunda_quinzena"),
             "tarifas_setores": ("id", "rede", "setor", "valor_pago_centavos"),
         }.items():
             for event in (("UPDATE",) if table == "tarifas_redes" else ("INSERT", "UPDATE", "DELETE")):
                 old_json = "json_object(" + ", ".join(f"'{field}', OLD.{field}" for field in fields) + ")" if event != "INSERT" else "NULL"
                 new_json = "json_object(" + ", ".join(f"'{field}', NEW.{field}" for field in fields) + ")" if event != "DELETE" else "NULL"
                 row_id = "OLD.id" if event == "DELETE" else "NEW.id"
+                db.execute(f"DROP TRIGGER IF EXISTS audit_{table}_{event.lower()}")
                 db.execute(f"""CREATE TRIGGER IF NOT EXISTS audit_{table}_{event.lower()}
                     AFTER {event} ON {table} BEGIN
                     INSERT INTO direct_auditoria (tabela, registro_id, operacao, antes, depois)
@@ -288,6 +296,17 @@ def init_db():
             db.execute("INSERT INTO direct_config_meta (chave, valor) VALUES ('setores_iniciais_v1', 'aplicado')")
         workflow.ensure_schema(db)
         extended.ensure_schema(db)
+        if not db.execute("SELECT 1 FROM direct_config_meta WHERE chave='calendario_pagamentos_v1'").fetchone():
+            for network, (first, second) in calendar.INITIAL_CALENDARS.items():
+                db.execute("UPDATE tarifas_redes SET pagamento_primeira_quinzena=?, pagamento_segunda_quinzena=? WHERE rede=?", (first, second, network))
+            # Only the old automatic service-date default; retain explicit manual edits.
+            for row in db.execute("SELECT id FROM diarias WHERE pedido_escala_id IS NOT NULL AND data_pagamento IS NULL AND pagamento_lote_id IS NULL AND vencimento_pagamento=data").fetchall():
+                edited = any(json.loads(a['antes'] or '{}').get('vencimento_pagamento') != json.loads(a['depois'] or '{}').get('vencimento_pagamento') for a in db.execute("SELECT antes,depois FROM direct_auditoria WHERE tabela='diarias' AND registro_id=? AND operacao='UPDATE'", (row['id'],)))
+                if not edited:
+                    db.execute("UPDATE diarias SET vencimento_origem='calendario' WHERE id=?", (row['id'],))
+            for network in db.execute("SELECT id FROM tarifas_redes").fetchall():
+                calendar.refresh_pending(db, network['id'])
+            db.execute("INSERT INTO direct_config_meta VALUES ('calendario_pagamentos_v1','aplicado')")
 
 
 def valid_cpf(cpf):
@@ -430,10 +449,10 @@ def validate_daily_finance(payload):
     return result
 
 
-def validate_payment_consistency(paid, amount, due):
+def validate_payment_consistency(paid, amount, due, unknown_calendar=False):
     if paid and amount is None:
         raise ValueError("Informe o valor da diária paga.")
-    if amount is not None and not paid and not due:
+    if amount is not None and not paid and not due and not unknown_calendar:
         raise ValueError("Informe o vencimento da diária pendente com valor.")
 
 
@@ -576,7 +595,7 @@ def validate_reading(payload):
 def public_scale(row):
     item = dict(row)
     item["diaria"] = None if item.get("diaria_id") is None else {
-        key: item[key] for key in ("diaria_id", "data_pagamento", "valor_centavos", "valor_recebido_centavos", "vencimento_pagamento", "forma_pagamento", "pagamento_lote_id", "contrato_id")
+        key: item[key] for key in ("diaria_id", "data_pagamento", "valor_centavos", "valor_recebido_centavos", "vencimento_pagamento", "vencimento_recebimento", "vencimento_origem", "forma_pagamento", "pagamento_lote_id", "contrato_id")
     }
     if item["diaria"]:
         item["diaria"]["id"] = item["diaria"].pop("diaria_id")
@@ -606,7 +625,7 @@ def validate_worker_shift(db, worker, order, day):
 
 def order_scale_rows(db, order_id):
     return [public_scale(row) for row in db.execute("""SELECT e.*, p.nome AS diarista_nome,
-        d.id AS diaria_id, d.data_pagamento, d.valor_centavos, d.valor_recebido_centavos, d.vencimento_pagamento, d.forma_pagamento, d.pagamento_lote_id, d.contrato_id
+        d.id AS diaria_id, d.data_pagamento, d.valor_centavos, d.valor_recebido_centavos, d.vencimento_pagamento, d.vencimento_recebimento, d.vencimento_origem, d.forma_pagamento, d.pagamento_lote_id, d.contrato_id
         FROM pedido_escalas e JOIN diaristas p ON p.id = e.diarista_id
         LEFT JOIN diarias d ON d.pedido_escala_id = e.id
         WHERE e.pedido_id = ? ORDER BY e.data, e.id""", (order_id,))]
@@ -615,7 +634,7 @@ def order_scale_rows(db, order_id):
 def all_scale_rows(db):
     return [public_scale(row) for row in db.execute("""SELECT e.*, p.nome AS diarista_nome,
         d.id AS diaria_id, d.data_pagamento, d.valor_centavos, d.valor_recebido_centavos,
-        d.vencimento_pagamento, d.forma_pagamento, d.pagamento_lote_id, d.contrato_id
+        d.vencimento_pagamento, d.vencimento_recebimento, d.vencimento_origem, d.forma_pagamento, d.pagamento_lote_id, d.contrato_id
         FROM pedido_escalas e JOIN diaristas p ON p.id = e.diarista_id
         LEFT JOIN diarias d ON d.pedido_escala_id = e.id
         ORDER BY e.pedido_id, e.data, e.id""")]
@@ -780,7 +799,7 @@ class Handler(BaseHTTPRequestHandler):
             return self.respond(HTTPStatus.OK, [dict(row) for row in rows])
         if path == "/":
             path = "/index.html"
-        assets = {"/index.html": "text/html; charset=utf-8", "/style.css": "text/css; charset=utf-8", "/brand.css": "text/css; charset=utf-8", "/theme.css": "text/css; charset=utf-8", "/mobile.css": "text/css; charset=utf-8", "/reading.css": "text/css; charset=utf-8", "/motion.css": "text/css; charset=utf-8", "/operations.css": "text/css; charset=utf-8", "/workflow.css": "text/css; charset=utf-8", "/app.js": "text/javascript; charset=utf-8", "/theme.js": "text/javascript; charset=utf-8", "/finance.js": "text/javascript; charset=utf-8", "/forecast.js": "text/javascript; charset=utf-8", "/operations.js": "text/javascript; charset=utf-8", "/workflow.js": "text/javascript; charset=utf-8", "/matching.js": "text/javascript; charset=utf-8", "/backup.js": "text/javascript; charset=utf-8", "/orders.js": "text/javascript; charset=utf-8", "/stores.js": "text/javascript; charset=utf-8", "/settings.js": "text/javascript; charset=utf-8", "/reading.js": "text/javascript; charset=utf-8", "/reading-parser.js": "text/javascript; charset=utf-8", "/remote.js": "text/javascript; charset=utf-8", "/vendor/supabase-2.117.2.js": "text/javascript; charset=utf-8", "/stores.css": "text/css; charset=utf-8", "/settings.css": "text/css; charset=utf-8", "/login.css": "text/css; charset=utf-8", "/favicon.svg": "image/svg+xml", "/logo-direct-promocoes.jpg": "image/jpeg", "/logo-direct-promocoes-transparente.png": "image/png"}
+        assets = {"/index.html": "text/html; charset=utf-8", "/style.css": "text/css; charset=utf-8", "/brand.css": "text/css; charset=utf-8", "/theme.css": "text/css; charset=utf-8", "/mobile.css": "text/css; charset=utf-8", "/reading.css": "text/css; charset=utf-8", "/motion.css": "text/css; charset=utf-8", "/operations.css": "text/css; charset=utf-8", "/workflow.css": "text/css; charset=utf-8", "/app.js": "text/javascript; charset=utf-8", "/theme.js": "text/javascript; charset=utf-8", "/finance.js": "text/javascript; charset=utf-8", "/forecast.js": "text/javascript; charset=utf-8", "/operations.js": "text/javascript; charset=utf-8", "/workflow.js": "text/javascript; charset=utf-8", "/matching.js": "text/javascript; charset=utf-8", "/backup.js": "text/javascript; charset=utf-8", "/orders.js": "text/javascript; charset=utf-8", "/stores.js": "text/javascript; charset=utf-8", "/settings.js": "text/javascript; charset=utf-8", "/reading.js": "text/javascript; charset=utf-8", "/reading-parser.js": "text/javascript; charset=utf-8", "/remote.js": "text/javascript; charset=utf-8", "/payment-calendar.js": "text/javascript; charset=utf-8", "/vendor/supabase-2.117.2.js": "text/javascript; charset=utf-8", "/stores.css": "text/css; charset=utf-8", "/settings.css": "text/css; charset=utf-8", "/login.css": "text/css; charset=utf-8", "/favicon.svg": "image/svg+xml", "/logo-direct-promocoes.jpg": "image/jpeg", "/logo-direct-promocoes-transparente.png": "image/png"}
         assets["/reconciliation.js"] = "text/javascript; charset=utf-8"
         for asset in ['insights.js','offline.js','operations-extended.js','crm-model.js','hub.js','sw.js']:
             assets['/'+asset]='text/javascript; charset=utf-8'
@@ -1018,6 +1037,20 @@ class Handler(BaseHTTPRequestHandler):
                 return self.respond(HTTPStatus.OK, dict(row))
             except (ValueError, json.JSONDecodeError, TypeError) as exc:
                 return self.respond(HTTPStatus.BAD_REQUEST, {"erro": str(exc)})
+        calendar_match = re.fullmatch(r"/api/tarifas/redes/(\d+)/calendario", urlparse(self.path).path)
+        if calendar_match:
+            try:
+                data = calendar.validate_calendar(self.read_json())
+                with connect() as db:
+                    network_id = int(calendar_match.group(1))
+                    cur = db.execute("UPDATE tarifas_redes SET pagamento_primeira_quinzena=?, pagamento_segunda_quinzena=?, atualizado_em=? WHERE id=?", (*data.values(), datetime.now(timezone.utc).isoformat(), network_id))
+                    if not cur.rowcount:
+                        return self.respond(HTTPStatus.NOT_FOUND, {"erro": "Rede não encontrada."})
+                    calendar.refresh_pending(db, network_id)
+                    row = db.execute("SELECT * FROM tarifas_redes WHERE id=?", (network_id,)).fetchone()
+                return self.respond(HTTPStatus.OK, dict(row))
+            except (ValueError, json.JSONDecodeError, TypeError) as exc:
+                return self.respond(HTTPStatus.BAD_REQUEST, {"erro": str(exc)})
         network_match = re.fullmatch(r"/api/tarifas/redes/(\d+)", urlparse(self.path).path)
         if network_match:
             try:
@@ -1184,7 +1217,7 @@ class Handler(BaseHTTPRequestHandler):
                                 raise ValueError("A quantidade de diaristas deste dia já foi preenchida.")
                         if status == "presente":
                             local = order["supermercado"] + (f" · {order['unidade']}" if order["unidade"] else "")
-                            network_rate = db.execute("SELECT valor_recebido_centavos, valor_padrao_centavos FROM tarifas_redes WHERE lower(rede) = lower(?)", (order["supermercado"],)).fetchone()
+                            network_rate = db.execute("SELECT * FROM tarifas_redes WHERE lower(rede) = lower(?)", (order["supermercado"],)).fetchone()
                             sector_rate = db.execute("""SELECT valor_pago_centavos FROM tarifas_setores
                                 WHERE lower(setor) = lower(?) AND (lower(rede) = lower(?) OR rede IS NULL) AND valor_pago_centavos IS NOT NULL
                                 ORDER BY CASE WHEN lower(rede) = lower(?) THEN 0 ELSE 1 END LIMIT 1""",
@@ -1195,12 +1228,13 @@ class Handler(BaseHTTPRequestHandler):
                             if contract:
                                 paid_rate = contract['valor_pago_centavos'] if contract['valor_pago_centavos'] is not None else paid_rate
                                 received_rate = contract['valor_recebido_centavos'] if contract['valor_recebido_centavos'] is not None else received_rate
+                            due = calendar.payment_due(scale['data'], network_rate['pagamento_primeira_quinzena'], network_rate['pagamento_segunda_quinzena']) if network_rate else None
                             db.execute("""INSERT INTO diarias (diarista_id, data, local, setor, observacoes, pedido_escala_id,
-                                valor_centavos, valor_recebido_centavos, vencimento_pagamento, criado_em, contrato_id)
-                                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+                                valor_centavos, valor_recebido_centavos, vencimento_pagamento, criado_em, contrato_id, vencimento_recebimento, vencimento_origem)
+                                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
                                 (scale["diarista_id"], scale["data"], local, order["setor"],
                                  f"Presença no pedido #{scale_route[0]}", scale["id"], paid_rate, received_rate,
-                                 scale["data"] if paid_rate is not None else None, datetime.now(timezone.utc).isoformat(), contract["id"] if contract else None))
+                                 due, datetime.now(timezone.utc).isoformat(), contract["id"] if contract else None, due, "calendario" if due else "nao_informado"))
                         now = datetime.now(timezone.utc).isoformat()
                         db.execute("""UPDATE pedido_escalas SET status = ?, atualizado_em = ?,
                             falta_motivo = ?, falta_confirmada_por = ?, falta_confirmada_em = ?,
@@ -1237,7 +1271,10 @@ class Handler(BaseHTTPRequestHandler):
                     if old["pagamento_lote_id"] is not None:
                         raise ValueError("Reabra o fechamento antes de corrigir esta diária.")
                     effective = {key: updates.get(key, old[key]) for key in ("data_pagamento", "valor_centavos", "vencimento_pagamento")}
-                    validate_payment_consistency(effective["data_pagamento"], effective["valor_centavos"], effective["vencimento_pagamento"])
+                    changed_due = 'vencimento_pagamento' in updates and updates['vencimento_pagamento'] != old['vencimento_pagamento']
+                    validate_payment_consistency(effective["data_pagamento"], effective["valor_centavos"], effective["vencimento_pagamento"], bool(old['pedido_escala_id'] and old['vencimento_origem']=='nao_informado' and not changed_due))
+                    if changed_due:
+                        updates['vencimento_origem'] = 'manual'
                     if old["data_pagamento"] and any(old[key] != value for key, value in updates.items() if key != "motivo_ajuste"):
                         reason = updates.get("motivo_ajuste", "")
                         if len(reason.strip()) < 8 or reason == old["motivo_ajuste"]:
