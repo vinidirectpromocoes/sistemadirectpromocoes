@@ -90,14 +90,15 @@
     const matches = [...String(value).matchAll(/(?:^|\D)([01]?\d|2[0-3])\s*(?:[:hH])\s*([0-5]\d)(?!\d)/g)];
     return matches.slice(0, 2).map(match => `${pad(match[1])}:${match[2]}`);
   }
-  function readDate(raw, today) {
+  function readDate(raw, today, recentDays = 31) {
     const match = /^(\d{1,2})(?:\/(\d{1,2}))?(?:\/(\d{4}))?$/.exec(raw);
     if (!match) return null;
     const day = Number(match[1]), month = Number(match[2]), year = Number(match[3]);
     if (month && year) return dateUTC(year, month, day);
     if (month) {
-      const thisYear = dateUTC(today.getUTCFullYear(), month, day);
-      return thisYear && thisYear >= today ? thisYear : dateUTC(today.getUTCFullYear() + 1, month, day);
+      const candidates = Array.from({length: 6}, (_, i) => dateUTC(today.getUTCFullYear() - 1 + i, month, day)).filter(Boolean);
+      const recent = candidates.filter(date => date <= today && daysBetween(date, today) <= recentDays).at(-1);
+      return recent || candidates.find(date => date >= today) || null;
     }
     for (let step = 0; step < 14; step++) {
       const cursor = new Date(Date.UTC(today.getUTCFullYear(), today.getUTCMonth() + step, day));
@@ -109,18 +110,26 @@
     const today = dateUTC(...todayIso.split('-').map(Number));
     const match = /(\d{1,2}(?:\/\d{1,2}(?:\/\d{4})?)?)\s*(?:a|[àá]|ate|até|-)\s*(\d{1,2}(?:\/\d{1,2}(?:\/\d{4})?)?)/i.exec(raw);
     if (!match || !today || !startClock || !endClock || startClock >= endClock) return [];
-    const start = readDate(match[1], today); if (!start) return [];
-    let end;
-    if (/^\d{1,2}$/.test(match[2])) {
+    let start = readDate(match[1], today); if (!start) return [];
+    const finish = first => {
+      if (!/^\d{1,2}$/.test(match[2])) return readDate(match[2], first, 0);
       const finalDay = Number(match[2]);
-      const monthOffset = finalDay >= start.getUTCDate() ? 0 : 1;
-      for (let step = monthOffset; step < monthOffset + 4; step++) {
-        const candidate = dateUTC(start.getUTCFullYear(), start.getUTCMonth() + step, finalDay);
-        if (candidate && candidate >= start) { end = candidate; break; }
+      const offset = finalDay >= first.getUTCDate() ? 0 : 1;
+      for (let step = offset; step < offset + 4; step++) {
+        const month = new Date(Date.UTC(first.getUTCFullYear(), first.getUTCMonth() + step, 1));
+        const candidate = dateUTC(month.getUTCFullYear(), month.getUTCMonth() + 1, finalDay);
+        if (candidate && candidate >= first) return candidate;
       }
-    } else {
-      end = readDate(match[2], start);
+      return null;
+    };
+    // An abbreviated range may already be in progress across the month boundary.
+    if (/^\d{1,2}$/.test(match[1])) {
+      const previousMonth = new Date(Date.UTC(today.getUTCFullYear(), today.getUTCMonth() - 1, 1));
+      const recentStart = dateUTC(previousMonth.getUTCFullYear(), previousMonth.getUTCMonth() + 1, Number(match[1]));
+      const recentEnd = recentStart && finish(recentStart);
+      if (recentStart && recentEnd && recentStart <= today && recentEnd >= today && daysBetween(recentStart, today) <= 31) start = recentStart;
     }
+    const end = finish(start);
     if (!end || end < start || daysBetween(start, end) > 89) return [];
     const shifts = [];
     for (let cursor = start; cursor <= end; cursor = nextDay(cursor)) shifts.push({ data: iso(cursor), inicio: startClock, fim: endClock });
@@ -203,6 +212,10 @@
     if (reported && reported !== turnos.length) missing.push('confirmar quantidade de dias');
     if (people < 1 || people > 100) missing.push('quantidade de diaristas');
     const avisos = peopleField ? [] : ['Padrão aplicado: 1 diarista por dia.'];
+    if (turnos.length && !/\b\d{1,2}\/\d{1,2}\/\d{4}\b/.test(period)) {
+      avisos.push(`Período identificado: ${turnos[0].data.split('-').reverse().join('/')} a ${turnos.at(-1).data.split('-').reverse().join('/')}.`);
+      if (daysBetween(dateUTC(...today.split('-').map(Number)), dateUTC(...turnos[0].data.split('-').map(Number))) > 90) missing.push('confirmar ano das datas');
+    }
     if (!market && matches.length > 1) avisos.unshift(`A loja ${unit} pertence a ${[...new Set(matches.map(item => item.rede))].join(' ou ')}. Informe a rede.`);
     return { tipo: 'pedido', dados: data, faltando: missing, texto: text, avisos };
   }
