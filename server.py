@@ -6,6 +6,7 @@ import json
 import os
 import re
 import sqlite3
+import scale_lifecycle
 from datetime import date, datetime, timezone
 from decimal import Decimal, InvalidOperation
 from http import HTTPStatus
@@ -86,6 +87,7 @@ def migrate_partial_workers():
 
 def init_db():
     migrate_partial_workers()
+    scale_lifecycle.migrate(__import__(__name__))
     with connect() as db:
         db.execute("""CREATE TABLE IF NOT EXISTS diaristas (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -192,13 +194,13 @@ def init_db():
             pedido_id INTEGER NOT NULL REFERENCES pedidos(id) ON DELETE RESTRICT,
             diarista_id INTEGER NOT NULL REFERENCES diaristas(id) ON DELETE RESTRICT,
             data TEXT NOT NULL,
-            status TEXT NOT NULL DEFAULT 'escalada' CHECK (status IN ('escalada', 'presente', 'falta')),
+            status TEXT NOT NULL DEFAULT 'escalada' CHECK (status IN ('escalada', 'presente', 'falta', 'desistiu')),
             criado_em TEXT NOT NULL,
             atualizado_em TEXT NOT NULL,
             UNIQUE(pedido_id, data, diarista_id)
         )""")
         scale_columns = {row["name"] for row in db.execute("PRAGMA table_info(pedido_escalas)")}
-        for name, kind in (("falta_motivo", "TEXT"), ("falta_confirmada_por", "TEXT"),
+        for name, kind in (("desistencia_motivo", "TEXT"), ("desistencia_em", "TEXT"), ("desistencia_por", "TEXT"), ("falta_motivo", "TEXT"), ("falta_confirmada_por", "TEXT"),
                            ("falta_confirmada_em", "TEXT"), ("substituida_por_escala_id", "INTEGER")):
             if name not in scale_columns:
                 db.execute(f"ALTER TABLE pedido_escalas ADD COLUMN {name} {kind}")
@@ -271,7 +273,7 @@ def init_db():
         for table, fields in {
             "diarias": ("id", "diarista_id", "data", "local", "setor", "valor_centavos", "vencimento_pagamento", "vencimento_recebimento", "vencimento_origem", "data_pagamento", "forma_pagamento", "motivo_ajuste"),
             "financeiro_lancamentos": ("id", "tipo", "descricao", "contraparte", "valor_centavos", "vencimento", "data_pagamento", "forma_pagamento", "motivo_ajuste"),
-            "pedido_escalas": ("id", "pedido_id", "diarista_id", "data", "status", "disponibilidade_pedido_confirmada"),
+            "pedido_escalas": ("id", "pedido_id", "diarista_id", "data", "status", "disponibilidade_pedido_confirmada", "desistencia_motivo", "desistencia_em", "desistencia_por", "substituida_por_escala_id"),
             "tarifas_redes": ("id", "rede", "valor_recebido_centavos", "valor_padrao_centavos", "pagamento_primeira_quinzena", "pagamento_segunda_quinzena"),
             "tarifas_setores": ("id", "rede", "setor", "valor_pago_centavos"),
         }.items():
@@ -620,7 +622,7 @@ def validate_worker_shift(db, worker, order, day, scoped_availability=False):
         raise ValueError("A diarista não está disponível nesse dia e horário.")
     other_scales = db.execute("""SELECT e.data, p.turnos FROM pedido_escalas e
         JOIN pedidos p ON p.id = e.pedido_id
-        WHERE e.diarista_id = ? AND e.data = ? AND e.status != 'falta'""", (worker["id"], day))
+        WHERE e.diarista_id = ? AND e.data = ? AND e.status NOT IN ('falta','desistiu')""", (worker["id"], day))
     for other in other_scales:
         existing = order_shift(other, day)
         if existing and shift["inicio"] < existing["fim"] and existing["inicio"] < shift["fim"]:
@@ -820,6 +822,15 @@ class Handler(BaseHTTPRequestHandler):
         path = urlparse(self.path).path
         if path == "/api/leitura/pedido-escalado":
             return linked_reading.handle(self, sys.modules[__name__])
+        replacement_route=re.fullmatch(r"/api/pedidos/(\d+)/escalas/(\d+)/substituir",urlparse(self.path).path)
+        if replacement_route:
+            try:
+                with connect() as db:
+                    db.execute('BEGIN IMMEDIATE')
+                    result=scale_lifecycle.replace(db,int(replacement_route[1]),int(replacement_route[2]),self.read_json(),__import__(__name__))
+                return self.respond(HTTPStatus.OK,result)
+            except (ValueError,TypeError,json.JSONDecodeError,sqlite3.IntegrityError) as error:
+                return self.respond(HTTPStatus.BAD_REQUEST,{'erro':str(error)})
         if extended.handle(self, "POST", sys.modules[__name__]): return
         if path == "/api/cobrancas" or re.fullmatch(r"/api/cobrancas/\d+/recebimentos", path):
             try:
@@ -927,16 +938,17 @@ class Handler(BaseHTTPRequestHandler):
                         validate_worker_shift(db, person, order, day)
                         if db.execute("SELECT 1 FROM pedido_escalas WHERE pedido_id = ? AND data = ? AND diarista_id = ?", (scale_route[0], day, person["id"])).fetchone():
                             raise ValueError(f"A diarista já está neste pedido em {day}.")
-                        count = db.execute("SELECT count(*) FROM pedido_escalas WHERE pedido_id = ? AND data = ? AND status != 'falta'", (scale_route[0], day)).fetchone()[0]
+                        count = db.execute("SELECT count(*) FROM pedido_escalas WHERE pedido_id = ? AND data = ? AND status NOT IN ('falta','desistiu')", (scale_route[0], day)).fetchone()[0]
                         if count >= order["quantidade_diaristas"]:
                             raise ValueError(f"A quantidade de diaristas em {day} já foi preenchida.")
                     now = datetime.now(timezone.utc).isoformat()
                     ids = [db.execute("INSERT INTO pedido_escalas (pedido_id, diarista_id, data, status, criado_em, atualizado_em) VALUES (?, ?, ?, 'escalada', ?, ?)", (scale_route[0], payload["diarista_id"], day, now, now)).lastrowid for day in days]
                     for day, new_id in zip(days, ids):
                         absence = db.execute("""SELECT id FROM pedido_escalas WHERE pedido_id = ? AND data = ?
-                            AND status = 'falta' AND substituida_por_escala_id IS NULL ORDER BY id LIMIT 1""", (scale_route[0], day)).fetchone()
+                            AND status IN ('falta','desistiu') AND substituida_por_escala_id IS NULL ORDER BY id LIMIT 1""", (scale_route[0], day)).fetchone()
                         if absence:
                             db.execute("UPDATE pedido_escalas SET substituida_por_escala_id = ? WHERE id = ?", (new_id, absence["id"]))
+                    scale_lifecycle.sync(db,scale_route[0])
                     saved = [row for row in order_scale_rows(db, scale_route[0]) if row["id"] in ids]
                 return self.respond(HTTPStatus.CREATED, saved if batch else saved[0])
             except (ValueError, json.JSONDecodeError, TypeError) as exc:
@@ -1195,7 +1207,7 @@ class Handler(BaseHTTPRequestHandler):
             try:
                 payload = self.read_json()
                 status = payload.get("status") if isinstance(payload, dict) else None
-                if status not in {"escalada", "presente", "falta"}:
+                if status not in {"escalada", "presente", "falta", "desistiu"}:
                     raise ValueError("Selecione presença ou falta.")
                 with connect() as db:
                     db.execute("BEGIN IMMEDIATE")
@@ -1203,8 +1215,10 @@ class Handler(BaseHTTPRequestHandler):
                     if not scale:
                         return self.respond(HTTPStatus.NOT_FOUND, {"erro": "Escala não encontrada."})
                     order = db.execute("SELECT * FROM pedidos WHERE id = ?", (scale_route[0],)).fetchone()
+                    if scale['status']=='desistiu' and status!='desistiu': raise ValueError('Preserve a desistência registrada. Escolha uma substituição.')
+                    if status=='desistiu' and scale['status'] not in ('escalada','desistiu'): raise ValueError('Desistência disponível apenas antes da presença ou falta.')
                     if status != scale["status"]:
-                        reason = clean_text(payload.get("motivo"), "o motivo da falta", 300) if status == "falta" else None
+                        reason = clean_text(payload.get("motivo"), "o motivo da falta ou desistência", 300) if status in ("falta","desistiu") else None
                         if reason is not None and len(reason) < 5:
                             raise ValueError("Informe o motivo da falta com pelo menos 5 caracteres.")
                         if status in {"presente", "falta"} and scale["data"] > datetime.now(FORTALEZA).date().isoformat():
@@ -1222,7 +1236,7 @@ class Handler(BaseHTTPRequestHandler):
                             if not person or person["bloqueada"] or order["situacao"] in {"cancelado", "concluido"}:
                                 raise ValueError("Confira o cadastro e a situação do pedido antes de reativar a escala.")
                             validate_worker_shift(db, person, order, scale["data"], scoped_availability=bool(scale["disponibilidade_pedido_confirmada"]))
-                            count = db.execute("SELECT count(*) FROM pedido_escalas WHERE pedido_id = ? AND data = ? AND status != 'falta'", (scale_route[0], scale["data"])).fetchone()[0]
+                            count = db.execute("SELECT count(*) FROM pedido_escalas WHERE pedido_id = ? AND data = ? AND status NOT IN ('falta','desistiu')", (scale_route[0], scale["data"])).fetchone()[0]
                             if count >= order["quantidade_diaristas"]:
                                 raise ValueError("A quantidade de diaristas deste dia já foi preenchida.")
                         if status == "presente":
@@ -1248,9 +1262,11 @@ class Handler(BaseHTTPRequestHandler):
                         now = datetime.now(timezone.utc).isoformat()
                         db.execute("""UPDATE pedido_escalas SET status = ?, atualizado_em = ?,
                             falta_motivo = ?, falta_confirmada_por = ?, falta_confirmada_em = ?,
-                            substituida_por_escala_id = CASE WHEN ? = 'falta' THEN substituida_por_escala_id ELSE NULL END
-                            WHERE id = ?""", (status, now, reason, "Servidor local" if reason else None,
-                            now if reason else None, status, scale["id"]))
+                            substituida_por_escala_id = CASE WHEN ? IN ('falta','desistiu') THEN substituida_por_escala_id ELSE NULL END
+                            WHERE id = ?""", (status, now, reason if status=='falta' else None, "Servidor local" if status=='falta' else None,
+                            now if status=='falta' else None, status, scale["id"]))
+                        if status=='desistiu': db.execute('UPDATE pedido_escalas SET desistencia_motivo=?,desistencia_em=?,desistencia_por=? WHERE id=?',(reason,now,'Servidor local',scale['id']))
+                        scale_lifecycle.sync(db,scale_route[0])
                         if scale['status'] == 'presente' and status != 'presente':
                             db.execute("UPDATE pedido_escalas SET loja_validacao='pendente',loja_responsavel='',loja_observacao='',chegada_em=NULL,saida_em=NULL,loja_validada_em=NULL,loja_validada_por=NULL WHERE id=?", (scale['id'],))
                     row = next(row for row in order_scale_rows(db, scale_route[0]) if row["id"] == scale["id"])
@@ -1336,6 +1352,7 @@ class Handler(BaseHTTPRequestHandler):
                     return self.respond(HTTPStatus.CONFLICT, {"erro": "Presenças e faltas registradas não podem ser excluídas."})
                 db.execute("UPDATE pedido_escalas SET substituida_por_escala_id = NULL WHERE substituida_por_escala_id = ?", (scale_route[1],))
                 db.execute("DELETE FROM pedido_escalas WHERE id = ?", (scale_route[1],))
+                scale_lifecycle.sync(db,scale_route[0])
             return self.respond(HTTPStatus.OK, {"ok": True})
         order_match = re.fullmatch(r"/api/pedidos/(\d+)", urlparse(self.path).path)
         if order_match:

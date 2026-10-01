@@ -59,14 +59,14 @@
   if(canFinance())for(const [label,v,detail]of [['Cobranças atrasadas',moneyLabel(d.overdue.reduce((n,x)=>n+x.balance,0)),`${d.overdue.length} cobranças com saldo vencido`],['Saldo contestado',moneyLabel(d.contested),'Saldo de cobranças contestadas, sem desconto automático']]){const c=node('article','','finance-stat');c.append(node('span',label),node('strong',v),node('small',detail));metricsGrid.append(c);}
   $('quality-summary').textContent=`${d.missingContact} sem telefone · ${d.staleAvailability} disponibilidades para reconfirmar. A falta de horário não é contada como pontualidade.`;
   const list=$('quality-list');list.replaceChildren();
-  for(const p of d.profiles){const r=entry(p.name,`${p.present} presenças · ${p.absent} faltas · ${p.late} atrasos registrados · ${p.unknown} sem horário · ${p.praise} elogios · ${p.complaints} reclamações`);list.append(r);}
+  for(const p of d.profiles){const r=entry(p.name,`${p.present} presenças · ${p.absent} faltas · ${p.withdrawn||0} desistências (${p.withdrawnAfterConfirmed||0} após confirmar) · ${p.late} atrasos registrados · ${p.unknown} sem horário · ${p.praise} elogios · ${p.complaints} reclamações`);list.append(r);}
   if(!d.profiles.length)list.textContent='Sem atendimentos registrados no período.';
  }
  function renderOnCall(){
   queue.replaceChildren();const today=homeToday(),end=new Date(`${today}T12:00:00Z`);end.setUTCDate(end.getUTCDate()+7);const last=end.toISOString().slice(0,10);const now=Date.now();
   const rows=[];
   for(const o of data.orders.filter(o=>!['cancelado','concluido'].includes(o.situacao)))for(const t of o.turnos.filter(t=>t.data>=today&&t.data<=last)){
-   const s=data.scales.filter(s=>s.pedido_id===o.id&&s.data===t.data&&s.status!=='falta');
+   const s=data.scales.filter(s=>s.pedido_id===o.id&&s.data===t.data&&!['falta','desistiu'].includes(s.status));
    const pending=s.filter(s=>s.status==='escalada');const vacancies=Math.max(0,o.quantidade_diaristas-s.length);
    const text=`${dateLabel(t.data)} ${t.inicio}–${t.fim} · ${o.setor} · ${vacancies} vaga(s) · ${pending.filter(s=>s.confirmacao!=='confirmou').length} respostas pendentes`;
    const r=entry(`${o.supermercado} / ${o.unidade}`,text);r.append(orderButton(o.id));
@@ -148,7 +148,7 @@
  const oldDetail=openDetail;openDetail=async id=>{await oldDetail(id);profileButton.hidden=!canOperate();};
  window.DirectOperations={refresh,printInvoice,renderStoreResults,openOccurrence,
   appendScale(row,s){if(!canOperate())return;const wrap=node('div','','extended-scale-controls');
-   if(s.status==='escalada'){wrap.append(node('small',`Resposta: ${{aguardando:'aguardando',confirmou:'confirmada',recusou:'recusou'}[s.confirmacao||'aguardando']}`));for(const [value,label]of [['confirmou','✓ Confirmou'],['recusou','× Recusou'],['aguardando','↺ Aguardando']]){const b=button(label,async()=>{await confirmation(s,value);await refreshOrderScales();await refresh(true);});b.disabled=s.confirmacao===value;wrap.append(b);}
+   if(s.status==='escalada'){wrap.append(node('small',`Resposta: ${{aguardando:'aguardando',confirmou:'confirmada',recusou:'recusou'}[s.confirmacao||'aguardando']}`));for(const [value,label]of [['confirmou','✓ Confirmou que vai'],['aguardando','↺ Aguardando']]){const b=button(label,async()=>{await confirmation(s,value);await refreshOrderScales();await refresh(true);});b.disabled=s.confirmacao===value;wrap.append(b);}
     wrap.append(button('♧ Copiar convite',async()=>{const o=orderRecords.find(o=>o.id===s.pedido_id);const t=o.turnos.find(t=>t.data===s.data);const store=matchingOrderStore(o.supermercado,o.unidade);await navigator.clipboard.writeText(`Olá, ${s.diarista_nome}!\n*Rede:* ${o.supermercado}\n*Loja:* ${o.unidade}\n*Endereço:* ${store?[store.endereco,store.bairro,store.cidade+'/CE'].filter(Boolean).join(', '):'Confirmar com a operação'}\n*Setor:* ${o.setor}\n*Data:* ${dateLabel(s.data)}\n*Horário:* ${t.inicio} às ${t.fim}\nVocê confirma sua disponibilidade?`);notice('Convite copiado. Registre a resposta após recebê-la.');}));
    }else if(s.status==='presente'){wrap.append(node('small',`Loja: ${s.loja_validacao||'pendente'}${s.loja_responsavel?' · '+s.loja_responsavel:''}`),button('✓ Validar atendimento',()=>openValidation(s)));}
    wrap.append(button('⚑ Ocorrência',()=>openOccurrence(s.pedido_id,s.id)));row.append(wrap);

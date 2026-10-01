@@ -5,8 +5,6 @@ let orderScales = [];
 let orderWorkers = [];
 let orderDetailBusy = false;
 let weeklyScales = {};
-let weeklyPage = 0;
-const weeklyPageSize = 7;
 let orderCatalogStores = [];
 let orderCatalogSectors = [];
 
@@ -40,7 +38,7 @@ function updateOrderFilterOptions() {
   const store=$('#orders-store-filter').value;
   populate('#orders-sector-filter',orders.filter(o=>store==='todos' || orderNormalize(o.unidade)===store).map(o=>o.setor),'Todos os setores');
 }
-function applyOrderFilters() { weeklyPage=0;updateOrderFilterOptions();renderOrders();renderWeekly(); }
+function applyOrderFilters() { updateOrderFilterOptions();renderOrders();renderOrderMetrics(); }
 
 const orderNormalize = value => String(value || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').trim().toLocaleLowerCase('pt-BR');
 
@@ -72,8 +70,7 @@ async function loadOrderCatalog() {
   updateOrderStoreOptions();
 }
 
-function renderWeekly() {
-  const target = $('#weekly-days'); target.replaceChildren();
+function renderOrderMetrics() {
   const filters=orderFilters(),records=filteredOrderRecords(filters);
   let demand = 0, filled = 0, present = 0, absent = 0, awaiting = 0;
   for (const order of records) {
@@ -81,7 +78,7 @@ function renderWeekly() {
     const dates=new Set(orderFilteredShifts(order,filters).map(shift=>shift.data));
     demand += dates.size*order.quantidade_diaristas;
     const scales = (weeklyScales[order.id] || []).filter(scale=>dates.has(scale.data));
-    filled += scales.filter(scale => scale.status !== 'falta').length;
+    filled += scales.filter(scale => !['falta','desistiu'].includes(scale.status)).length;
     present += scales.filter(scale => scale.status === 'presente').length;
     absent += scales.filter(scale => scale.status === 'falta').length;
     awaiting += scales.filter(scale => scale.status === 'escalada' && scale.data <= orderToday()).length;
@@ -89,49 +86,7 @@ function renderWeekly() {
   $('#orders-fill-rate').textContent = `${demand ? Math.round(filled / demand * 100) : 0}%`;
   $('#orders-absence-rate').textContent = `${present + absent ? Math.round(absent / (present + absent) * 100) : 0}%`;
   $('#orders-awaiting-attendance').textContent = String(awaiting);
-  const hasPeriod=!!(filters.start || filters.end);
-  $('#weekly-date').closest('label').hidden=hasPeriod;
-  $('#weekly-help').textContent=hasPeriod?'Mostra somente os dias com diárias no período filtrado.':'Mostra somente os dias com pedidos a partir da data escolhida.';
-  const firstDate = filters.start || (filters.end ? '0000-00-00' : $('#weekly-date').value || orderToday());
-  const shiftsByDate = new Map();
-  for (const order of records) {
-    if (order.situacao === 'cancelado') continue;
-    for (const shift of orderFilteredShifts(order,filters)) {
-      if (shift.data < firstDate) continue;
-      const shifts = shiftsByDate.get(shift.data) || [];
-      shifts.push({ order, shift });
-      shiftsByDate.set(shift.data, shifts);
-    }
-  }
-  const dates = [...shiftsByDate.keys()].sort();
-  const pageCount = Math.ceil(dates.length / weeklyPageSize);
-  weeklyPage = Math.min(weeklyPage, Math.max(0, pageCount - 1));
-  const visibleDates = dates.slice(weeklyPage * weeklyPageSize, (weeklyPage + 1) * weeklyPageSize);
-  const pagination = $('#weekly-pagination');
-  pagination.hidden = pageCount <= 1;
-  $('#weekly-page-label').textContent = `Página ${weeklyPage + 1} de ${pageCount}`;
-  $('#weekly-prev').disabled = weeklyPage === 0;
-  $('#weekly-next').disabled = weeklyPage >= pageCount - 1;
-  if (!visibleDates.length) {
-    const empty = document.createElement('p'); empty.className = 'weekly-empty';
-    empty.textContent = 'Nenhuma diária para os filtros e a data escolhidos.';
-    target.append(empty);
-  }
-  for (const key of visibleDates) {
-    const card = document.createElement('article'); card.className = 'weekly-day';
-    const heading = document.createElement('h3'); heading.textContent = dateLabel(key); card.append(heading);
-    const shifts = shiftsByDate.get(key).sort((a, b) => a.shift.inicio.localeCompare(b.shift.inicio) || a.order.supermercado.localeCompare(b.order.supermercado, 'pt-BR'));
-    for (const { order, shift } of shifts) {
-      const active = (weeklyScales[order.id] || []).filter(scale => scale.data === key && scale.status !== 'falta');
-      const button = document.createElement('button'); button.type = 'button';
-      button.className = `weekly-shift${active.length < order.quantidade_diaristas ? ' is-open' : ''}`;
-      const title = document.createElement('strong'); title.textContent = `${order.supermercado} · ${order.unidade || 'Loja não informada'}`;
-      const subtitle = document.createElement('span'); subtitle.textContent = `${shift.inicio}–${shift.fim} · ${order.setor}`;
-      const people = document.createElement('span'); people.textContent = `${active.length}/${order.quantidade_diaristas} · ${active.map(scale => scale.diarista_nome).join(', ') || 'Vaga aberta'}`;
-      button.append(title, subtitle, people); button.addEventListener('click', () => openOrderDetail(order.id)); card.append(button);
-    }
-    target.append(card);
-  }
+
 }
 
 const orderStatusLabels = {
@@ -154,9 +109,17 @@ function showOrderFeedback(message, isError = false) {
   showOrderFeedback.timer = window.setTimeout(() => { box.hidden = true; }, 5000);
 }
 
+function orderCoverage(order,filters=orderFilters(),now=Date.now()) {
+  if(order.situacao==='cancelado')return {color:'neutral',label:'Pedido cancelado'};
+  const gaps=orderFilteredShifts(order,filters).filter(t=>(weeklyScales[order.id]||[]).filter(s=>s.data===t.data&&!['falta','desistiu'].includes(s.status)).length<order.quantidade_diaristas);
+  if(!gaps.length)return {color:'green',label:'Equipe preenchida em todos os dias exibidos'};
+  const running=gaps.some(t=>Date.parse(`${t.data}T${t.inicio}:00-03:00`)<=now&&now<Date.parse(`${t.data}T${t.fim}:00-03:00`));
+  return running?{color:'yellow',label:'Diária já iniciou e há vaga sem diarista'}:{color:'red',label:'Pedido não atendido: há vaga sem diarista'};
+}
+
 function orderAssignedNames(order, filters=orderFilters()) {
   const dates=new Set(orderFilteredShifts(order,filters).map(shift=>shift.data));
-  return [...new Set((weeklyScales[order.id] || []).filter(scale=>dates.has(scale.data) && scale.status!=='falta').map(scale=>scale.diarista_nome).filter(Boolean))];
+  return [...new Set((weeklyScales[order.id] || []).filter(scale=>dates.has(scale.data) && !['falta','desistiu'].includes(scale.status)).map(scale=>scale.diarista_nome).filter(Boolean))];
 }
 
 function renderOrders() {
@@ -209,13 +172,22 @@ function renderOrders() {
     }
     row.append(demand);
     const state = document.createElement('td');
+    const coverage=orderCoverage(item,filters);
+    const indicator=document.createElement('span'); indicator.className=`order-neon ${coverage.color}`; indicator.setAttribute('role','img'); indicator.setAttribute('aria-label',coverage.label); indicator.title=coverage.label;
+    state.append(indicator);
     const badge = document.createElement('span'); badge.className = `order-status ${item.situacao}`;
     badge.textContent = orderStatusLabels[item.situacao]; state.append(badge); row.append(state);
     const action = document.createElement('td'); action.className = 'actions';
     const view = document.createElement('button'); view.type = 'button'; view.className = 'order-view-button';
     view.textContent = '◉'; view.setAttribute('aria-label', `Ver pedido de ${item.supermercado}`);
     view.title = 'Ver pedido'; view.addEventListener('click', () => openOrderDetail(item.id));
-    action.append(view); row.append(action); body.append(row);
+    action.append(view);
+    if(!window.directRemote || ['admin','operacao'].includes(window.directRemote.role)) {
+      const edit=document.createElement('button');edit.type='button';edit.className='order-view-button order-edit-button';
+      edit.innerHTML='<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="m16 3 5 5L8 21H3v-5zM14 5l5 5"/></svg>';
+      edit.setAttribute('aria-label',`Editar pedido #${item.id}`);edit.title='Editar pedido';edit.addEventListener('click',()=>openOrderForm(item));action.append(edit);
+    }
+    row.append(action);row.addEventListener('click',event=>{if(!event.target.closest('button'))openOrderDetail(item.id);}); body.append(row);
   });
 }
 
@@ -227,7 +199,7 @@ async function loadOrders() {
     weeklyScales = Object.groupBy ? Object.groupBy(allScales, scale => scale.pedido_id) :
       allScales.reduce((groups, scale) => ((groups[scale.pedido_id] ||= []).push(scale), groups), {});
     renderOrders();
-    renderWeekly();
+    renderOrderMetrics();
   }
   catch (err) { showOrderFeedback(`Não foi possível carregar os pedidos: ${err.message}`, true); }
 }
@@ -353,7 +325,7 @@ async function refreshOrderScales() {
   if (orderDetailId !== id) return;
   orderScales = savedScales;
   renderOrderShifts();
-  renderWeekly();
+  await loadOrders();
   if (typeof loadHome === 'function') loadHome().catch(() => {});
 }
 
@@ -399,7 +371,7 @@ function chooseOrderWorker(data, select, picker) {
   const dates = item.turnos.filter(shift => {
     if (assigned.has(shift.data)) return false;
     if (!window.DirectMatching.rank(worker, shift, item, store, orderRecords, weeklyScales).eligible) { unavailable++; return false; }
-    const occupied = orderScales.filter(scale => scale.data === shift.data && scale.status !== 'falta').length;
+    const occupied = orderScales.filter(scale => scale.data === shift.data && !['falta','desistiu'].includes(scale.status)).length;
     if (occupied >= item.quantidade_diaristas) { full++; return false; }
     return true;
   }).map(shift => shift.data);
@@ -428,8 +400,8 @@ async function changeOrderAttendance(scale, status) {
   }
   if (scale.status === 'presente' && status === 'falta' && !window.confirm(`Corrigir a presença de ${scale.diarista_nome} para falta? A diária pendente será retirada do Financeiro.`)) return;
   let motivo = null;
-  if (status === 'falta') {
-    motivo = window.prompt(`Motivo da falta de ${scale.diarista_nome} em ${dateLabel(scale.data)}:`, '')?.trim();
+  if (['falta','desistiu'].includes(status)) {
+    motivo = window.prompt(`Motivo ${status==='desistiu'?'da desistência':'da falta'} de ${scale.diarista_nome} em ${dateLabel(scale.data)}:`, '')?.trim();
     if (motivo == null) return;
     if (motivo.length < 5 || motivo.length > 300) return orderDetailError('Informe o motivo da falta com 5 a 300 caracteres.');
   }
@@ -440,9 +412,9 @@ async function changeOrderAttendance(scale, status) {
       method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ status, motivo }),
     });
     await refreshOrderScales();
-    if (status === 'falta') {
+    if (['falta','desistiu'].includes(status)) {
       const notice = $('#order-detail-success');
-      notice.textContent = 'Falta registrada. A vaga está aberta para substituição e a previsão financeira foi recalculada.';
+      notice.textContent = `${status==='desistiu'?'Desistência':'Falta'} registrada. Vaga aberta para substituição; previsão financeira atualizada.`;
       notice.hidden = false;
     }
     if (!window.directRemote || ['admin', 'financeiro'].includes(window.directRemote.role)) {
@@ -452,6 +424,32 @@ async function changeOrderAttendance(scale, status) {
     if (typeof loadHome === 'function') await loadHome();
   } catch (err) { orderDetailError(err.message); }
   finally { orderDetailBusy = false; }
+}
+
+function showOrderSubstitute(scale,row) {
+  if(orderDetailBusy)return;
+  document.querySelectorAll('.order-substitute-panel').forEach(p=>p.remove());
+  const panel=document.createElement('div');panel.className='order-substitute-panel';
+  const label=document.createElement('label');label.textContent='Pessoa substituta';
+  const select=document.createElement('select');select.setAttribute('aria-label',`Pessoa substituta de ${scale.diarista_nome}`);select.append(new Option('Selecione a pessoa',''));
+  for(const w of orderWorkers.filter(w=>!w.bloqueada&&w.id!==scale.diarista_id))select.append(new Option(w.nome,String(w.id)));
+  label.append(select);panel.append(label);
+  const reason=document.createElement('input');reason.type='text';reason.maxLength=300;reason.placeholder='Motivo da desistência';reason.setAttribute('aria-label','Motivo da desistência para substituir');
+  if(scale.status==='escalada')panel.append(reason);
+  const scope=document.createElement('label');scope.className='scope-choice';const checkbox=document.createElement('input');checkbox.type='checkbox';scope.append(checkbox,document.createTextNode('Confirmei a disponibilidade da substituta para este dia e horário'));panel.append(scope);
+  const actions=document.createElement('div');actions.className='order-assign-actions';
+  const save=document.createElement('button');save.type='button';save.className='button button-primary';save.textContent='Salvar substituição';
+  save.addEventListener('click',async()=>{
+    if(orderDetailBusy||!select.value)return;
+    if(scale.status==='escalada'&&reason.value.trim().length<5)return orderDetailError('Informe o motivo da desistência com pelo menos 5 caracteres.');
+    orderDetailBusy=true;save.disabled=true;
+    try {
+      await request(`/api/pedidos/${scale.pedido_id}/escalas/${scale.id}/substituir`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({diarista_id:Number(select.value),motivo:reason.value.trim(),disponibilidade_confirmada:checkbox.checked})});
+      await refreshOrderScales();if(typeof loadFinance==='function'&&(!window.directRemote||['admin','financeiro'].includes(window.directRemote.role)))await loadFinance();
+      $('#order-detail-success').textContent='Substituição registrada. Histórico preservado; confirme se a nova pessoa vai e depois registre presença ou falta.';$('#order-detail-success').hidden=false;
+    }catch(error){orderDetailError(error.message);}finally{orderDetailBusy=false;save.disabled=false;}
+  });
+  const cancel=document.createElement('button');cancel.type='button';cancel.className='button button-quiet';cancel.textContent='Cancelar';cancel.addEventListener('click',()=>panel.remove());actions.append(save,cancel);panel.append(actions);row.append(panel);panel.scrollIntoView({block:'nearest'});
 }
 
 async function removeOrderWorker(scale) {
@@ -472,7 +470,7 @@ function renderOrderShifts() {
   const list = $('#order-detail-shifts'); list.replaceChildren();
   item.turnos.forEach(shift => {
     const scales = orderScales.filter(scale => scale.data === shift.data);
-    const active = scales.filter(scale => scale.status !== 'falta').length;
+    const active = scales.filter(scale => !['falta','desistiu'].includes(scale.status)).length;
     const card = document.createElement('div'); card.className = 'order-day-card';
     const header = document.createElement('div'); header.className = 'order-detail-shift';
     const date = document.createElement('strong'); date.textContent = dateLabel(shift.data);
@@ -488,12 +486,12 @@ function renderOrderShifts() {
       const identity = document.createElement('div'); identity.className = 'order-worker-identity';
       const name = document.createElement('strong'); name.textContent = scale.diarista_nome;
       const state = document.createElement('span'); state.className = `order-attendance-status ${scale.status}`;
-      state.textContent = { escalada: 'Aguardando', presente: 'Presença', falta: 'Falta' }[scale.status];
+      state.textContent = { escalada: 'Escalado', presente: 'Presença', falta: 'Falta', desistiu:'Desistiu' }[scale.status];
       identity.append(name, state); row.append(identity);
-      if (scale.status === 'falta') {
+      if (['falta','desistiu'].includes(scale.status)) {
         const absence = document.createElement('small'); absence.className = 'order-absence-detail';
         const replacement = scales.find(item => item.id === scale.substituida_por_escala_id);
-        absence.textContent = `${scale.falta_motivo || 'Motivo não registrado (histórico anterior)'} · ${scale.falta_confirmada_por || 'Autor não registrado'}${scale.falta_confirmada_em ? ` · ${new Date(scale.falta_confirmada_em).toLocaleString('pt-BR')}` : ''}${replacement ? ` · Substituta: ${replacement.diarista_nome}` : ' · Substituição pendente'}`;
+        absence.textContent = `${scale.desistencia_motivo || scale.falta_motivo || 'Motivo não registrado (histórico anterior)'} · ${scale.desistencia_por || scale.falta_confirmada_por || 'Autor não registrado'}${(scale.desistencia_em || scale.falta_confirmada_em) ? ` · ${new Date(scale.desistencia_em || scale.falta_confirmada_em).toLocaleString('pt-BR')}` : ''}${replacement ? ` · Substituta: ${replacement.diarista_nome}` : ' · Substituição pendente'}`;
         row.append(absence);
       }
       const actions = document.createElement('div'); actions.className = 'order-worker-actions';
@@ -508,7 +506,7 @@ function renderOrderShifts() {
         });
         actions.append(profile);
       }
-      for (const [status, label] of canOperate ? [['presente', 'Presença'], ['falta', 'Falta']] : []) {
+      for (const [status, label] of canOperate && scale.status!=='desistiu' ? [['presente', 'Presença'], ['falta', 'Falta']] : []) {
         const button = document.createElement('button'); button.type = 'button';
         button.className = `order-attendance-button ${status}${scale.status === status ? ' selected' : ''}`;
         button.textContent = label; button.disabled = scale.status === status || shift.data > orderToday();
@@ -516,10 +514,15 @@ function renderOrderShifts() {
         button.setAttribute('aria-label', `${label} de ${scale.diarista_nome} em ${dateLabel(shift.data)}`);
         button.addEventListener('click', () => changeOrderAttendance(scale, status)); actions.append(button);
       }
-      if (canOperate && scale.status === 'escalada') {
-        const remove = document.createElement('button'); remove.type = 'button'; remove.className = 'text-button'; remove.textContent = 'Retirar';
-        remove.setAttribute('aria-label', `Retirar ${scale.diarista_nome} da escala`);
-        remove.addEventListener('click', () => removeOrderWorker(scale)); actions.append(remove);
+      if(canOperate && !['cancelado','concluido'].includes(item.situacao)) {
+        if(scale.status==='escalada') {
+          const withdraw=document.createElement('button');withdraw.type='button';withdraw.className='order-attendance-button desistiu';withdraw.textContent='Desistência';
+          withdraw.setAttribute('aria-label',`Desistência de ${scale.diarista_nome} em ${dateLabel(shift.data)}`);withdraw.addEventListener('click',()=>changeOrderAttendance(scale,'desistiu'));actions.append(withdraw);
+        }
+        if(scale.status!=='presente' && !scale.substituida_por_escala_id) {
+          const replace=document.createElement('button');replace.type='button';replace.className='order-attendance-button substitute';replace.textContent='Substituir';
+          replace.setAttribute('aria-label',`Substituir ${scale.diarista_nome} em ${dateLabel(shift.data)}`);replace.addEventListener('click',()=>showOrderSubstitute(scale,row));actions.append(replace);
+        }
       }
       row.append(actions);
       window.DirectOperations?.appendScale(row, scale);
@@ -639,10 +642,6 @@ $('#orders-search').addEventListener('input', applyOrderFilters);
 for(const id of ['orders-network-filter','orders-store-filter','orders-sector-filter','orders-status-filter','orders-start-filter','orders-end-filter']) $('#'+id).addEventListener('change',applyOrderFilters);
 $('#orders-filter-toggle').addEventListener('click',()=>{const panel=$('#orders-filter-fields');panel.hidden=!panel.hidden;$('#orders-filter-toggle').setAttribute('aria-expanded',String(!panel.hidden));});
 $('#orders-filter-clear').addEventListener('click',()=>{for(const id of ['orders-search','orders-start-filter','orders-end-filter']) $('#'+id).value='';for(const id of ['orders-network-filter','orders-store-filter','orders-sector-filter','orders-status-filter']) $('#'+id).value='todos';applyOrderFilters();});
-$('#weekly-date').value = orderToday();
-$('#weekly-date').addEventListener('change', () => { weeklyPage = 0; renderWeekly(); });
-$('#weekly-prev').addEventListener('click', () => { if (weeklyPage > 0) { weeklyPage--; renderWeekly(); } });
-$('#weekly-next').addEventListener('click', () => { weeklyPage++; renderWeekly(); });
 $('#order-close-button').addEventListener('click', () => $('#order-dialog').close());
 $('#order-cancel-button').addEventListener('click', () => $('#order-dialog').close());
 $('#order-form').addEventListener('submit', saveOrder);
@@ -657,3 +656,5 @@ $('#order-delete-button').addEventListener('click', deleteOrder);
 $('#order-dialog').addEventListener('click', orderDialogBackdrop);
 $('#order-detail-dialog').addEventListener('click', orderDialogBackdrop);
 if (window.location.hash === '#pedidos') loadOrders();
+
+setInterval(()=>{if(location.hash==='#pedidos'&&!orderDetailBusy)renderOrders();},60000);

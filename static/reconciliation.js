@@ -14,7 +14,7 @@
         if (typeof month === 'string' ? month && !shift.data.startsWith(month)
           : (month.start && shift.data < month.start) || (month.end && shift.data > month.end)) continue;
         const dayScales = scales.filter(item => item.data === shift.data);
-        const active = dayScales.filter(item => item.status !== 'falta');
+        const active = dayScales.filter(item => !['falta','desistiu'].includes(item.status));
         const present = dayScales.filter(item => item.status === 'presente');
         const absent = dayScales.filter(item => item.status === 'falta');
         const requested = order.situacao === 'cancelado' ? present.length : Number(order.quantidade_diaristas) || 0;

@@ -335,7 +335,7 @@ async function runExtendedWorkflow() {
     await page.locator('#worker-reserve-button').click();await page.locator('#ext-telefone').fill('85999991234');await page.locator('#ext-reserva').selectOption('sim');await page.locator('#extended-save').click();await page.locator('#extended-dialog').waitFor({state:'hidden'});await page.locator('#detail-dialog').evaluate(e=>e.close());
     await page.locator('#nav-crm').click();if(!await page.locator('#crm-support').evaluate(e=>e.open))await page.locator('#crm-support > summary').click();await page.locator('details.crm-tool').filter({has:page.locator('#reserves-section')}).locator('summary').click();await page.getByText('85999991234').waitFor();
     await page.locator('#nav-pedidos').click();await page.waitForFunction(id=>orderRecords.some(x=>x.id===id),order.id);await page.evaluate(id=>openOrderDetail(id),order.id);
-    await page.getByRole('button',{name:'✓ Confirmou',exact:true}).click();await page.getByText('Resposta: confirmada').waitFor();
+    await page.getByRole('button',{name:'✓ Confirmou que vai',exact:true}).click();await page.getByText('Resposta: confirmada').waitFor();
     await page.getByRole('button',{name:/^Presença de/}).click();await page.getByRole('button',{name:'✓ Validar atendimento',exact:true}).waitFor();
     await page.getByRole('button',{name:'✓ Validar atendimento',exact:true}).click();await page.locator('#ext-loja_responsavel').fill('Ana da loja');await page.locator('#ext-chegada').fill('07:05');await page.locator('#ext-saida').fill('15:20');await page.locator('#extended-save').click();await page.locator('#extended-dialog').waitFor({state:'hidden'});await page.getByText('Loja: validado · Ana da loja').waitFor();
     await page.getByRole('button',{name:'⚑ Ocorrência',exact:true}).click();await page.locator('#ext-tipo').selectOption('elogio');await page.locator('#ext-descricao').fill('Atendimento bem avaliado na loja');await page.locator('#extended-save').click();await page.locator('#extended-dialog').waitFor({state:'hidden'});await page.locator('#order-detail-dialog').evaluate(e=>e.close());
@@ -423,7 +423,7 @@ async function runAssignmentPersistence() {
         await page.goto(`${url}#pedidos`);
         const firstDateLabel = shifts[0].data.split('-').reverse().join('/');
         const row = page.locator('#orders-rows tr').filter({hasText:'Repositor de FLV'}).filter({hasText:firstDateLabel});
-        await row.getByRole('button').click();
+        await row.getByRole('button',{name:'Ver pedido de Super do Povo',exact:true}).click();
         const cards = page.locator('#order-detail-shifts .order-day-card');
         try {await cards.first().getByRole('combobox').waitFor();}
         catch(error) {console.error(`${name} ${width}: pedido ${order.id}: ${await page.locator('#order-detail-dialog').innerText()}`);throw error;}
@@ -455,7 +455,7 @@ async function runAssignmentPersistence() {
           // Aguarda os controles auxiliares para não abortar fetches no WebKit/Linux ao recarregar.
           await page.evaluate(async()=>{await loadHome();await window.DirectOperations.refresh();});
           await page.waitForLoadState('networkidle');
-          await page.reload(); await page.locator('#orders-rows tr').filter({hasText:'Repositor de FLV'}).filter({hasText:firstDateLabel}).getByRole('button').click();
+          await page.reload(); await page.locator('#orders-rows tr').filter({hasText:'Repositor de FLV'}).filter({hasText:firstDateLabel}).getByRole('button',{name:'Ver pedido de Super do Povo',exact:true}).click();
           await cards.first().locator('.order-worker-row').waitFor();
         }
         await cards.nth(1).getByRole('combobox').selectOption(String(worker.id));
@@ -465,7 +465,7 @@ async function runAssignmentPersistence() {
         // Aguarda os controles auxiliares para não abortar fetches no WebKit/Linux ao recarregar.
           await page.evaluate(async()=>{await loadHome();await window.DirectOperations.refresh();});
           await page.waitForLoadState('networkidle');
-          await page.reload(); await page.locator('#orders-rows tr').filter({hasText:'Repositor de FLV'}).filter({hasText:firstDateLabel}).getByRole('button').click();
+          await page.reload(); await page.locator('#orders-rows tr').filter({hasText:'Repositor de FLV'}).filter({hasText:firstDateLabel}).getByRole('button',{name:'Ver pedido de Super do Povo',exact:true}).click();
         await page.locator('#order-detail-shifts .order-worker-row').nth(6).waitFor();
         assert.equal(await page.locator('#order-detail-shifts .order-worker-row').count(),7,'Escalas persistem ao recarregar e reabrir');
         await page.waitForLoadState('networkidle');
@@ -597,14 +597,14 @@ async function runOrderFilters() {
       await page.locator('#orders-sector-filter').selectOption('flv');assert.equal(await page.locator('#orders-rows tr').count(),1);
       await page.locator('#orders-start-filter').fill('2026-10-03');await page.locator('#orders-end-filter').fill('2026-10-04');
       await page.waitForFunction(()=>document.querySelector('#orders-demand-count').textContent==='2');
-      assert.equal(await page.locator('#weekly-days .weekly-day').count(),1);assert.match(await page.locator('#weekly-days').innerText(),/03\/10\/2026/);assert.doesNotMatch(await page.locator('#weekly-days').innerText(),/01\/10\/2026|05\/10\/2026/);
-      assert.match(await page.locator('#orders-rows').innerText(),/1 dia.*2 diárias no período/);assert.equal(await page.locator('#weekly-date').isVisible(),false);
+      assert.equal(await page.locator('.weekly-card').count(),0);assert.match(await page.locator('#orders-rows').innerText(),/03\/10\/2026/);assert.doesNotMatch(await page.locator('#orders-rows').innerText(),/01\/10\/2026|05\/10\/2026/);
+      assert.match(await page.locator('#orders-rows').innerText(),/1 dia.*2 diárias no período/);assert.equal(await page.locator('#weekly-date').count(),0);
       await page.locator('#orders-status-filter').selectOption('confirmado');assert.equal(await page.locator('#orders-rows tr').count(),0);assert.ok(await page.locator('#orders-no-results').isVisible());
       await page.locator('#orders-status-filter').selectOption('novo');
       await page.locator('#orders-start-filter').fill('2026-10-05');await page.locator('#orders-end-filter').fill('2026-10-03');assert.ok(await page.locator('#orders-filter-error').isVisible());assert.equal(await page.locator('#orders-rows tr').count(),0);
       await page.locator('#orders-end-filter').fill('2026-10-06');assert.equal(await page.locator('#orders-demand-count').innerText(),'2');assert.equal(await page.locator('#orders-filter-error').isVisible(),false);
-      await page.locator('#orders-start-filter').fill('');await page.locator('#orders-end-filter').fill('2026-10-02');assert.equal(await page.locator('#orders-demand-count').innerText(),'2');assert.match(await page.locator('#weekly-days').innerText(),/01\/10\/2026/);
-      await page.locator('#orders-end-filter').fill('');await page.locator('#orders-start-filter').fill('2026-10-03');assert.equal(await page.locator('#orders-demand-count').innerText(),'4');assert.equal(await page.locator('#weekly-days .weekly-day').count(),2);
+      await page.locator('#orders-start-filter').fill('');await page.locator('#orders-end-filter').fill('2026-10-02');assert.equal(await page.locator('#orders-demand-count').innerText(),'2');assert.match(await page.locator('#orders-rows').innerText(),/01\/10\/2026/);
+      await page.locator('#orders-end-filter').fill('');await page.locator('#orders-start-filter').fill('2026-10-03');assert.equal(await page.locator('#orders-demand-count').innerText(),'4');assert.match(await page.locator('#orders-rows').innerText(),/2 dias/);
       for(const theme of ['light','dark']) {
         await page.evaluate(value=>document.documentElement.dataset.theme=value,theme);
         assert.ok(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth+2),'Filtros cabem na tela');
@@ -617,6 +617,39 @@ async function runOrderFilters() {
       await page.waitForLoadState('networkidle');assert.deepEqual(errors,[]);console.log(`${name} ${width}: rede, loja, setor, situação, período, cards, escala, intervalo inválido, limpar e temas OK`);await context.close();
     }}finally{await browser.close();}
   }} finally {for(const order of created)await api('DELETE',`/api/pedidos/${order.id}`);}
+}
+
+async function runScaleLifecycle() {
+  const api=async(method,route,data)=>{const response=await fetch(url.slice(0,-1)+route,{method,headers:{'Content-Type':'application/json'},body:data?JSON.stringify(data):undefined});const result=await response.json();assert.ok(response.ok,JSON.stringify(result));return result;};
+  function cpfFor(n){let v=String(n);for(let size=9;size<=10;size++){const sum=[...v].reduce((total,x,i)=>total+Number(x)*(size+1-i),0),digit=(sum*10)%11;v+=digit===10?'0':String(digit);}return v;}
+  const day=new Intl.DateTimeFormat('en-CA',{timeZone:'America/Fortaleza',year:'numeric',month:'2-digit',day:'2-digit'}).format(new Date());let serial=999006000;
+  for(const [engine,name]of [[chromium,'Chromium'],[webkit,'WebKit']]){
+    const browser=await engine.launch();try{for(const width of [1280,390,320]){
+      const label=`Lifecycle ${name} ${width}`,person=`Original ${label}`, substitute=`Substituta ${label}`;
+      const original=await api('POST','/api/leitura/pedido-escalado',{pedido:{supermercado:'Hipermarket',unidade:'Vila União',setor:'Repositor de FLV',contato:label,quantidade_diaristas:1,turnos:[{data:day,inicio:'00:00',fim:'23:59'}]},diarista:{nome:person,cpf:cpfFor(++serial)},confirmar_cadastro:true,chave_operacao:crypto.randomUUID()});
+      const replacement=await api('POST','/api/diaristas',{nome:substitute,cpf:cpfFor(++serial)});
+      const context=await browser.newContext({viewport:{width,height:844},isMobile:width<500,hasTouch:width<500}),page=await context.newPage(),errors=[];page.on('pageerror',e=>errors.push(e.message));
+      await page.goto(url+'#pedidos');await page.locator('#orders-search').fill(label);let row=page.locator('#orders-rows tr');await row.filter({hasText:person}).waitFor();assert.equal(await page.locator('.weekly-card').count(),0);
+      assert.equal(await row.locator('.order-neon.green').count(),1);
+      await row.getByRole('button',{name:`Editar pedido #${original.pedido_id}`,exact:true}).click();await page.locator('#order-dialog').waitFor({state:'visible'});await page.locator('#order-cancel-button').click();
+      await row.getByText('Hipermarket',{exact:true}).click();await page.locator('#order-detail-dialog').waitFor({state:'visible'});
+      await page.getByRole('button',{name:'✓ Confirmou que vai',exact:true}).click();await page.getByText('Resposta: confirmada',{exact:true}).waitFor();
+      let scale=(await api('GET','/api/escalas')).find(s=>s.pedido_id===original.pedido_id);assert.equal(scale.status,'escalada');assert.equal(scale.confirmacao,'confirmou');assert.equal(scale.diaria,null);
+      await page.getByRole('button',{name:`Substituir ${person} em ${day.split('-').reverse().join('/')}`,exact:true}).click();
+      await page.getByLabel(`Pessoa substituta de ${person}`,{exact:true}).selectOption(String(replacement.id));await page.getByLabel('Motivo da desistência para substituir',{exact:true}).fill('Desistiu por motivo pessoal');await page.getByText('Confirmei a disponibilidade da substituta para este dia e horário',{exact:true}).click();await page.getByRole('button',{name:'Salvar substituição',exact:true}).click();
+      await page.getByText('Substituição registrada. Histórico preservado; confirme se a nova pessoa vai e depois registre presença ou falta.',{exact:true}).waitFor();
+      let scales=(await api('GET','/api/escalas')).filter(s=>s.pedido_id===original.pedido_id);const old=scales.find(s=>s.diarista_id===original.diarista_id),current=scales.find(s=>s.diarista_id===replacement.id);assert.equal(old.status,'desistiu');assert.equal(old.substituida_por_escala_id,current.id);assert.equal(old.confirmacao,'confirmou');assert.equal(current.status,'escalada');assert.equal(current.confirmacao,'aguardando');assert.equal(current.diaria,null);
+      await page.locator('#order-detail-close-bottom').click();await page.reload();await page.locator('#orders-search').fill(label);await row.filter({hasText:substitute}).waitFor();assert.doesNotMatch(await row.innerText(),new RegExp(`Escalados?: ${person}`));assert.equal(await row.locator('.order-neon.green').count(),1);
+      await row.getByRole('button',{name:'Ver pedido de Hipermarket',exact:true}).click();await page.locator('#order-detail-dialog').waitFor({state:'visible'});
+      page.once('dialog',dialog=>dialog.accept('Desistência comunicada para teste'));
+      await page.getByRole('button',{name:`Desistência de ${substitute} em ${day.split('-').reverse().join('/')}`,exact:true}).click();await page.getByText('Desistência registrada. Vaga aberta para substituição; previsão financeira atualizada.',{exact:true}).waitFor();
+      await page.locator('#order-detail-close-bottom').click();assert.equal(await row.locator('.order-neon.yellow').count(),1);
+      assert.equal(await page.evaluate(()=>orderCoverage({id:99999,situacao:'novo',quantidade_diaristas:1,turnos:[{data:'2099-10-01',inicio:'07:00',fim:'15:20'}]}).color),'red');
+      for(const theme of ['light','dark']){await page.evaluate(t=>document.documentElement.dataset.theme=t,theme);assert.ok(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth+2));}
+      await page.emulateMedia({reducedMotion:'reduce'});assert.equal(await row.locator('.order-neon').evaluate(e=>getComputedStyle(e).animationName),'none');
+      await page.waitForLoadState('networkidle');assert.deepEqual(errors,[]);console.log(`${name} ${width}: lista sem escala semanal, edição, confirmou que vai, desistência, substituição atômica, histórico, neon e persistência OK`);await context.close();
+    }}finally{await browser.close();}
+  }
 }
 
 try {
@@ -634,6 +667,7 @@ try {
   await runPaymentCalendars();
   await runLinkedReading();
   await runOrderFilters();
+  await runScaleLifecycle();
 } finally {
   child.kill();
   await rm(work, { recursive: true, force: true });
