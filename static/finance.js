@@ -28,7 +28,9 @@ function renderFinanceForecast() {
   for (const [key, value] of [['revenue', data.confirmed.revenue], ['cost', data.confirmed.cost], ['profit', data.confirmed.net]])
     $(`#confirmed-${key}`).textContent = moneyLabel(value);
   $('#confirmed-count').textContent = count(data.present, 'diária com presença', 'diárias com presença');
-  $('#confirmed-extra-note').textContent = `Após ${moneyLabel(data.confirmed.extras)} de extras estimados`;
+  const average = data.confirmedMissingRevenue || data.confirmedMissingCost
+    ? 'Média pendente de tarifas' : `Média por diária: ${moneyLabel(data.present ? Math.round(data.confirmed.net / data.present) : 0)}`;
+  $('#confirmed-extra-note').textContent = `${average} · Extras estimados: ${moneyLabel(data.confirmed.extras)}`;
   const confirmedWarning = $('#confirmed-warning');
   confirmedWarning.hidden = !data.confirmedMissingRevenue && !data.confirmedMissingCost;
   confirmedWarning.textContent = `${data.confirmedMissingRevenue} presença(s) sem faturamento e ${data.confirmedMissingCost} sem custo informado. Totais confirmados incluem apenas valores conhecidos.`;

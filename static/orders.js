@@ -394,7 +394,7 @@ function chooseOrderWorker(data, select, picker) {
 
 async function changeOrderAttendance(scale, status) {
   if (orderDetailBusy || scale.status === status) return;
-  if (['presente', 'falta'].includes(status) && scale.data > orderToday()) return orderDetailError('Presença ou falta só pode ser registrada a partir da data da diária.');
+  if (['presente', 'falta'].includes(status) && scale.data > orderToday()) return orderDetailError(`Esta diária está em ${dateLabel(scale.data)}. Confira o ano e a data do pedido; a presença fica disponível a partir desse dia.`);
   if (scale.status === 'presente' && status === 'falta' && scale.diaria?.data_pagamento) {
     return orderDetailError('Essa diária já foi paga. Abra Pagamento, retire a data do pagamento e depois corrija para falta.');
   }
@@ -510,7 +510,7 @@ function renderOrderShifts() {
         const button = document.createElement('button'); button.type = 'button';
         button.className = `order-attendance-button ${status}${scale.status === status ? ' selected' : ''}`;
         button.textContent = label; button.disabled = scale.status === status || shift.data > orderToday();
-        if (shift.data > orderToday()) button.title = 'Registro disponível a partir da data da diária.';
+        if (shift.data > orderToday()) button.title = `Disponível em ${dateLabel(shift.data)}. Confira a data e o ano do pedido.`;
         button.setAttribute('aria-label', `${label} de ${scale.diarista_nome} em ${dateLabel(shift.data)}`);
         button.addEventListener('click', () => changeOrderAttendance(scale, status)); actions.append(button);
       }

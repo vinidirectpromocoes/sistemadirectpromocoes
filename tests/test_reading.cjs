@@ -5,6 +5,39 @@ const stores = [{ rede: 'Super do Povo', nome: 'Meireles' }];
 const sectors = ['Repositor de FLV', 'Operador de caixa'];
 const today = '2026-09-28';
 
+test('pedido iniciado há poucos dias mantém o ano e as datas ao atravessar o mês', () => {
+  for (const period of ['29/09', '29/09 a 05/10', '29 a 05']) {
+    const [item] = parser.parse(`Rede: Super do Povo\nLoja: Meireles\nFunção: Mercearia\nHorário: 13:40 às 22:00\nData de início: ${period}\nQuantidade de dias: 7`, { stores, today: '2026-10-01' });
+    assert.equal(item.dados.turnos[0].data, '2026-09-29');
+    assert.equal(item.dados.turnos.at(-1).data, '2026-10-05');
+    assert.equal(item.dados.turnos.length, 7);
+    assert.deepEqual(item.faltando, []);
+    assert.ok(item.avisos.some(note => /29\/09\/2026 a 05\/10\/2026/.test(note)));
+  }
+});
+
+test('datas abreviadas preservam virada de ano e próximos pedidos', () => {
+  const message = period => `Loja: Meireles\nFunção: FLV\nHorário: 07:00 às 15:20\nData: ${period}`;
+  for (const period of ['29 a 05', '29/12 a 05/01']) {
+    const [item] = parser.parse(message(period), { stores, today: '2027-01-01' });
+    assert.equal(item.dados.turnos[0].data, '2026-12-29');
+    assert.equal(item.dados.turnos.at(-1).data, '2027-01-05');
+  }
+  const [future] = parser.parse(message('03 a 04'), { stores, today: '2026-10-01' });
+  assert.deepEqual(future.dados.turnos.map(t => t.data), ['2026-10-03', '2026-10-04']);
+  const [december] = parser.parse(message('29 a 05'), { stores, today: '2026-12-28' });
+  assert.equal(december.dados.turnos.at(-1).data, '2027-01-05');
+});
+
+test('ano explícito é respeitado e ano inferido distante exige revisão', () => {
+  const message = period => `Loja: Meireles\nFunção: FLV\nHorário: 07:00 às 15:20\nData: ${period}`;
+  const [explicit] = parser.parse(message('29/09/2027'), { stores, today: '2026-10-01' });
+  assert.equal(explicit.dados.turnos[0].data, '2027-09-29');
+  assert.deepEqual(explicit.faltando, []);
+  const [ambiguous] = parser.parse(message('01/05'), { stores, today: '2026-10-01' });
+  assert.ok(ambiguous.faltando.includes('confirmar ano das datas'));
+});
+
 test('separa texto misto em diaristas e pedidos', () => {
   const text = `Nome Completo: Maria da Silva
 CPF: 529.982.247-25

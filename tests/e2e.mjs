@@ -652,6 +652,47 @@ async function runScaleLifecycle() {
   }
 }
 
+async function runRecentOrderAttendance() {
+  const api=async(method,route,data)=>{const response=await fetch(url.slice(0,-1)+route,{method,headers:{'Content-Type':'application/json'},body:data?JSON.stringify(data):undefined});const result=await response.json();assert.ok(response.ok,JSON.stringify(result));return result;};
+  function cpfFor(n){let v=String(n);for(let size=9;size<=10;size++){const sum=[...v].reduce((total,x,i)=>total+Number(x)*(size+1-i),0),digit=(sum*10)%11;v+=digit===10?'0':String(digit);}return v;}
+  const today=new Intl.DateTimeFormat('en-CA',{timeZone:'America/Fortaleza',year:'numeric',month:'2-digit',day:'2-digit'}).format(new Date());
+  const first=new Date(today+'T12:00:00Z');first.setUTCDate(first.getUTCDate()-2);const firstDay=first.toISOString().slice(0,10),display=firstDay.split('-').reverse().join('/');
+  const tomorrow=new Date(today+'T12:00:00Z');tomorrow.setUTCDate(tomorrow.getUTCDate()+1);const futureDay=tomorrow.toISOString().slice(0,10);
+  await api('PUT','/api/custos-extras',{rede:'Super do Povo',transporte:'0',taxas:'0',outros:'0'});
+  let serial=999007000;
+  for(const [engine,name] of [[chromium,'Chromium'],[webkit,'WebKit']]) {
+    const browser=await engine.launch({headless:true});
+    try {for(const width of [1280,390,320]) {
+      const person=`Presença recente ${name} ${width}`,cpf=cpfFor(++serial);
+      const context=await browser.newContext({viewport:{width,height:844},isMobile:width<500,hasTouch:width<500}),page=await context.newPage(),errors=[];
+      page.on('pageerror',error=>errors.push(error.message));
+      await page.goto(url+'#financeiro');await page.waitForFunction(()=>financeForecastInput!==null);await page.locator('#forecast-period').selectOption('day');await page.locator('#forecast-date').fill(firstDay);
+      const amounts=async()=>Promise.all(['revenue','cost','profit'].map(async key=>Number((await page.locator('#confirmed-'+key).innerText()).replace(/\D/g,''))));
+      const before=await amounts();
+      await page.locator('#nav-leitura').click();
+      await page.locator('#reading-text').fill(`Rede: Super do Povo\nLoja: Meireles\nFunção: Mercearia\nHorário: 13:40 às 22:00\nData de início: ${display.slice(0,5)}\nQuantidade de dias: 7\nNome: ${person}\nCPF: ${cpf}`);
+      await page.locator('#reading-submit').click();await page.locator('#reading-result-items .reading-link-save').click();await page.locator('#reading-result-items .reading-item.saved').waitFor();
+      const worker=(await api('GET','/api/diaristas')).find(w=>w.cpf===cpf),scales=(await api('GET','/api/escalas')).filter(e=>e.diarista_id===worker.id);
+      assert.equal(scales.length,7);assert.equal(scales[0].data,firstDay);
+      await page.locator('#reading-result-items').getByRole('button',{name:'Ver pedido e escala',exact:true}).click();
+      const present=page.getByRole('button',{name:`Presença de ${person} em ${display}`,exact:true});assert.equal(await present.isEnabled(),true);await present.click();
+      await page.waitForFunction(id=>document.querySelector('#order-detail-shifts')?.textContent.includes('Pagamento pendente'),worker.id);
+      assert.equal((await api('GET','/api/escalas')).find(e=>e.id===scales[0].id).status,'presente');
+      assert.equal(await page.getByRole('button',{name:`Presença de ${person} em ${futureDay.split('-').reverse().join('/')}`,exact:true}).isEnabled(),false,'Não lança presença futura como realizada');
+      await page.locator('#order-detail-close-bottom').click();await page.locator('#nav-financeiro').click();
+      await page.waitForFunction(expected=>Number(document.querySelector('#confirmed-revenue').textContent.replace(/\D/g,''))===expected,before[0]+13400);
+      const after=await amounts();assert.deepEqual(after.map((value,i)=>value-before[i]),[13400,9000,4400],'Presença atualiza faturamento, diária e lucro no dashboard');
+      assert.match(await page.locator('#confirmed-extra-note').innerText(),/Média por diária:/);
+      await page.waitForLoadState('networkidle');await page.reload();await page.waitForFunction(()=>financeForecastInput!==null);await page.locator('#forecast-period').selectOption('day');await page.locator('#forecast-date').fill(firstDay);assert.deepEqual(await amounts(),after,'Financeiro persiste após recarga');
+      assert.ok(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth+2));assert.deepEqual(errors,[]);
+      await api('PATCH',`/api/pedidos/${scales[0].pedido_id}/escalas/${scales[0].id}`,{status:'escalada'});
+      for(const scale of scales)await api('DELETE',`/api/pedidos/${scale.pedido_id}/escalas/${scale.id}`);
+      await api('DELETE',`/api/pedidos/${scales[0].pedido_id}`);await api('DELETE',`/api/diaristas/${worker.id}`);
+      console.log(`${name} ${width}: leitura de início recente, presença disponível, faturamento +134, custo +90, lucro +44, média e persistência OK`);await context.close();
+    }}finally{await browser.close();}
+  }
+}
+
 try {
   await ready();
   await runBrowser(chromium, 'Chromium');
@@ -668,6 +709,7 @@ try {
   await runLinkedReading();
   await runOrderFilters();
   await runScaleLifecycle();
+  await runRecentOrderAttendance();
 } finally {
   child.kill();
   await rm(work, { recursive: true, force: true });
