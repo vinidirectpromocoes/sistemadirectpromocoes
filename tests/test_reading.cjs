@@ -140,3 +140,35 @@ test('mensagens WhatsApp em lote mantêm rede e loja juntas mesmo sem diarista',
   const parts=parser.split(a+'\n\n'+b);
   assert.equal(parts.length,2);assert.match(parts[0],/Hipermarket/);assert.match(parts[0],/VILA UNIÃO/);assert.match(parts[1],/Super do Povo/);
 });
+
+test('formato do print: Região e nome sem rótulo reconhecem pedido e CPF',()=>{
+  const message='*NOVA SOLICITAÇÃO*\nREDE: Hipermarket\n*Região:* LOJA VILA UNIÃO\n*Função:* Repositor de mercearia\n*Horário:* 13:40 as 22:00\n*Data de início:* 03/10\n*Quantidade de dias:* 2 dias\n\n*Pessoa Exemplo Leitura*\nCPF: 52998224725';
+  const [item,...others]=parser.parse(message,{stores:[{rede:'Hipermarket',nome:'Vila União'}],today:'2026-10-01'});
+  assert.equal(others.length,0);assert.equal(item.tipo,'pedido');assert.equal(item.dados.supermercado,'Hipermarket');assert.equal(item.dados.unidade,'Vila União');assert.equal(item.dados.setor,'Repositor de mercearia');
+  assert.deepEqual(item.dados.diarista_escalado,{nome:'Pessoa Exemplo Leitura',cpf:'52998224725'});
+  assert.deepEqual(item.dados.turnos,[{data:'2026-10-03',inicio:'13:40',fim:'22:00'},{data:'2026-10-04',inicio:'13:40',fim:'22:00'}]);assert.deepEqual(item.faltando,[]);
+});
+
+test('nome livre com CPF permite cadastro básico e separa pessoas em lote',()=>{
+  const items=parser.parse('*Maria José da Silva*\nCPF: 52998224725\n\nJoão D\'Ávila\nCPF: 04068775303');
+  assert.equal(items.length,2);assert.equal(items[0].dados.nome,'Maria José da Silva');assert.equal(items[1].dados.nome,"João D'Ávila");
+  for(const item of items){assert.deepEqual(item.faltando,[]);assert.deepEqual(item.dados.setores,[]);assert.deepEqual(item.dados.disponibilidade,[]);assert.equal(item.dados.trabalhando,null);}
+});
+
+test('não interpreta título ou instrução como nome antes do CPF',()=>{
+  for(const name of ['*NOVA SOLICITAÇÃO*','*Dados para Cadastro*','Nome Completo','Pagamento confirmado: sim','Pessoa 123']) {
+    const [item]=parser.parse(name+'\nCPF: 52998224725');assert.ok(item.faltando.includes('nome'),name);
+  }
+});
+
+test('pedidos por Região em lote não misturam nomes, lojas e datas',()=>{
+  const a='REDE: Hipermarket\nRegiao: Vila União\nFunção: ASG\nHorário: 06:00 as 14:20\nData: 31/10\nQuantidade de dias: 3\nPessoa Um\nCPF: 52998224725';
+  const b='REDE: Super do Povo\nRegião: Meireles\nFunção: FLV\nHorário: 07:00 as 15:20\nData: 03/10\nPessoa Dois\nCPF: 04068775303';
+  const items=parser.parse(a+'\n\n'+b,{stores:[...stores,{rede:'Hipermarket',nome:'Vila União'}],today:'2026-10-01'});
+  assert.equal(items.length,2);assert.equal(items[0].dados.diarista_escalado.nome,'Pessoa Um');assert.equal(items[1].dados.diarista_escalado.nome,'Pessoa Dois');assert.deepEqual(items[0].dados.turnos.map(t=>t.data),['2026-10-31','2026-11-01','2026-11-02']);assert.deepEqual(items[0].faltando,[]);assert.deepEqual(items[1].faltando,[]);
+});
+
+test('duas pessoas sem rótulo dentro de um pedido exigem revisão',()=>{
+  const [item]=parser.parse('Loja: Meireles\nFunção: FLV\nHorário: 07:00 as 15:20\nData: 03/10\nPessoa Um\nCPF: 52998224725\nPessoa Dois\nCPF: 04068775303',{stores,today:'2026-10-01'});
+  assert.ok(item.faltando.includes('revisar mais de um diarista informado no mesmo pedido'));
+});

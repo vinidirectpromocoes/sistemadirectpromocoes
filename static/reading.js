@@ -199,7 +199,7 @@
     let previous=existing.draftRecords.find(record=>record.status==='pendente'&&record.chave===draftKey);
     item.dados.leitura_chave_operacao ||= previous?.dados.leitura_chave_operacao || crypto.randomUUID();
     const preserve=async(reason,needsRegistration=false,canConfirm=false)=>{
-      const draft={...item,chave:draftKey,faltando:[...item.faltando,reason]};
+      const draft={...item,chave:draftKey,faltando:item.faltando.length?[...item.faltando]:[reason]};
       const record=await request('/api/leituras-pendentes',{method:'POST',headers:{'Content-Type':'application/json'},body:body(draft)});
       if(previous) Object.assign(previous,record); else {previous=record;existing.draftRecords.push(record);}
       existing.drafts.add(draftKey);
