@@ -555,9 +555,13 @@ async function runLinkedReading() {
       const assignments=(await api('GET','/api/escalas')).filter(e=>e.diarista_id===worker.id);
       assert.equal(assignments.length,2);assert.deepEqual(assignments.map(e=>e.data),['2026-10-03','2026-10-04']);assert.ok(assignments.every(e=>e.status==='escalada'&&e.disponibilidade_pedido_confirmada));
       if(existingOrder) assert.ok(assignments.every(e=>e.pedido_id===existingOrder.id),'Vincula pedido existente com diferenças de maiúsculas');
+      assert.equal((await api('GET','/api/pedidos')).find(o=>o.id===assignments[0].pedido_id).situacao,'confirmado');
       await page.locator('#reading-text').fill(message);await page.locator('#reading-submit').click();await page.locator('#reading-result-items .reading-item.duplicate').waitFor();
       assert.equal((await api('GET','/api/escalas')).filter(e=>e.diarista_id===worker.id).length,2,'Releitura não duplica escala');
       await page.locator('#reading-result-items').getByRole('button',{name:'Ver pedido e escala',exact:true}).click();await page.locator('#order-detail-dialog').waitFor({state:'visible'});await page.waitForFunction(name=>document.querySelector('#order-detail-shifts')?.textContent.includes(name),workerName);assert.match(await page.locator('#order-detail-shifts').innerText(),new RegExp(workerName));await page.locator('#order-detail-close-bottom').click();
+      let orderRow=page.locator('#orders-rows tr').filter({hasText:workerName});assert.equal(await orderRow.count(),1);assert.match(await orderRow.innerText(),/Confirmado/);
+      await page.reload();await orderRow.waitFor();assert.match(await orderRow.innerText(),/Confirmado/);
+      assert.ok(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth+2),'Nome escalado cabe na tela');
       await page.waitForLoadState('networkidle');assert.deepEqual(errors,[]);
       for(const scale of assignments) await api('DELETE',`/api/pedidos/${scale.pedido_id}/escalas/${scale.id}`);
       await api('DELETE',`/api/pedidos/${assignments[0].pedido_id}`);await api('DELETE',`/api/diaristas/${worker.id}`);

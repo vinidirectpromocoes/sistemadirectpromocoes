@@ -183,7 +183,7 @@
   }
   function linkedResult(saved) {
     const duplicate=!saved.cadastro_criado&&!saved.pedido_criado&&!saved.escalas_criadas.length;
-    return {state:duplicate?'duplicate':'saved',entity:'pedido_escalado',orderId:saved.pedido_id,description:`${saved.cadastro_criado?'Cadastro básico criado':'Cadastro existente preservado'} · ${saved.nome} · ${saved.dias} dia(s) escalado(s). ${duplicate?'Esta escala já estava registrada.':''}`};
+    return {state:duplicate?'duplicate':'saved',entity:'pedido_escalado',orderId:saved.pedido_id,description:`${saved.cadastro_criado?'Cadastro básico criado':'Cadastro existente preservado'} · ${saved.nome} · ${saved.dias} dia(s) escalado(s). ${saved.situacao==='confirmado'?'Pedido confirmado.':saved.situacao==='em_selecao'?'Pedido em seleção: ainda há vagas.':''} ${duplicate?'Esta escala já estava registrada.':''}`};
   }
   async function saveLinked(item, data, confirm, pendingId) {
     const rows=data.orderRows || (Array.isArray(data.orders)?data.orders:[]);
