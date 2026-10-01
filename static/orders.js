@@ -154,6 +154,11 @@ function showOrderFeedback(message, isError = false) {
   showOrderFeedback.timer = window.setTimeout(() => { box.hidden = true; }, 5000);
 }
 
+function orderAssignedNames(order, filters=orderFilters()) {
+  const dates=new Set(orderFilteredShifts(order,filters).map(shift=>shift.data));
+  return [...new Set((weeklyScales[order.id] || []).filter(scale=>dates.has(scale.data) && scale.status!=='falta').map(scale=>scale.diarista_nome).filter(Boolean))];
+}
+
 function renderOrders() {
   updateOrderFilterOptions();
   const filters=orderFilters(),records=filteredOrderRecords(filters);
@@ -195,7 +200,14 @@ function renderOrders() {
     const demand = document.createElement('td');
     const perDay = document.createElement('strong'); perDay.textContent = orderPlural(item.quantidade_diaristas, 'diarista/dia', 'diaristas/dia');
     const total = document.createElement('small'); total.textContent = `${orderPlural(days, 'dia', 'dias')} · ${orderPlural(totalDemand, 'diária', 'diárias')}${filters.start || filters.end?' no período':''}`;
-    demand.append(perDay, total); row.append(demand);
+    demand.append(perDay, total);
+    const names=orderAssignedNames(item,filters);
+    if(names.length) {
+      const assigned=document.createElement('small'); assigned.className='order-assigned-names';
+      assigned.textContent=`Escalado${names.length>1?'s':''}: ${names.join(', ')}`;
+      demand.append(assigned);
+    }
+    row.append(demand);
     const state = document.createElement('td');
     const badge = document.createElement('span'); badge.className = `order-status ${item.situacao}`;
     badge.textContent = orderStatusLabels[item.situacao]; state.append(badge); row.append(state);
@@ -209,12 +221,12 @@ function renderOrders() {
 
 async function loadOrders() {
   try {
-    orderRecords = await request('/api/pedidos');
-    renderOrders();
+    const [records,allScales] = await Promise.all([request('/api/pedidos'),request('/api/escalas')]);
+    orderRecords=records;
     loadOrderCatalog().catch(() => {});
-    const allScales = await request('/api/escalas');
     weeklyScales = Object.groupBy ? Object.groupBy(allScales, scale => scale.pedido_id) :
       allScales.reduce((groups, scale) => ((groups[scale.pedido_id] ||= []).push(scale), groups), {});
+    renderOrders();
     renderWeekly();
   }
   catch (err) { showOrderFeedback(`Não foi possível carregar os pedidos: ${err.message}`, true); }
