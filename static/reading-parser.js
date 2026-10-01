@@ -126,15 +126,19 @@
     const missing = [];
     if (!nome) missing.push('nome');
     if (!validCpf(cpf)) missing.push(cpf ? 'CPF válido' : 'CPF');
-    if (!setores.length) missing.push('setor de experiência');
-    if (!/^\d{8}$/.test(cep)) missing.push('CEP');
-    if (!logradouro || !numero) missing.push('rua e número');
-    if (!data.bairro) missing.push('bairro');
-    if (trabalhando === null || (trabalhando && !local_trabalho)) missing.push('trabalho atual');
-    if (!disponibilidade.length) missing.push('dias e horários exatos');
-    if (pode_se_deslocar === null || (pode_se_deslocar && !transporte)) missing.push('locomoção e transporte');
-    return { tipo: 'diarista', dados: data, faltando: missing, texto: text };
+    if (cep && !/^\d{8}$/.test(cep)) missing.push('CEP válido');
+    const completar = [];
+    if (!setores.length) completar.push('setor de experiência');
+    if (!cep) completar.push('CEP');
+    if (!logradouro || !numero) completar.push('rua e número');
+    if (!data.bairro) completar.push('bairro');
+    if (trabalhando === null || (trabalhando && !local_trabalho)) completar.push('trabalho atual');
+    if (!disponibilidade.length) completar.push('dias e horários exatos');
+    if (pode_se_deslocar === null || (pode_se_deslocar && !transporte)) completar.push('locomoção e transporte');
+    return { tipo: 'diarista', dados: data, faltando: missing, completar, texto: text,
+      avisos: completar.length ? [`Cadastro parcial: completar depois ${completar.join(', ')}.`] : [] };
   }
+
   function order(text, stores, sectors, today) {
     const unit = field(text, ['Loja', 'Unidade']);
     let market = field(text, ['Rede', 'Supermercado']);

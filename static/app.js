@@ -132,12 +132,12 @@ function updateScheduleMode() {
 function toggleConditional() {
   const working = $('input[name="trabalhando"]:checked')?.value === 'true';
   $('#workplace-wrap').hidden = !working;
-  $('#local_trabalho').required = working;
-  if (!working) $('#local_trabalho').value = '';
+  $('#local_trabalho').required = false;
+  if ($('input[name="trabalhando"]:checked')?.value === 'false') $('#local_trabalho').value = '';
   const mobile = $('input[name="pode_se_deslocar"]:checked')?.value === 'true';
   $('#transport-wrap').hidden = !mobile;
-  $('#transporte').required = mobile;
-  if (!mobile) $('#transporte').value = '';
+  $('#transporte').required = false;
+  if ($('input[name="pode_se_deslocar"]:checked')?.value === 'false') $('#transporte').value = '';
 }
 
 function setRadio(name, value) {
@@ -166,8 +166,8 @@ function openForm(record = null) {
       $(`#${key}`).value = key === 'cpf' ? formatCpf(record[key]) : key === 'cep' ? formatCep(record[key]) : record[key];
     }
     $('#setores').value = record.setores.join(', ');
-    setRadio('trabalhando', String(record.trabalhando));
-    setRadio('pode_se_deslocar', String(record.pode_se_deslocar));
+    setRadio('trabalhando', record.trabalhando == null ? 'unknown' : String(record.trabalhando));
+    setRadio('pode_se_deslocar', record.pode_se_deslocar == null ? 'unknown' : String(record.pode_se_deslocar));
     setRadio('horario_tipo', record.disponibilidade.every(slot => slot.inicio === '00:00' && slot.fim === '23:59') ? 'qualquer' : 'especifico');
     record.disponibilidade.forEach(slot => {
       const row = document.querySelector(`.day-row[data-day="${slot.dia}"]`);
@@ -198,25 +198,20 @@ function formData() {
     setores: $('#setores').value.split(',').map(value => value.trim()).filter(Boolean),
     cep: $('#cep').value, logradouro: $('#logradouro').value, numero: $('#numero').value,
     complemento: $('#complemento').value, bairro: $('#bairro').value,
-    trabalhando: workingChoice ? workingChoice.value === 'true' : null, local_trabalho: $('#local_trabalho').value,
+    trabalhando: workingChoice && workingChoice.value !== 'unknown' ? workingChoice.value === 'true' : null, local_trabalho: $('#local_trabalho').value,
     disponibilidade: availability,
-    pode_se_deslocar: travelChoice ? travelChoice.value === 'true' : null,
+    pode_se_deslocar: travelChoice && travelChoice.value !== 'unknown' ? travelChoice.value === 'true' : null,
     transporte: $('#transporte').value, observacoes_locomocao: $('#observacoes_locomocao').value,
   };
 }
 
 function validateForm(data) {
-  const required = [['nome', 'nome'], ['cpf', 'CPF'], ['setores', 'setores de experiência'], ['cep', 'CEP'], ['logradouro', 'logradouro'], ['numero', 'número'], ['bairro', 'bairro']];
+  const required = [['nome', 'nome'], ['cpf', 'CPF']];
   for (const [key, label] of required) if (!(Array.isArray(data[key]) ? data[key].length : data[key].trim())) return `Preencha ${label}.`;
   if (!validCpf(data.cpf)) return 'Informe um CPF válido.';
-  if (data.cep.replace(/\D/g, '').length !== 8) return 'Informe um CEP válido.';
-  if (data.trabalhando === null) return 'Confirme se a pessoa está trabalhando atualmente.';
-  if (data.trabalhando && !data.local_trabalho.trim()) return 'Informe o local onde está trabalhando.';
-  if (!data.disponibilidade.length) return 'Selecione ao menos um dia disponível.';
+  if (data.cep.trim() && data.cep.replace(/\D/g, '').length !== 8) return 'Informe um CEP válido.';
   const invalidSlot = data.disponibilidade.find(slot => !slot.inicio || !slot.fim || slot.inicio >= slot.fim);
   if (invalidSlot) return `Confira o horário de ${days.find(([key]) => key === invalidSlot.dia)?.[1] || invalidSlot.dia}: o início deve ser antes do fim.`;
-  if (data.pode_se_deslocar === null) return 'Confirme a disponibilidade de locomoção.';
-  if (data.pode_se_deslocar && !data.transporte) return 'Selecione o meio de transporte.';
   return null;
 }
 
@@ -278,7 +273,7 @@ function render() {
   const rawTerm = $('#search').value.trim().toLocaleLowerCase('pt-BR');
   const filtered = records.filter(item => !rawTerm || item.nome.toLocaleLowerCase('pt-BR').includes(rawTerm) || item.setores.some(setor => setor.toLocaleLowerCase('pt-BR').includes(rawTerm)) || (term && item.cpf.includes(term)));
   $('#total-count').textContent = records.length;
-  $('#available-count').textContent = records.filter(item => !item.bloqueada).length;
+  $('#available-count').textContent = records.filter(item => !item.bloqueada && item.disponibilidade.length).length;
   $('#blocked-count').textContent = records.filter(item => item.bloqueada).length;
   $('#empty-state').hidden = records.length !== 0;
   $('#no-results').hidden = records.length === 0 || filtered.length !== 0;
@@ -295,7 +290,7 @@ function render() {
     const status = document.createElement('td');
     const badge = document.createElement('span');
     badge.className = `badge ${item.bloqueada ? 'blocked' : 'available'}`;
-    badge.textContent = item.bloqueada ? 'Bloqueada' : 'Disponível';
+    badge.textContent = item.bloqueada ? 'Bloqueada' : partialWorker(item) ? 'Cadastro parcial' : 'Disponível';
     status.append(badge); tr.append(status);
     const actions = document.createElement('td');
     actions.className = 'actions';
@@ -323,14 +318,18 @@ function detailSection(title, entries) {
   return section;
 }
 
+function partialWorker(record) {
+  return !record.setores?.length || !record.cep || !record.logradouro || !record.numero || !record.bairro || !record.disponibilidade?.length || record.trabalhando == null || record.pode_se_deslocar == null || (record.trabalhando && !record.local_trabalho) || (record.pode_se_deslocar && !record.transporte);
+}
+
 function renderDetail(record) {
   $('#detail-title').textContent = record.nome;
   const status = $('#detail-status');
   const badge = document.createElement('span');
   badge.className = `badge ${record.bloqueada ? 'blocked' : 'available'}`;
-  badge.textContent = record.bloqueada ? 'Bloqueada' : 'Disponível';
+  badge.textContent = record.bloqueada ? 'Bloqueada' : partialWorker(record) ? 'Cadastro parcial' : 'Disponível';
   const explanation = document.createElement('span');
-  explanation.textContent = record.bloqueada ? 'Cadastro bloqueado para novas diárias.' : 'Cadastro ativo para novas diárias.';
+  explanation.textContent = record.bloqueada ? 'Cadastro bloqueado para novas diárias.' : partialWorker(record) ? 'Cadastro salvo. Complete os dados quando receber as informações.' : 'Cadastro ativo para novas diárias.';
   status.replaceChildren(badge, explanation);
   $('#block-button').textContent = record.bloqueada ? 'Desbloquear' : 'Bloquear';
   $('#add-daily-button').disabled = record.bloqueada;
@@ -339,12 +338,12 @@ function renderDetail(record) {
     const label = days.find(([key]) => key === slot.dia)?.[1] || slot.dia;
     return `${label}: ${slot.inicio === '00:00' && slot.fim === '23:59' ? 'qualquer horário' : `${slot.inicio} às ${slot.fim}`}`;
   }).join('\n');
-  const address = `${record.logradouro}, ${record.numero}${record.complemento ? `, ${record.complemento}` : ''} · ${record.bairro} · Fortaleza–CE · CEP ${formatCep(record.cep)}`;
+  const address = [[record.logradouro, record.numero].filter(Boolean).join(', '), record.complemento, record.bairro, record.cep ? `CEP ${formatCep(record.cep)}` : ''].filter(Boolean).join(' · ');
   $('#detail-fields').replaceChildren(
     detailSection('Dados pessoais', [['Nome completo', record.nome], ['CPF', formatCpf(record.cpf)], ['Setores de experiência', record.setores.join(', ')]]),
     detailSection('Endereço', [['Endereço completo', address]]),
-    detailSection('Trabalho e disponibilidade', [['Trabalha atualmente', record.trabalhando ? 'Sim' : 'Não'], ['Local de trabalho', record.trabalhando ? record.local_trabalho : '—'], ['Dias e horários', schedule]]),
-    detailSection('Locomoção', [['Pode se deslocar', record.pode_se_deslocar ? 'Sim' : 'Não'], ['Meio de transporte', record.pode_se_deslocar ? record.transporte : '—'], ['Observações', record.observacoes_locomocao || '—']]),
+    detailSection('Trabalho e disponibilidade', [['Trabalha atualmente', record.trabalhando == null ? 'Não informado' : record.trabalhando ? 'Sim' : 'Não'], ['Local de trabalho', record.local_trabalho || (record.trabalhando === false ? '—' : 'Não informado')], ['Dias e horários', schedule]]),
+    detailSection('Locomoção', [['Pode se deslocar', record.pode_se_deslocar == null ? 'Não informado' : record.pode_se_deslocar ? 'Sim' : 'Não'], ['Meio de transporte', record.transporte || (record.pode_se_deslocar === false ? '—' : 'Não informado')], ['Observações', record.observacoes_locomocao || '—']]),
   );
 }
 

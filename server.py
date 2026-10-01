@@ -50,7 +50,40 @@ def connect():
     return db
 
 
+def migrate_partial_workers():
+    """Relax only unknown yes/no answers, preserving existing IDs and related history."""
+    with connect() as db:
+        columns = list(db.execute("PRAGMA table_info(diaristas)"))
+        if not any(row["name"] in ("trabalhando", "pode_se_deslocar") and row["notnull"] for row in columns):
+            return
+        definition = db.execute("SELECT sql FROM sqlite_master WHERE type='table' AND name='diaristas'").fetchone()[0]
+        objects = [row[0] for row in db.execute("SELECT sql FROM sqlite_master WHERE tbl_name='diaristas' AND type IN ('index','trigger') AND sql IS NOT NULL")]
+        sequence = db.execute("SELECT seq FROM sqlite_sequence WHERE name='diaristas'").fetchone()
+        definition = re.sub(r'CREATE TABLE\s+(?:"diaristas"|diaristas)', 'CREATE TABLE diaristas_partial', definition, count=1, flags=re.I)
+        definition = re.sub(r'(trabalhando|pode_se_deslocar)(\s+INTEGER)\s+NOT NULL', r'\1\2', definition, flags=re.I)
+        db.execute("PRAGMA foreign_keys = OFF")
+        db.execute("BEGIN IMMEDIATE")
+        try:
+            db.execute(definition)
+            db.execute("INSERT INTO diaristas_partial SELECT * FROM diaristas")
+            db.execute("DROP TABLE diaristas")
+            db.execute("ALTER TABLE diaristas_partial RENAME TO diaristas")
+            for sql in objects:
+                db.execute(sql)
+            if sequence:
+                db.execute("UPDATE sqlite_sequence SET seq = max(seq, ?) WHERE name='diaristas'", (sequence[0],))
+            if db.execute("PRAGMA foreign_key_check").fetchone():
+                raise ValueError("Migração interrompida: referência de cadastro inválida.")
+            db.commit()
+        except Exception:
+            db.rollback()
+            raise
+        finally:
+            db.execute("PRAGMA foreign_keys = ON")
+
+
 def init_db():
+    migrate_partial_workers()
     with connect() as db:
         db.execute("""CREATE TABLE IF NOT EXISTS diaristas (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -64,10 +97,10 @@ def init_db():
             bairro TEXT NOT NULL,
             cidade TEXT NOT NULL,
             uf TEXT NOT NULL,
-            trabalhando INTEGER NOT NULL,
+            trabalhando INTEGER,
             local_trabalho TEXT NOT NULL DEFAULT '',
             disponibilidade TEXT NOT NULL,
-            pode_se_deslocar INTEGER NOT NULL,
+            pode_se_deslocar INTEGER,
             transporte TEXT NOT NULL DEFAULT '',
             observacoes_locomocao TEXT NOT NULL DEFAULT '',
             bloqueada INTEGER NOT NULL DEFAULT 0,
@@ -286,29 +319,29 @@ def validate(payload):
     cpf = re.sub(r"\D", "", str(payload.get("cpf", "")))
     if not valid_cpf(cpf):
         raise ValueError("Informe um CPF válido.")
-    setores = payload.get("setores")
-    if not isinstance(setores, list) or not setores or len(setores) > 12:
-        raise ValueError("Informe ao menos um setor de experiência.")
+    setores = payload.get("setores", [])
+    if not isinstance(setores, list) or len(setores) > 12:
+        raise ValueError("Informe até 12 setores de experiência.")
     setores = list(dict.fromkeys(clean_text(item, "o setor", 60) for item in setores))
     address = {}
     for key, label, length in [
         ("logradouro", "o logradouro", 180), ("numero", "o número", 30),
         ("bairro", "o bairro", 100),
     ]:
-        address[key] = clean_text(payload.get(key), label, length)
+        address[key] = clean_text(payload.get(key, ""), label, length, False)
     address["complemento"] = clean_text(payload.get("complemento", ""), "o complemento", 120, False)
     cep = re.sub(r"\D", "", str(payload.get("cep", "")))
-    if len(cep) != 8:
+    if cep and len(cep) != 8:
         raise ValueError("Informe um CEP com 8 dígitos.")
     trabalhando = payload.get("trabalhando")
-    if not isinstance(trabalhando, bool):
+    if trabalhando is not None and not isinstance(trabalhando, bool):
         raise ValueError("Informe se está trabalhando atualmente.")
-    local_trabalho = clean_text(payload.get("local_trabalho", ""), "o local de trabalho", 180, trabalhando)
-    if not trabalhando:
+    local_trabalho = clean_text(payload.get("local_trabalho", ""), "o local de trabalho", 180, False)
+    if trabalhando is False:
         local_trabalho = ""
-    disponibilidade = payload.get("disponibilidade")
-    if not isinstance(disponibilidade, list) or not disponibilidade or len(disponibilidade) > 7:
-        raise ValueError("Selecione ao menos um dia e horário disponível.")
+    disponibilidade = payload.get("disponibilidade", [])
+    if not isinstance(disponibilidade, list) or len(disponibilidade) > 7:
+        raise ValueError("Informe até sete dias e horários disponíveis.")
     days_seen = set()
     slots = []
     for item in disponibilidade:
@@ -320,19 +353,19 @@ def validate(payload):
         days_seen.add(day)
         slots.append({"dia": day, "inicio": start, "fim": end})
     pode_se_deslocar = payload.get("pode_se_deslocar")
-    if not isinstance(pode_se_deslocar, bool):
+    if pode_se_deslocar is not None and not isinstance(pode_se_deslocar, bool):
         raise ValueError("Informe a disponibilidade de locomoção.")
-    transporte = clean_text(payload.get("transporte", ""), "o meio de transporte", 80, pode_se_deslocar)
+    transporte = clean_text(payload.get("transporte", ""), "o meio de transporte", 80, False)
     observacoes = clean_text(payload.get("observacoes_locomocao", ""), "as observações de locomoção", 300, False)
-    if not pode_se_deslocar:
+    if pode_se_deslocar is False:
         transporte = ""
     return {
         "nome": nome, "cpf": cpf, "setores": json.dumps(setores, ensure_ascii=False),
         "cep": cep, **address, "cidade": "Fortaleza", "uf": "CE",
-        "trabalhando": int(trabalhando),
+        "trabalhando": None if trabalhando is None else int(trabalhando),
         "local_trabalho": local_trabalho,
         "disponibilidade": json.dumps(slots, ensure_ascii=False),
-        "pode_se_deslocar": int(pode_se_deslocar), "transporte": transporte,
+        "pode_se_deslocar": None if pode_se_deslocar is None else int(pode_se_deslocar), "transporte": transporte,
         "observacoes_locomocao": observacoes,
     }
 
@@ -341,8 +374,8 @@ def public_row(row):
     value = dict(row)
     value["setores"] = json.loads(value["setores"])
     value["disponibilidade"] = json.loads(value["disponibilidade"])
-    value["trabalhando"] = bool(value["trabalhando"])
-    value["pode_se_deslocar"] = bool(value["pode_se_deslocar"])
+    value["trabalhando"] = None if value["trabalhando"] is None else bool(value["trabalhando"])
+    value["pode_se_deslocar"] = None if value["pode_se_deslocar"] is None else bool(value["pode_se_deslocar"])
     value["bloqueada"] = bool(value["bloqueada"])
     return value
 

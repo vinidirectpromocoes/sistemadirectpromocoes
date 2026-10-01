@@ -80,6 +80,45 @@ class CadastroTest(unittest.TestCase):
         self.assertTrue(result["ok"])
         self.assertEqual(self.call("GET", "/api/diaristas")[1], [])
 
+    def test_partial_registration_can_be_completed_without_duplicate_or_assumed_answers(self):
+        status, partial = self.call("POST", "/api/diaristas", {"nome": "Cadastro parcial", "cpf": SAMPLE["cpf"]})
+        self.assertEqual(status, 201)
+        self.assertEqual(partial["setores"], [])
+        self.assertEqual(partial["disponibilidade"], [])
+        self.assertIsNone(partial["trabalhando"])
+        self.assertIsNone(partial["pode_se_deslocar"])
+        self.assertEqual(partial["cep"], "")
+        server.init_db()
+        self.assertIsNone(self.call("GET", "/api/diaristas")[1][0]["trabalhando"])
+        self.assertEqual(self.call("POST", "/api/diaristas", {"nome": "Duplicado", "cpf": SAMPLE["cpf"]})[0], 409)
+        self.assertEqual(self.call("PUT", f"/api/diaristas/{partial['id']}", {**SAMPLE, "cep": "123"})[0], 400)
+        status, complete = self.call("PUT", f"/api/diaristas/{partial['id']}", SAMPLE)
+        self.assertEqual(status, 200)
+        self.assertEqual(complete["id"], partial["id"])
+        self.assertEqual(complete["disponibilidade"], SAMPLE["disponibilidade"])
+        self.assertTrue(complete["pode_se_deslocar"])
+        self.assertEqual(len(self.call("GET", "/api/diaristas")[1]), 1)
+
+    def test_partial_schema_migration_preserves_history_and_foreign_keys(self):
+        import re
+        _, worker = self.call("POST", "/api/diaristas", SAMPLE)
+        _, daily = self.call("POST", f"/api/diaristas/{worker['id']}/diarias", {"data": "2026-09-30", "local": "Meireles", "setor": "FLV"})
+        with server.connect() as db:
+            definition = db.execute("SELECT sql FROM sqlite_master WHERE name='diaristas'").fetchone()[0]
+            definition = definition.replace('CREATE TABLE diaristas', 'CREATE TABLE legacy_workers')
+            definition = re.sub(r'(trabalhando|pode_se_deslocar)(\s+INTEGER)', r'\1\2 NOT NULL', definition)
+            db.execute("PRAGMA foreign_keys = OFF")
+            db.execute(definition)
+            db.execute("INSERT INTO legacy_workers SELECT * FROM diaristas")
+            db.execute("DROP TABLE diaristas")
+            db.execute("ALTER TABLE legacy_workers RENAME TO diaristas")
+        server.init_db()
+        self.assertEqual(self.call("GET", f"/api/diaristas/{worker['id']}/diarias")[1][0]["id"], daily["id"])
+        with server.connect() as db:
+            self.assertIsNone(db.execute("PRAGMA foreign_key_check").fetchone())
+        status, _ = self.call("POST", "/api/diaristas", {"nome": "Novo parcial", "cpf": "11144477735"})
+        self.assertEqual(status, 201)
+
     def test_invalid_cpf_and_schedule_are_rejected(self):
         bad_cpf = {**SAMPLE, "cpf": "111.111.111-11"}
         status, _ = self.call("POST", "/api/diaristas", bad_cpf)

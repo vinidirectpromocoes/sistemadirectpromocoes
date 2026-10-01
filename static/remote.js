@@ -129,11 +129,11 @@
   const money = value => value == null || value === '' ? null : Math.round(Number(value) * 100);
   function diaristaPayload(p) {
     return {
-      nome: p.nome, cpf: String(p.cpf).replace(/\D/g, ''), setores: p.setores,
-      cep: String(p.cep).replace(/\D/g, ''), logradouro: p.logradouro, numero: p.numero,
-      complemento: p.complemento || '', bairro: p.bairro, cidade: 'Fortaleza', uf: 'CE',
-      trabalhando: p.trabalhando, local_trabalho: p.local_trabalho || '',
-      disponibilidade: p.disponibilidade, pode_se_deslocar: p.pode_se_deslocar,
+      nome: p.nome, cpf: String(p.cpf).replace(/\D/g, ''), setores: p.setores || [],
+      cep: String(p.cep || '').replace(/\D/g, ''), logradouro: p.logradouro || '', numero: p.numero || '',
+      complemento: p.complemento || '', bairro: p.bairro || '', cidade: 'Fortaleza', uf: 'CE',
+      trabalhando: p.trabalhando ?? null, local_trabalho: p.local_trabalho || '',
+      disponibilidade: p.disponibilidade || [], pode_se_deslocar: p.pode_se_deslocar ?? null,
       transporte: p.transporte || '', observacoes_locomocao: p.observacoes_locomocao || ''
     };
   }

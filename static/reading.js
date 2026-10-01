@@ -130,6 +130,10 @@
       const values = document.createElement('pre'); values.textContent = JSON.stringify(item.dados, null, 2);
       detail.append(summary, values); card.append(detail);
     }
+    if (item.tipo === 'diarista' && ['saved','duplicate'].includes(state)) {
+      const complete = document.createElement('button'); complete.type='button'; complete.className='text-button'; complete.textContent='Completar no formulário';
+      complete.addEventListener('click',()=>fillDiarista(item.dados)); card.append(complete);
+    }
     if (onUndo) {
       const undo = document.createElement('button'); undo.type = 'button'; undo.className = 'text-button'; undo.textContent = 'Desfazer este registro';
       undo.addEventListener('click', async () => {
@@ -242,21 +246,24 @@
     } catch (error) { feedback(`Não foi possível concluir a importação: ${error.message}`, true); }
     finally { button.disabled = false; button.textContent = '✦ Ler e registrar tudo'; }
   }
-  function fillDiarista(d, pendingId) {
-    window.location.hash = '#diaristas'; openForm();
-    window.directPendingForm = { id: pendingId, tipo: 'diarista' };
-    for (const key of ['nome', 'cpf', 'cep', 'logradouro', 'numero', 'complemento', 'bairro', 'local_trabalho', 'observacoes_locomocao']) pick(`#${key}`).value = d[key] || '';
-    pick('#setores').value = (d.setores || []).join(', ');
-    document.querySelectorAll('input[name="trabalhando"]').forEach(input => { input.checked = d.trabalhando !== null && input.value === String(d.trabalhando); });
-    document.querySelectorAll('input[name="pode_se_deslocar"]').forEach(input => { input.checked = d.pode_se_deslocar !== null && input.value === String(d.pode_se_deslocar); });
+  async function fillDiarista(d, pendingId) {
+    try {
+    const existing = (await request('/api/diaristas')).find(r => r.cpf === String(d.cpf || '').replace(/\D/g, ''));
+    window.location.hash = '#diaristas'; openForm(existing || null);
+    window.directPendingForm = pendingId ? { id: pendingId, tipo: 'diarista' } : null;
+    for (const key of ['nome', 'cpf', 'cep', 'logradouro', 'numero', 'complemento', 'bairro', 'local_trabalho', 'observacoes_locomocao']) if (d[key] || !existing) pick(`#${key}`).value = d[key] || '';
+    if (d.setores?.length || !existing) pick('#setores').value = (d.setores || []).join(', ');
+    document.querySelectorAll('input[name="trabalhando"]').forEach(input => { if (d.trabalhando != null || !existing) input.checked = input.value === (d.trabalhando == null ? 'unknown' : String(d.trabalhando)); });
+    document.querySelectorAll('input[name="pode_se_deslocar"]').forEach(input => { if (d.pode_se_deslocar != null || !existing) input.checked = input.value === (d.pode_se_deslocar == null ? 'unknown' : String(d.pode_se_deslocar)); });
     toggleConditional();
     const transport = (d.transporte || '').toLowerCase();
     const mapped = transport.includes('ônibus') || transport.includes('transporte público') ? 'Transporte público'
       : ['moto', 'carro', 'bicicleta'].some(name => transport.includes(name)) ? 'Veículo próprio'
       : transport.includes('aplicativo') || transport.includes('táxi') ? 'Aplicativo / táxi'
       : transport ? 'Outros meios' : '';
-    pick('#transporte').value = mapped;
+    if (mapped || !existing) pick('#transporte').value = mapped;
     if (d.disponibilidade?.length) {
+      document.querySelectorAll('.day-enabled').forEach(input => { input.checked = false; input.dispatchEvent(new Event('change')); });
       const anyHours = d.disponibilidade.every(slot => slot.inicio === '00:00' && slot.fim === '23:59');
       setRadio('horario_tipo', anyHours ? 'qualquer' : 'especifico');
       updateScheduleMode();
@@ -271,6 +278,7 @@
     }
     if (typeof formatCpf === 'function') pick('#cpf').value = formatCpf(pick('#cpf').value);
     if (typeof formatCep === 'function') pick('#cep').value = formatCep(pick('#cep').value);
+    } catch(error) { feedback(`Não foi possível abrir o cadastro: ${error.message}`,true); }
   }
   function fillPedido(p, pendingId) {
     window.location.hash = '#pedidos'; openOrderForm();

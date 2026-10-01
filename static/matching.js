@@ -34,7 +34,7 @@
     if (matchesSector(worker, order.setor)) { score += 50; reasons.push('experiência no setor'); }
     if (sameArea) { score += 25; reasons.push('mesmo bairro'); }
     else if (worker.pode_se_deslocar) { score += 10; reasons.push('pode se deslocar'); }
-    if (!worker.trabalhando) { score += 5; reasons.push('disponível no cadastro'); }
+    if (worker.trabalhando === false) { score += 5; reasons.push('disponível no cadastro'); }
     return { eligible: true, score, reasons };
   }
   return { rank, matchesSector, conflicts };
