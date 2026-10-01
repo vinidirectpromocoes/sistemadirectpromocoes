@@ -449,6 +449,7 @@ async function runAssignmentPersistence() {
         assert.equal((await api('GET',`/api/pedidos/${order.id}/escalas`)).length,1);
         if (simulateRefreshFailure) {
           // Aguarda os controles auxiliares para não abortar fetches no WebKit/Linux ao recarregar.
+          await page.evaluate(async()=>{await loadHome();await window.DirectOperations.refresh();});
           await page.waitForLoadState('networkidle');
           await page.reload(); await page.locator('#orders-rows tr').filter({hasText:'Repositor de FLV'}).filter({hasText:firstDateLabel}).getByRole('button').click();
           await cards.first().locator('.order-worker-row').waitFor();
@@ -458,10 +459,12 @@ async function runAssignmentPersistence() {
         await page.getByText('Diarista escalada em 6 dias deste pedido.',{exact:true}).waitFor();
         assert.equal((await api('GET',`/api/pedidos/${order.id}/escalas`)).length,7);
         // Aguarda os controles auxiliares para não abortar fetches no WebKit/Linux ao recarregar.
+          await page.evaluate(async()=>{await loadHome();await window.DirectOperations.refresh();});
           await page.waitForLoadState('networkidle');
           await page.reload(); await page.locator('#orders-rows tr').filter({hasText:'Repositor de FLV'}).filter({hasText:firstDateLabel}).getByRole('button').click();
         await page.locator('#order-detail-shifts .order-worker-row').nth(6).waitFor();
         assert.equal(await page.locator('#order-detail-shifts .order-worker-row').count(),7,'Escalas persistem ao recarregar e reabrir');
+        await page.waitForLoadState('networkidle');
         assert.deepEqual(errors,[]); console.log(`${name} ${width}: Escalar visível, confirmação, cancelamento e persistência de 7 dias OK`);
         await context.close();
       }
