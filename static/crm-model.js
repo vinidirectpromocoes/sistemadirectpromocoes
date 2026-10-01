@@ -13,7 +13,7 @@
       const shifts=o.turnos||[], requested=shifts.length*Number(o.quantidade_diaristas||0);
       add({...context(o),key:`pedido:${o.id}`,kind:'pedido',stage,date:shifts[0]?.data||'',title:`Pedido #${o.id} · ${o.supermercado}`,detail:`${o.unidade||'Loja não informada'} · ${o.setor} · ${requested} diárias solicitadas`,action:'order',id:o.id});
       if(['cancelado','concluido'].includes(o.situacao))continue;
-      for(const t of shifts){const active=(groups.get(`${o.id}:${t.data}`)||[]).filter(s=>s.status!=='falta');const vacancies=Math.max(0,Number(o.quantidade_diaristas)-active.length);
+      for(const t of shifts){const active=(groups.get(`${o.id}:${t.data}`)||[]).filter(s=>!['falta','desistiu'].includes(s.status));const vacancies=Math.max(0,Number(o.quantidade_diaristas)-active.length);
         if(vacancies)add({...context(o),key:`vaga:${o.id}:${t.data}`,kind:'escala',stage:'aberto',date:t.data,overdue:t.data<today,title:`${vacancies} vaga(s) · ${o.unidade||o.supermercado}`,detail:`${o.setor} · ${t.inicio}–${t.fim} · Pedido #${o.id}`,action:'order',id:o.id});
       }
     }
@@ -22,7 +22,7 @@
       let stage='aberto', detail='Aguardando resposta do diarista';
       if(s.status==='presente'){stage=s.loja_validacao==='validado'?'concluido':s.loja_validacao==='divergencia'?'aberto':'confirmado';detail=s.loja_validacao==='validado'?'Presença e atendimento validados':s.loja_validacao==='divergencia'?'Presença registrada · divergência da loja':'Presença registrada · conferir validação da loja';}
       else if(o.situacao==='cancelado'){stage='cancelado';detail='Pedido cancelado';}
-      else if(s.status==='falta'){const replacement=scaleById.get(s.substituida_por_escala_id);stage=replacement&&replacement.status!=='falta'?'concluido':'aberto';detail=stage==='concluido'?'Falta com substituição registrada':'Falta · substituição pendente';}
+      else if(['falta','desistiu'].includes(s.status)){const replacement=scaleById.get(s.substituida_por_escala_id);stage=replacement&&!['falta','desistiu'].includes(replacement.status)?'concluido':'aberto';detail=`${s.status==='desistiu'?'Desistência':'Falta'} · ${stage==='concluido'?'substituição registrada':'substituição pendente'}`;}
       else if(s.confirmacao==='recusou')detail='Recusou · retirar da escala e substituir';
       else if(s.data<=today)detail=s.confirmacao==='confirmou'?'Disponibilidade confirmada · registrar presença ou falta':'Resposta e presença ainda por conferir';
       else if(s.confirmacao==='confirmou'){stage='confirmado';detail='Disponibilidade confirmada · presença ainda não registrada';}
@@ -64,13 +64,13 @@
         const o=orders.get(r.orderId);if(o?.situacao==='cancelado')continue;
         const s=r.key.startsWith('escala:')?scales.get(Number(r.key.split(':')[1])):null;
         if(!s){issue.label='Escalar diarista';issue.detail=r.title+' · '+r.detail;}
-        else if(s.status==='falta'){issue.label=r.stage==='concluido'?'Ver substituição':'Substituir diarista';}
+        else if(['falta','desistiu'].includes(s.status)){issue.label=r.stage==='concluido'?'Ver substituição':'Substituir diarista';}
         else if(s.status==='presente'){issue.label=r.stage==='concluido'?'Ver atendimento':'Conferir atendimento';}
         else if(s.confirmacao==='recusou')issue.label='Substituir diarista';
         else if(s.data<=today)issue.label='Conferir presença';
         else {if(s.confirmacao==='confirmou')continue;issue.waiting=true;issue.label='Conferir resposta';}
         const shift=o?.turnos?.find(t=>t.data===r.date);
-        const message=!s?`${r.title.split(' ')[0]} vaga(s) sem diarista`:s.status==='falta'?r.stage==='concluido'?'Falta com substituição registrada':'Falta; precisa de substituição':s.status==='presente'?r.stage==='concluido'?'Presença validada':s.loja_validacao==='divergencia'?'Conferir divergência da loja':'Presença registrada; falta validar com a loja':s.confirmacao==='recusou'?'Recusou; precisa de substituição':s.data<=today?'Registrar presença ou falta':'Aguardando resposta do diarista';
+        const message=!s?`${r.title.split(' ')[0]} vaga(s) sem diarista`:['falta','desistiu'].includes(s.status)?r.stage==='concluido'?`${s.status==='desistiu'?'Desistência':'Falta'} com substituição registrada`:`${s.status==='desistiu'?'Desistência':'Falta'}; precisa de substituição`:s.status==='presente'?r.stage==='concluido'?'Presença validada':s.loja_validacao==='divergencia'?'Conferir divergência da loja':'Presença registrada; falta validar com a loja':s.confirmacao==='recusou'?'Recusou; precisa de substituição':s.data<=today?'Registrar presença ou falta':'Aguardando resposta do diarista';
         issue.detail=[s?r.title:'',message,shift?`${shift.inicio}–${shift.fim}`:''].filter(Boolean).join(' · ');
         issue.overdue=['aberto','confirmado'].includes(r.stage)&&!!r.date&&r.date<today;
         add(`pedido:${r.orderId}`,'operacao',{},issue);continue;

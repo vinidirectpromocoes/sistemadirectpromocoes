@@ -58,20 +58,20 @@ def save(db, payload, core):
     for shift in json.loads(order['turnos']):
         existing = db.execute('SELECT * FROM pedido_escalas WHERE pedido_id=? AND diarista_id=? AND data=?',(order['id'],worker['id'],shift['data'])).fetchone()
         if existing:
-            if existing['status']=='falta':
+            if existing['status'] in ('falta','desistiu'):
                 raise ValueError('Já há uma falta registrada neste pedido. Revise a escala no pedido.')
             continue
         core.validate_worker_shift(db, worker, order, shift['data'], scoped_availability=True)
-        count = db.execute("SELECT count(*) FROM pedido_escalas WHERE pedido_id=? AND data=? AND status!='falta'",(order['id'],shift['data'])).fetchone()[0]
+        count = db.execute("SELECT count(*) FROM pedido_escalas WHERE pedido_id=? AND data=? AND status NOT IN ('falta','desistiu')",(order['id'],shift['data'])).fetchone()[0]
         if count >= order['quantidade_diaristas']:
             raise ValueError(f"As vagas de {shift['data']} já estão preenchidas.")
         scale_id = db.execute("INSERT INTO pedido_escalas(pedido_id,diarista_id,data,status,disponibilidade_pedido_confirmada,criado_em,atualizado_em) VALUES (?,?,?,'escalada',1,?,?)",(order['id'],worker['id'],shift['data'],now,now)).lastrowid
         new_scales.append(scale_id)
-        absence=db.execute("SELECT id FROM pedido_escalas WHERE pedido_id=? AND data=? AND status='falta' AND substituida_por_escala_id IS NULL ORDER BY id LIMIT 1",(order['id'],shift['data'])).fetchone()
+        absence=db.execute("SELECT id FROM pedido_escalas WHERE pedido_id=? AND data=? AND status IN ('falta','desistiu') AND substituida_por_escala_id IS NULL ORDER BY id LIMIT 1",(order['id'],shift['data'])).fetchone()
         if absence:
             db.execute('UPDATE pedido_escalas SET substituida_por_escala_id=? WHERE id=?',(scale_id,absence['id']))
     shifts = json.loads(order['turnos'])
-    complete = all(db.execute("SELECT count(*) FROM pedido_escalas WHERE pedido_id=? AND data=? AND status!='falta'", (order['id'], shift['data'])).fetchone()[0] >= order['quantidade_diaristas'] for shift in shifts)
+    complete = all(db.execute("SELECT count(*) FROM pedido_escalas WHERE pedido_id=? AND data=? AND status NOT IN ('falta','desistiu')", (order['id'], shift['data'])).fetchone()[0] >= order['quantidade_diaristas'] for shift in shifts)
     situation = 'confirmado' if complete else 'em_selecao'
     db.execute('UPDATE pedidos SET situacao=?,atualizado_em=? WHERE id=?', (situation,now,order['id']))
     if pending_id:

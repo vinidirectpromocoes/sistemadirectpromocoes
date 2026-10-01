@@ -360,6 +360,7 @@
     if (entity === 'pedidos') {
       if (child === 'escalas') {
         const scaleId = parts[4] ? Number(parts[4]) : null;
+        if(parts[5]==='substituir' && method==='POST') return unwrap(await sb.rpc('direct_replace_order_worker',{p_pedido_id:id,p_escala_id:scaleId,p_diarista_id:Number(p.diarista_id),p_motivo:p.motivo||'',p_disponibilidade_confirmada:p.disponibilidade_confirmada===true}));
         if (method === 'GET') {
           const assignments = unwrap(await sb.from('pedido_escalas').select('*, diaristas(nome)').eq('pedido_id', id).order('data').order('id'));
           if (!assignments.length) return [];
@@ -376,7 +377,7 @@
           return unwrap(await sb.from('pedido_escalas').insert({ pedido_id: id, diarista_id: Number(p.diarista_id), data: p.data }).select().single());
         }
         if (method === 'PATCH') return unwrap(await sb.from('pedido_escalas').update({ status: p.status,
-          ...(p.status === 'falta' ? { falta_motivo: p.motivo } : {}) }).eq('pedido_id', id).eq('id', scaleId).select().single());
+          ...(p.status === 'falta' ? { falta_motivo: p.motivo } : p.status==='desistiu'?{desistencia_motivo:p.motivo}:{}) }).eq('pedido_id', id).eq('id', scaleId).select().single());
         if (method === 'DELETE') { unwrap(await sb.from('pedido_escalas').delete().eq('pedido_id', id).eq('id', scaleId)); return { ok: true }; }
       }
       if (method === 'GET') return (await rows('pedidos')).sort((a,b) => b.id - a.id).map(orderView);

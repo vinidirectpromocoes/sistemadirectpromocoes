@@ -18,3 +18,12 @@ test('contrato mais específico e vigência; presença mantém snapshot anterior
  const d=forecast.calculate([order],{1:[{data:'2026-09-29',status:'presente',diaria:{valor_centavos:8500,valor_recebido_centavos:13400}}]},{redes:[],setores:[],contratos:contracts});
  assert.equal(d.expected.revenue,57400);assert.equal(d.expected.cost,36500);assert.equal(d.confirmed.revenue,13400);
 });
+test('desistência é separada de falta e só substituição ativa recompõe a previsão',()=>{
+ const o={...order,quantidade_diaristas:1,turnos:[order.turnos[0]]};
+ const scales=[{id:1,pedido_id:1,diarista_id:1,diarista_nome:'A',data:o.turnos[0].data,status:'desistiu',confirmacao:'confirmou'}];
+ const d=calculate([o],scales,[],[],[],{today:'2026-10-01'});
+ assert.equal(d.assigned,0);assert.equal(d.absent,0);assert.equal(d.profiles[0].withdrawn,1);assert.equal(d.profiles[0].absent,0);
+ const tarifs={redes:[{rede:o.supermercado,valor_recebido_centavos:13400,valor_padrao_centavos:9000}]};
+ let f=forecast.calculate([o],{1:scales},tarifs);assert.equal(f.expected.revenue,0);assert.equal(f.absent,0);
+ scales.push({id:2,pedido_id:1,diarista_id:2,data:o.turnos[0].data,status:'escalada'});f=forecast.calculate([o],{1:scales},tarifs);assert.equal(f.expected.revenue,13400);assert.equal(f.expected.cost,9000);assert.equal(f.confirmed.revenue,0);
+});

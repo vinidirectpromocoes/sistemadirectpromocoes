@@ -18,21 +18,22 @@
    if(shift.data<=today) demand+=o.situacao==='cancelado'?completed.length:o.quantidade_diaristas;
    const shiftStart=Date.parse(`${shift.data}T${shift.inicio}:00-03:00`);
    for(const s of day) {
-    if(s.status!=='falta') {
+    if(!['falta','desistiu'].includes(s.status)) {
      if(o.situacao!=='cancelado'||s.status==='presente')assigned++;
      if((o.situacao!=='cancelado'||s.status==='presente')&&s.confirmacao==='confirmou'&&Date.parse(s.confirmacao_em)<shiftStart)early++;
     }
-    const profile=profiles.get(s.diarista_id)||{id:s.diarista_id,name:s.diarista_nome,present:0,absent:0,late:0,unknown:0,praise:0,complaints:0}; profiles.set(s.diarista_id,profile);
+    const profile=profiles.get(s.diarista_id)||{id:s.diarista_id,name:s.diarista_nome,present:0,absent:0,withdrawn:0,withdrawnAfterConfirmed:0,late:0,unknown:0,praise:0,complaints:0}; profiles.set(s.diarista_id,profile);
     if(s.status==='presente') {
      if(shift.data<=today)present++;profile.present++;
      if(s.loja_validacao==='validado')validated++;
      if(!s.chegada_em){arrivalUnknown++;profile.unknown++;}
      else if(Date.parse(s.chegada_em)>shiftStart){late++;profile.late++;}else punctual++;
     }
+    if(s.status==='desistiu'){profile.withdrawn++;if(s.confirmacao==='confirmou')profile.withdrawnAfterConfirmed++;}
     if(s.status==='falta') {
      absent++;profile.absent++;
      const replacement=byId.get(s.substituida_por_escala_id);
-     if(replacement&&replacement.status!=='falta'&&s.falta_confirmada_em) {
+     if(replacement&&!['falta','desistiu'].includes(replacement.status)&&s.falta_confirmada_em) {
       const minutes=(Date.parse(replacement.criado_em)-Date.parse(s.falta_confirmada_em))/60000;
       if(Number.isFinite(minutes)&&minutes>=0)replacements.push(minutes);
      }

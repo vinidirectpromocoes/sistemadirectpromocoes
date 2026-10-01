@@ -49,10 +49,10 @@
         const currentRevenue = chosenContract?.valor_recebido_centavos ?? baseRevenue;
         const currentCost = chosenContract?.valor_pago_centavos ?? baseCost;
         const dayScales = scales.filter(scale => scale.data === shift.data);
-        const active = dayScales.filter(scale => scale.status !== 'falta');
+        const active = dayScales.filter(scale => !['falta','desistiu'].includes(scale.status));
         const present = active.filter(scale => scale.status === 'presente');
         const requested = cancelled ? present.length : Number(order.quantidade_diaristas) || 0;
-        const absent = cancelled ? 0 : dayScales.length - active.length;
+        const absent = cancelled ? 0 : dayScales.filter(s=>s.status==='falta').length;
         // Uma vaga ainda não escalada permanece na hipótese de atendimento integral.
         // A falta reduz a projeção; uma substituta escalada recompõe a vaga.
         // Pedido cancelado mantém apenas diárias realizadas, inclusive valores congelados.

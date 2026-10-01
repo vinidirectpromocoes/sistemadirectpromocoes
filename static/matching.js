@@ -17,7 +17,7 @@
     for (const order of orders || []) {
       const slot = (order.turnos || []).find(item => item.data === shift.data);
       if (!slot || slot.inicio >= shift.fim || shift.inicio >= slot.fim) continue;
-      if ((scales?.[order.id] || []).some(item => item.diarista_id === workerId && item.data === shift.data && item.status !== 'falta')) return true;
+      if ((scales?.[order.id] || []).some(item => item.diarista_id === workerId && item.data === shift.data && !['falta','desistiu'].includes(item.status))) return true;
     }
     return false;
   }
