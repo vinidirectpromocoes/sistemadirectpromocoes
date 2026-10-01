@@ -10,6 +10,7 @@
   let ocrWorker, pdfLibrary, pending = [];
   let loadingPending = false;
   let lastOcrConfidence = 100;
+  let reviewPendingId = null;
 
   function feedback(message, error = false) {
     const box = pick('#reading-feedback');
@@ -107,9 +108,10 @@
     element.textContent = label;
     return element;
   }
-  function resultCard(item, state, description, onUndo = null) {
+  function resultCard(item, state, description, onUndo = null, linkedOutcome = null) {
     const card = document.createElement('article'); card.className = `reading-item ${state}`;
     card.dataset.resultState = state;
+    if(item.dados?.diarista_escalado) card.dataset.assignmentKey=item.dados.leitura_chave_operacao || parser.textKey(item.texto);
     const head = document.createElement('div'); head.className = 'reading-item-head';
     const title = document.createElement('strong');
     title.textContent = item.tipo === 'diarista' ? (item.dados.nome || 'Diarista sem nome') : item.tipo === 'pedido' ? [item.dados.supermercado, item.dados.unidade].filter(Boolean).join(' · ') || 'Pedido sem loja' : 'Tipo não identificado';
@@ -127,12 +129,40 @@
     if (item.tipo !== 'indefinido') {
       const detail = document.createElement('details'); detail.className = 'reading-identified';
       const summary = document.createElement('summary'); summary.textContent = 'Dados identificados';
-      const values = document.createElement('pre'); values.textContent = JSON.stringify(item.dados, null, 2);
+      const values = document.createElement('pre'); values.textContent = JSON.stringify({ ...item.dados, leitura_chave_operacao: undefined }, null, 2);
       detail.append(summary, values); card.append(detail);
     }
     if (item.tipo === 'diarista' && ['saved','duplicate'].includes(state)) {
       const complete = document.createElement('button'); complete.type='button'; complete.className='text-button'; complete.textContent='Completar no formulário';
       complete.addEventListener('click',()=>fillDiarista(item.dados)); card.append(complete);
+    }
+    if (item.dados?.diarista_escalado) {
+      if (state === 'pending' && linkedOutcome?.canConfirm) {
+        const save = document.createElement('button'); save.type='button'; save.className='button button-primary reading-link-save';
+        save.textContent=linkedOutcome.needsRegistration ? 'Cadastrar diarista e salvar pedido' : 'Salvar pedido com escala';
+        save.addEventListener('click', async () => {
+          save.disabled=true;
+          try {
+            const data=await getData();
+            const response=await saveLinked(item,data,true,linkedOutcome.pendingId);
+            if(response.requires_registration) throw new Error('Confirme o cadastro do diarista.');
+            const outcome=linkedResult(response);
+            const savedCard=resultCard(item,outcome.state,outcome.description,null,outcome);
+            const resultList=pick('#reading-result-items');
+            const original=[...resultList.children].find(node=>node.dataset.assignmentKey===card.dataset.assignmentKey);
+            if(original) original.replaceWith(savedCard); else resultList.append(savedCard);
+            pick('#reading-result').hidden=false;
+            updateResultSummary();
+            await Promise.all([load(),loadOrders(),loadPending()]);
+            feedback(outcome.description);
+          } catch(error) { detail.textContent=`Não foi possível salvar: ${error.message}. As informações continuam nesta pendência.`; save.disabled=false; }
+        });
+        card.append(save);
+      }
+      if(linkedOutcome?.orderId) {
+        const view=document.createElement('button'); view.type='button';view.className='text-button';view.textContent='Ver pedido e escala';
+        view.addEventListener('click',async()=>{window.location.hash='#pedidos';await loadOrders();await openOrderDetail(linkedOutcome.orderId);});card.append(view);
+      }
     }
     if (onUndo) {
       const undo = document.createElement('button'); undo.type = 'button'; undo.className = 'text-button'; undo.textContent = 'Desfazer este registro';
@@ -146,7 +176,45 @@
     return card;
   }
   function orderKey(order) { return parser.fingerprint({ tipo: 'pedido', dados: order }); }
+  function updateResultSummary() {
+    const counts={saved:0,pending:0,duplicate:0,error:0};
+    for(const card of pick('#reading-result-items').querySelectorAll('[data-result-state]')) counts[card.dataset.resultState]++;
+    pick('#reading-result-summary').textContent=`${counts.saved} registrado(s) · ${counts.pending} pendente(s) · ${counts.duplicate} já existente(s) · ${counts.error} erro(s).`;
+  }
+  function linkedResult(saved) {
+    const duplicate=!saved.cadastro_criado&&!saved.pedido_criado&&!saved.escalas_criadas.length;
+    return {state:duplicate?'duplicate':'saved',entity:'pedido_escalado',orderId:saved.pedido_id,description:`${saved.cadastro_criado?'Cadastro básico criado':'Cadastro existente preservado'} · ${saved.nome} · ${saved.dias} dia(s) escalado(s). ${duplicate?'Esta escala já estava registrada.':''}`};
+  }
+  async function saveLinked(item, data, confirm, pendingId) {
+    const rows=data.orderRows || (Array.isArray(data.orders)?data.orders:[]);
+    const matches=rows.filter(order=>orderKey(order)===item.chave);
+    if(matches.length>1) throw new Error('Há mais de um pedido igual. Abra Pedidos para escolher o pedido correto antes de escalar.');
+    item.dados.leitura_chave_operacao ||= crypto.randomUUID();
+    return request('/api/leitura/pedido-escalado',{method:'POST',headers:{'Content-Type':'application/json'},body:body({pedido:item.dados,diarista:item.dados.diarista_escalado,confirmar_cadastro:confirm,chave_operacao:item.dados.leitura_chave_operacao,pedido_id:matches[0]?.id || null,pendencia_id:pendingId || null})});
+  }
+  async function processLinked(item, existing) {
+    const draftKey=`rascunho:${parser.textKey(item.texto)}`;
+    let previous=existing.draftRecords.find(record=>record.status==='pendente'&&record.chave===draftKey);
+    item.dados.leitura_chave_operacao ||= previous?.dados.leitura_chave_operacao || crypto.randomUUID();
+    const preserve=async(reason,needsRegistration=false,canConfirm=false)=>{
+      const draft={...item,chave:draftKey,faltando:[...item.faltando,reason]};
+      const record=await request('/api/leituras-pendentes',{method:'POST',headers:{'Content-Type':'application/json'},body:body(draft)});
+      if(previous) Object.assign(previous,record); else {previous=record;existing.draftRecords.push(record);}
+      existing.drafts.add(draftKey);
+      return {state:'pending',description:reason,canConfirm,needsRegistration,pendingId:record.id};
+    };
+    if(item.faltando.length) return preserve(`Falta confirmar: ${item.faltando.join(', ')}.`);
+    try {
+      const saved=await saveLinked(item,existing,false,previous?.id || existing.reviewPendingId);
+      if(saved.requires_registration) return preserve(`${saved.nome} ainda não tem cadastro. Confira o nome e CPF em Dados identificados e clique abaixo para cadastrar e salvar o pedido com a escala.`,true,true);
+      if(!existing.workers.has(item.dados.diarista_escalado.cpf)) existing.workers.add(item.dados.diarista_escalado.cpf);
+      if(saved.pedido_criado) existing.orderRows.push({...item.dados,id:saved.pedido_id});
+      existing.orders.add(item.chave);
+      return linkedResult(saved);
+    } catch(error) {return preserve(`Não foi possível salvar pedido e escala: ${error.message}`,false,true);}
+  }
   async function processItem(item, existing) {
+    if (item.tipo === 'pedido' && item.dados.diarista_escalado) return processLinked(item,existing);
     const cpf = item.dados.cpf;
     const draftKey = `rascunho:${parser.textKey(item.texto)}`;
     const duplicate = item.tipo === 'diarista' ? cpf && existing.workers.has(cpf) : item.tipo === 'pedido' ? existing.orders.has(item.chave) : false;
@@ -204,7 +272,7 @@
         workers: new Set(data.workers.map(row => row.cpf)),
         orders: new Set(data.orders.map(orderKey)),
         drafts: new Set(data.drafts.filter(row => row.status === 'pendente').map(row => row.chave)),
-        draftRecords: data.drafts,
+        draftRecords: data.drafts, orderRows:data.orders, reviewPendingId,
       };
       const sources = [];
       if (typed) sources.push({ name: 'Texto colado', text: typed });
@@ -214,7 +282,7 @@
       }
       for (const source of sources) {
         const before = { ...counts };
-        const parts = parser.parse(source.text, { stores: data.stores, sectors: data.sectors, today: orderToday() });
+        const parts = parser.parse(source.text, { stores: data.stores, sectors: data.sectors, workers:data.workers, today: orderToday() });
         if (!parts.length) { counts.error++; sourceReport.push(`${source.name}: nenhum registro reconhecido`); list.append(resultCard({ tipo: 'indefinido', dados: {}, fonte: source.name, confianca: source.confidence ?? null }, 'error', `${source.name}: nenhum texto reconhecido. Envie uma imagem mais nítida ou um PDF com melhor resolução.`)); continue; }
         for (const item of parts) {
           item.fonte = source.name;
@@ -229,11 +297,11 @@
           feedback(`Registrando ${source.name} · ${counts.saved + counts.pending + counts.duplicate + counts.error + 1} registro(s) processado(s)...`);
           const outcome = await processItem(item, existing);
           counts[outcome.state]++;
-          const undo = outcome.state === 'saved' && (outcome.entity === 'pedidos' || !window.directRemote || window.directRemote.role === 'admin') ? async () => {
+          const undo = outcome.state === 'saved' && ['pedidos','diaristas'].includes(outcome.entity) && (outcome.entity === 'pedidos' || !window.directRemote || window.directRemote.role === 'admin') ? async () => {
             await request(`/api/${outcome.entity}/${outcome.id}`, { method: 'DELETE' });
             await Promise.all([load(), loadOrders(), loadPending()]);
           } : null;
-          list.append(resultCard(item, outcome.state, outcome.description, undo));
+          list.append(resultCard(item, outcome.state, outcome.description, undo, outcome));
         }
         sourceReport.push(`${source.name}: ${counts.saved - before.saved} salvo(s), ${counts.pending - before.pending} em revisão, ${counts.duplicate - before.duplicate} duplicado(s), ${counts.error - before.error} erro(s)`);
       }
@@ -242,6 +310,7 @@
       pick('#reading-result-filter').value = 'todos';
       feedback(counts.error ? 'Processamento concluído com erros. Confira o resultado abaixo.' : 'Processamento concluído. Confira o resultado abaixo.', !!counts.error);
       await Promise.all([load(), loadOrders(), loadPending()]);
+      reviewPendingId = null;
       resultArea.scrollIntoView({ behavior: 'smooth', block: 'start' });
     } catch (error) { feedback(`Não foi possível concluir a importação: ${error.message}`, true); }
     finally { button.disabled = false; button.textContent = '✦ Ler e registrar tudo'; }
@@ -295,7 +364,9 @@
     updateOrderPreview();
   }
   function pendingCard(item) {
-    const card = resultCard({ ...item, dados: item.dados }, 'pending', `Falta confirmar: ${(item.faltando || []).join(', ')}.`);
+    const linked=!!item.dados?.diarista_escalado;
+    const canConfirm=linked && (item.faltando || []).every(text=>/^(?:Confirmar cadastro|.*ainda não tem cadastro|Não foi possível salvar pedido)/.test(text));
+    const card = resultCard({ ...item, dados: item.dados }, 'pending', `Falta confirmar: ${(item.faltando || []).join(', ')}.`,null,linked?{canConfirm,needsRegistration:/ainda não tem cadastro/.test((item.faltando||[]).join(' ')),pendingId:item.id}:null);
     const details = document.createElement('details');
     const summary = document.createElement('summary'); summary.textContent = 'Ver texto reconhecido';
     const original = document.createElement('pre'); original.textContent = item.texto;
@@ -303,7 +374,7 @@
     const actions = document.createElement('div'); actions.className = 'reading-item-actions';
     if (item.tipo !== 'indefinido') {
       const edit = document.createElement('button'); edit.className = 'button button-outline'; edit.type = 'button'; edit.textContent = 'Abrir e completar';
-      edit.addEventListener('click', () => item.tipo === 'diarista' ? fillDiarista(item.dados, item.id) : fillPedido(item.dados, item.id)); actions.append(edit);
+      edit.addEventListener('click', () => linked ? reviewLinked(item) : item.tipo === 'diarista' ? fillDiarista(item.dados, item.id) : fillPedido(item.dados, item.id)); actions.append(edit);
     }
     const resolve = document.createElement('button'); resolve.className = 'button button-quiet'; resolve.type = 'button'; resolve.textContent = 'Marcar resolvido';
     resolve.addEventListener('click', async () => { try { await request(`/api/leituras-pendentes/${item.id}`, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: body({ status: 'resolvido' }) }); await loadPending(); } catch (error) { feedback(error.message, true); } });
@@ -321,7 +392,11 @@
     } catch (error) { const area = pick('#reading-pending-items'); area.textContent = `Não foi possível carregar as pendências: ${error.message}`; }
     finally { loadingPending = false; }
   }
-  window.DirectReading={complete:item=>item.tipo==='diarista'?fillDiarista(item.dados,item.id):fillPedido(item.dados,item.id)};
+  function reviewLinked(item) {
+    window.location.hash='#leitura'; pick('#reading-text').value=item.texto; reviewPendingId=item.id;
+    feedback('Revise a mensagem completa, incluindo pedido, nome e CPF, e clique em Ler e registrar tudo.');pick('#reading-text').focus();
+  }
+  window.DirectReading={complete:item=>item.dados?.diarista_escalado?reviewLinked(item):item.tipo==='diarista'?fillDiarista(item.dados,item.id):fillPedido(item.dados,item.id)};
   window.directResolvePendingForm = async tipo => {
     const current = window.directPendingForm;
     if (!current || current.tipo !== tipo) return null;

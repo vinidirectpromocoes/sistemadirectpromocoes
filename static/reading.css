@@ -76,3 +76,5 @@ html[data-theme="dark"] .reading-item small { color: #ffd291; }
   .reading-item-head { flex-wrap: wrap; }
   .reading-item-actions .button { flex: 1 1 140px; }
 }
+
+.reading-link-save { margin-top:12px; max-width:100%; white-space:normal; overflow-wrap:anywhere; }

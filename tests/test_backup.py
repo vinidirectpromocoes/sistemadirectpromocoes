@@ -96,6 +96,7 @@ class BackupRestoreTests(unittest.TestCase):
                     db.execute("""INSERT INTO cobranca_itens (cobranca_id, diaria_id, pedido_id, data, valor_centavos)
                         VALUES (?, ?, ?, '2026-09-29', 13400)""", (invoice_id, daily_id, order_id))
                     db.execute("UPDATE diarias SET vencimento_pagamento='2026-10-15', vencimento_recebimento='2026-10-15', vencimento_origem='calendario' WHERE id=?", (daily_id,))
+                    db.execute("UPDATE pedido_escalas SET disponibilidade_pedido_confirmada=1 WHERE id=?", (scale_id,))
                     db.execute("UPDATE tarifas_redes SET pagamento_segunda_quinzena=18 WHERE rede='Super do Povo'")
                     contract_id=db.execute("INSERT INTO contratos(rede,loja,setor,inicio,valor_recebido_centavos,valor_pago_centavos,criado_em) VALUES('Super do Povo','Meireles','Operador de caixa','2026-09-01',13400,9000,'2026-09-29')").lastrowid
                     db.execute("UPDATE diarias SET contrato_id=? WHERE id=?",(contract_id,daily_id))
@@ -111,6 +112,7 @@ class BackupRestoreTests(unittest.TestCase):
                 self.assertEqual(counts["ocorrencias"],1)
                 with sqlite3.connect(target) as db:
                     self.assertEqual(db.execute("PRAGMA foreign_key_check").fetchall(), [])
+                    self.assertEqual(db.execute("SELECT disponibilidade_pedido_confirmada FROM pedido_escalas WHERE id=?", (scale_id,)).fetchone()[0],1)
                     self.assertEqual(db.execute("SELECT count(*) FROM diarias WHERE pedido_escala_id = ?", (scale_id,)).fetchone()[0], 1)
                     self.assertEqual(db.execute("SELECT vencimento_pagamento,vencimento_recebimento,vencimento_origem FROM diarias").fetchone(), ('2026-10-15','2026-10-15','calendario'))
                     self.assertEqual(db.execute("SELECT pagamento_segunda_quinzena FROM tarifas_redes WHERE rede='Super do Povo'").fetchone()[0],18)
