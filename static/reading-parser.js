@@ -19,6 +19,23 @@
     }
     return '';
   };
+  const nameLabels = ['Nome Completo', 'Nome do operador', 'Nome da diarista', 'Nome', 'Diarista escalado'];
+  const cpfLine = line => /^\s*\*?\s*CPF\s*\*?\s*:/i.test(line);
+  function plainName(line) {
+    const value = String(line || '').trim().replace(/^[*_]+|[\\*_]+$/g, '').trim();
+    if (!/^[\p{L}\p{M}]+(?:[ '\u2019-][\p{L}\p{M}]+)+$/u.test(value)) return '';
+    if (/^(?:nova solicitacao|novo pedido|dados para cadastro|dados do diarista|nome completo|quantidade de dias|informacoes|observacoes)\b/.test(normal(value))) return '';
+    return value;
+  }
+  function identityNames(text) {
+    const lines = text.split('\n').map(line => line.trim()).filter(Boolean);
+    const names = lines.filter(line => /^\s*\*?\s*(?:nome completo|nome do operador|nome da diarista|nome|diarista escalado)\s*\*?\s*:/i.test(line))
+      .map(line => field(line, nameLabels)).filter(Boolean);
+    for (let i = 1; i < lines.length; i++) {
+      if (cpfLine(lines[i])) { const name = plainName(lines[i - 1]); if (name) names.push(name); }
+    }
+    return names;
+  }
   function validCpf(value) {
     const cpf = digits(value);
     if (!/^\d{11}$/.test(cpf) || /^(\d)\1{10}$/.test(cpf)) return false;
@@ -32,11 +49,15 @@
   function split(text) {
     const result = []; let current = [];
     const flush = () => { const value = current.join('\n').trim(); if (value) result.push(value); current = []; };
-    for (const line of String(text || '').replace(/\r/g, '').split('\n')) {
-      const startsWorker = /^\s*\*?\s*(?:nome completo|nome do operador|nome da diarista|nome|diarista escalado)\s*\*?\s*:/i.test(line);
-      const startsOrder = /^\s*\*?\s*(?:loja|unidade|rede|supermercado)\s*\*?\s*:/i.test(line);
+    const lines = String(text || '').replace(/\r/g, '').split('\n');
+    for (let index = 0; index < lines.length; index++) {
+      const line = lines[index];
+      const bareName = plainName(line);
+      const next = bareName ? lines.slice(index + 1).find(value => value.trim()) : '';
+      const startsWorker = /^\s*\*?\s*(?:nome completo|nome do operador|nome da diarista|nome|diarista escalado)\s*\*?\s*:/i.test(line) || (!!bareName && cpfLine(next || ''));
+      const startsOrder = /^\s*\*?\s*(?:loja|unidade|regi[aã]o|rede|supermercado)\s*\*?\s*:/i.test(line);
       const hasWorker = current.some(item => /^\s*\*?\s*(?:nome completo|nome do operador|nome da diarista|nome|diarista escalado|cpf)\s*\*?\s*:/i.test(item));
-      const hasStore = current.some(item => /^\s*\*?\s*(?:loja|unidade)\s*\*?\s*:/i.test(item));
+      const hasStore = current.some(item => /^\s*\*?\s*(?:loja|unidade|regi[aã]o)\s*\*?\s*:/i.test(item));
       const hasNetwork = current.some(item => /^\s*\*?\s*(?:rede|supermercado)\s*\*?\s*:/i.test(item));
       const hasDetails = current.some(item => /^\s*\*?\s*(?:hor[aá]rio|fun[cç][aã]o|setor|data(?: de in[ií]cio)?)\s*\*?\s*:/i.test(item));
       const hasOrder = hasStore || hasNetwork;
@@ -52,7 +73,7 @@
   function classify(text) {
     const value = normal(text);
     const worker = /\bcpf\b/.test(value) || /\bnome completo\b/.test(value);
-    const order = /\bloja\b|\bunidade\b|\bsupermercado\b/.test(value) && /\bhorario\b|\bdata\b|\bfuncao\b|\bsetor\b/.test(value);
+    const order = /^\s*\*?\s*(?:loja|unidade|regi[aã]o|supermercado|rede)\s*\*?\s*:/im.test(text) && /\bhorario\b|\bdata\b|\bfuncao\b|\bsetor\b/.test(value);
     return order ? 'pedido' : worker ? 'diarista' : 'indefinido';
   }
   function sector(value, known) {
@@ -106,7 +127,8 @@
     return shifts;
   }
   function worker(text, sectors) {
-    const nome = field(text, ['Nome Completo', 'Nome do operador', 'Nome da diarista', 'Nome']);
+    const names = identityNames(text);
+    const nome = field(text, nameLabels) || names[0] || '';
     const cpf = digits(field(text, ['CPF']));
     const cep = digits(field(text, ['CEP']));
     const street = field(text, ['Rua/Nº', 'Rua/No', 'Rua', 'Endereço', 'Endereco', 'Logradouro']);
@@ -132,6 +154,7 @@
     const data = { nome, cpf, setores, cep, logradouro, numero, complemento: field(text, ['Complemento']), bairro: field(text, ['Bairro']), trabalhando, local_trabalho, disponibilidade, pode_se_deslocar, transporte, observacoes_locomocao: locomocao };
     const missing = [];
     if (!nome) missing.push('nome');
+    if (names.length > 1 || text.split('\n').filter(cpfLine).length > 1) missing.push('revisar mais de um diarista informado no mesmo cadastro');
     if (!validCpf(cpf)) missing.push(cpf ? 'CPF válido' : 'CPF');
     if (cep && !/^\d{8}$/.test(cep)) missing.push('CEP válido');
     const completar = [];
@@ -147,7 +170,7 @@
   }
 
   function order(text, stores, sectors, today) {
-    let unit = field(text, ['Loja', 'Unidade']);
+    let unit = field(text, ['Loja', 'Unidade', 'Região', 'Regiao']);
     const storeName = value => normal(value).replace(/^loja /, '');
     let market = field(text, ['Rede', 'Supermercado']);
     const matches = (stores || []).filter(item => storeName(item.nome) === storeName(unit));
@@ -202,8 +225,8 @@
       const kind = classify(part);
       const item = kind === 'diarista' ? worker(part, context.sectors) : kind === 'pedido' ? order(part, context.stores, context.sectors, today) : { tipo: 'indefinido', dados: {}, faltando: ['identificar cadastro ou pedido'], texto: part };
       if (kind === 'pedido') {
-        const names = part.split('\n').filter(line => /^\s*\*?\s*(?:nome completo|nome do operador|nome da diarista|nome|diarista escalado)\s*\*?\s*:/i.test(line));
-        let nome = field(part, ['Nome Completo','Nome do operador','Nome da diarista','Nome','Diarista escalado']);
+        const names = identityNames(part);
+        let nome = field(part, nameLabels) || names[0] || '';
         let cpf = digits(field(part, ['CPF']));
         if (nome || cpf) {
           const known = context.workers || [];
@@ -212,7 +235,7 @@
           item.dados.diarista_escalado = {nome, cpf};
           if (!nome) item.faltando.push('nome do diarista escalado');
           if (!validCpf(cpf)) item.faltando.push('CPF válido do diarista escalado');
-          if (names.length > 1) item.faltando.push('revisar mais de um diarista informado no mesmo pedido');
+          if (names.length > 1 || part.split('\n').filter(cpfLine).length > 1) item.faltando.push('revisar mais de um diarista informado no mesmo pedido');
           item.avisos.push('A pessoa informada será escalada em todos os dias deste pedido. A disponibilidade vale apenas para estas datas e horários.');
         }
       }

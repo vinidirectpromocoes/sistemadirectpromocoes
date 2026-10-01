@@ -537,11 +537,12 @@ async function runLinkedReading() {
   for(const [engine,name] of [[chromium,'Chromium'],[webkit,'WebKit']]) {
     const browser=await engine.launch({headless:true});
     try {for(const width of [1280,390,320]) {
-      const cpf=cpfFor(++serial),workerName=`Pessoa Leitura ${name} ${width}`;
-      const message=`Rede: Hipermarket\n*Loja:* LOJA VILA UNIÃO\n*Função:* Repositor de mercearia\n*Horário:* 6:00 às 14:20\n*Data de início:* 03/10/2026\n*Quantidade de dias:* 2 dias\n\n*nome: ${workerName}*\nCPF: ${cpf}`;
+      const cpf=cpfFor(++serial),workerName=`Pessoa Leitura ${name} ${width===320?'Compacta':width===390?'Celular':'Desktop'}`;
+      const start=width===1280?'06:00':'13:40',end=width===1280?'14:20':'22:00';
+      const message=`*NOVA SOLICITAÇÃO*\nREDE: Hipermarket\n*${width===1280?'Loja':'Região'}:* LOJA VILA UNIÃO\n*Função:* Repositor de mercearia\n*Horário:* ${start} as ${end}\n*Data de início:* 03/10/2026\n*Quantidade de dias:* 2 dias\n\n*${width===1280?'nome: ':''}${workerName}*\nCPF: ${cpf}`;
       const context=await browser.newContext({viewport:{width,height:844},isMobile:width<500,hasTouch:width<500}),page=await context.newPage(),errors=[];
       page.on('pageerror',error=>errors.push(error.message));
-      const existingOrder=width===390?await api('POST','/api/pedidos',{supermercado:'hipermarket',unidade:'vila união',setor:'repositor de mercearia',quantidade_diaristas:1,turnos:[{data:'2026-10-03',inicio:'06:00',fim:'14:20'},{data:'2026-10-04',inicio:'06:00',fim:'14:20'}]}):null;
+      const existingOrder=width===390?await api('POST','/api/pedidos',{supermercado:'hipermarket',unidade:'vila união',setor:'repositor de mercearia',quantidade_diaristas:1,turnos:[{data:'2026-10-03',inicio:start,fim:end},{data:'2026-10-04',inicio:start,fim:end}]}):null;
       await page.goto(url+'#leitura');await page.locator('#reading-text').fill(message);await page.locator('#reading-submit').click();
       await page.locator('#reading-result-items .reading-link-save').waitFor();
       assert.equal((await api('GET','/api/diaristas')).filter(w=>w.cpf===cpf).length,0,'Sugestão não cadastra automaticamente pessoa desconhecida');
