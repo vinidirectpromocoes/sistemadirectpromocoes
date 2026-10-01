@@ -6,6 +6,7 @@ const financeToday = () => {
 };
 let visibleFinanceRows = [];
 let financeOpenGroupId = null;
+let financeGroupSelection = null;
 let financeForecastInput = null;
 let financeLoadSequence = 0;
 
@@ -256,7 +257,7 @@ function financeGroupSummaryStat(label, value) {
 }
 
 function renderFinanceGroup() {
-  const items = visibleFinanceRows.filter(item => item.origem === 'diaria' && item.diarista_id === financeOpenGroupId);
+  const items = (financeGroupSelection ? financeRecords : visibleFinanceRows).filter(item => item.origem === 'diaria' && item.diarista_id === financeOpenGroupId && (!financeGroupSelection || financeGroupSelection.has(item.id)));
   if (!items.length) { if ($('#finance-group-dialog').open) $('#finance-group-dialog').close(); return false; }
   $('#finance-group-dialog').querySelector('.finance-group-notice')?.remove();
   $('#finance-group-dialog').querySelector('.finance-batch-button')?.remove();
@@ -306,8 +307,9 @@ function renderFinanceGroup() {
   return true;
 }
 
-function openFinanceGroup(diaristaId) {
+function openFinanceGroup(diaristaId, selectedIds = null) {
   financeOpenGroupId = diaristaId;
+  financeGroupSelection = selectedIds ? new Set(selectedIds) : null;
   if (renderFinanceGroup() && !$('#finance-group-dialog').open) $('#finance-group-dialog').showModal();
 }
 
@@ -584,7 +586,7 @@ function showPage() {
     if (active) link.setAttribute('aria-current', 'page');
     else link.removeAttribute('aria-current');
   }
-  document.title = `${{ inicio: 'Início', crm: 'CRM', diaristas: 'Diaristas', pedidos: 'Pedidos', leitura: 'Leitura IA', redes: 'Redes e lojas', financeiro: 'Financeiro', configuracoes: 'Configurações' }[page]} | Direct Promoções`;
+  document.title = `${{ inicio: 'Início', crm: 'Pendências', diaristas: 'Diaristas', pedidos: 'Pedidos', leitura: 'Leitura IA', redes: 'Redes e lojas', financeiro: 'Financeiro', configuracoes: 'Configurações' }[page]} | Direct Promoções`;
   window.scrollTo(0, 0);
   if (page === 'inicio' || page === 'crm') loadHome();
   if (page === 'financeiro') loadFinance();
