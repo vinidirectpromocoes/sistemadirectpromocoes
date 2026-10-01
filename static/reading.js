@@ -190,7 +190,9 @@
     const matches=rows.filter(order=>orderKey(order)===item.chave);
     if(matches.length>1) throw new Error('Há mais de um pedido igual. Abra Pedidos para escolher o pedido correto antes de escalar.');
     item.dados.leitura_chave_operacao ||= crypto.randomUUID();
-    return request('/api/leitura/pedido-escalado',{method:'POST',headers:{'Content-Type':'application/json'},body:body({pedido:item.dados,diarista:item.dados.diarista_escalado,confirmar_cadastro:confirm,chave_operacao:item.dados.leitura_chave_operacao,pedido_id:matches[0]?.id || null,pendencia_id:pendingId || null})});
+    const matched=matches[0];
+    const pedido=matched?{...item.dados,supermercado:matched.supermercado,unidade:matched.unidade,setor:matched.setor,quantidade_diaristas:matched.quantidade_diaristas,turnos:matched.turnos}:item.dados;
+    return request('/api/leitura/pedido-escalado',{method:'POST',headers:{'Content-Type':'application/json'},body:body({pedido,diarista:item.dados.diarista_escalado,confirmar_cadastro:confirm,chave_operacao:item.dados.leitura_chave_operacao,pedido_id:matched?.id || null,pendencia_id:pendingId || null})});
   }
   async function processLinked(item, existing) {
     const draftKey=`rascunho:${parser.textKey(item.texto)}`;

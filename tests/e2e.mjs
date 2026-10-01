@@ -541,6 +541,7 @@ async function runLinkedReading() {
       const message=`Rede: Hipermarket\n*Loja:* LOJA VILA UNIÃO\n*Função:* Repositor de mercearia\n*Horário:* 6:00 às 14:20\n*Data de início:* 03/10/2026\n*Quantidade de dias:* 2 dias\n\n*nome: ${workerName}*\nCPF: ${cpf}`;
       const context=await browser.newContext({viewport:{width,height:844},isMobile:width<500,hasTouch:width<500}),page=await context.newPage(),errors=[];
       page.on('pageerror',error=>errors.push(error.message));
+      const existingOrder=width===390?await api('POST','/api/pedidos',{supermercado:'hipermarket',unidade:'vila união',setor:'repositor de mercearia',quantidade_diaristas:1,turnos:[{data:'2026-10-03',inicio:'06:00',fim:'14:20'},{data:'2026-10-04',inicio:'06:00',fim:'14:20'}]}):null;
       await page.goto(url+'#leitura');await page.locator('#reading-text').fill(message);await page.locator('#reading-submit').click();
       await page.locator('#reading-result-items .reading-link-save').waitFor();
       assert.equal((await api('GET','/api/diaristas')).filter(w=>w.cpf===cpf).length,0,'Sugestão não cadastra automaticamente pessoa desconhecida');
@@ -552,6 +553,7 @@ async function runLinkedReading() {
       const worker=(await api('GET','/api/diaristas')).find(w=>w.cpf===cpf);assert.ok(worker);assert.deepEqual(worker.disponibilidade,[]);assert.deepEqual(worker.setores,[]);assert.equal(worker.trabalhando,null);
       const assignments=(await api('GET','/api/escalas')).filter(e=>e.diarista_id===worker.id);
       assert.equal(assignments.length,2);assert.deepEqual(assignments.map(e=>e.data),['2026-10-03','2026-10-04']);assert.ok(assignments.every(e=>e.status==='escalada'&&e.disponibilidade_pedido_confirmada));
+      if(existingOrder) assert.ok(assignments.every(e=>e.pedido_id===existingOrder.id),'Vincula pedido existente com diferenças de maiúsculas');
       await page.locator('#reading-text').fill(message);await page.locator('#reading-submit').click();await page.locator('#reading-result-items .reading-item.duplicate').waitFor();
       assert.equal((await api('GET','/api/escalas')).filter(e=>e.diarista_id===worker.id).length,2,'Releitura não duplica escala');
       await page.locator('#reading-result-items').getByRole('button',{name:'Ver pedido e escala',exact:true}).click();await page.locator('#order-detail-dialog').waitFor({state:'visible'});await page.waitForFunction(name=>document.querySelector('#order-detail-shifts')?.textContent.includes(name),workerName);assert.match(await page.locator('#order-detail-shifts').innerText(),new RegExp(workerName));await page.locator('#order-detail-close-bottom').click();

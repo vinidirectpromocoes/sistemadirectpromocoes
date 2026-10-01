@@ -9,7 +9,7 @@ Cole a mensagem completa na aba Leitura IA. O sistema reconhece o pedido e o nom
 - Quantidade de diaristas omitida: um por dia. Data inicial e quantidade de dias geram as datas consecutivas; uma quantidade diferente de um intervalo explícito exige revisão.
 - O exemplo Hipermarket / LOJA VILA UNIÃO / 03/10 / 2 dias é reconhecido como Vila União, 03 e 04/10/2026, 06:00–14:20.
 - Mensagens de WhatsApp com asteriscos e mensagens em lote são reconhecidas. Fotos e PDFs usam o mesmo processamento após o OCR existente; baixa confiança mantém a revisão obrigatória.
-- Releitura não duplica escalas. Pedido idêntico existente pode receber a vinculação; dois pedidos idênticos exigem escolha manual para evitar vincular ao pedido errado.
+- Releitura não duplica escalas. Pedido idêntico existente pode receber a vinculação, preservando sua grafia mesmo com diferenças de maiúsculas; dois pedidos idênticos exigem escolha manual para evitar vincular ao pedido errado.
 - **Ver pedido e escala** abre o pedido salvo. Pendências continuam disponíveis após recarregar a página.
 
 ## Integridade e segurança
