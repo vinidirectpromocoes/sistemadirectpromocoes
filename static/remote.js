@@ -349,7 +349,7 @@
     if (entity === 'escalas' && method === 'GET') {
       const assignments = await rows('pedido_escalas', '*, diaristas(nome)');
       const daily = ['admin', 'financeiro'].includes(currentRole)
-        ? await rows('diarias', 'id,pedido_escala_id,data_pagamento,valor_centavos,valor_recebido_centavos,vencimento_pagamento,forma_pagamento,pagamento_lote_id') : [];
+        ? await rows('diarias', 'id,pedido_escala_id,data_pagamento,valor_centavos,valor_recebido_centavos,vencimento_pagamento,vencimento_recebimento,vencimento_origem,forma_pagamento,pagamento_lote_id') : [];
       const byScale = new Map(daily.map(item => [item.pedido_escala_id, item]));
       return assignments.map(item => ({ ...item, diarista_nome: item.diaristas?.nome || '', diaria: byScale.get(item.id) || null }));
     }
@@ -360,7 +360,7 @@
           const assignments = unwrap(await sb.from('pedido_escalas').select('*, diaristas(nome)').eq('pedido_id', id).order('data').order('id'));
           if (!assignments.length) return [];
           const daily = ['admin', 'financeiro'].includes(currentRole)
-            ? unwrap(await sb.from('diarias').select('id,pedido_escala_id,data_pagamento,valor_centavos,valor_recebido_centavos,vencimento_pagamento,forma_pagamento,pagamento_lote_id').in('pedido_escala_id', assignments.map(item => item.id))) : [];
+            ? unwrap(await sb.from('diarias').select('id,pedido_escala_id,data_pagamento,valor_centavos,valor_recebido_centavos,vencimento_pagamento,vencimento_recebimento,vencimento_origem,forma_pagamento,pagamento_lote_id').in('pedido_escala_id', assignments.map(item => item.id))) : [];
           const byScale = new Map(daily.map(item => [item.pedido_escala_id, item]));
           return assignments.map(item => ({ ...item, diarista_nome: item.diaristas?.nome || '', diaria: byScale.get(item.id) || null }));
         }
@@ -404,6 +404,11 @@
       }
       const table = parts[2] === 'redes' ? 'tarifas_redes' : parts[2] === 'setores' ? 'tarifas_setores' : null;
       const rateId = parts[3] ? Number(parts[3]) : null;
+      if (table === 'tarifas_redes' && method === 'PUT' && rateId && parts[4] === 'calendario') {
+        const first = p.pagamento_primeira_quinzena, second = p.pagamento_segunda_quinzena;
+        if (!(first === null && second === null) && ![first, second].every(day => Number.isInteger(day) && day >= 1 && day <= 31)) throw new Error('Informe os dois dias, de 1 a 31, ou deixe ambos em branco.');
+        return unwrap(await sb.from(table).update({ pagamento_primeira_quinzena: first, pagamento_segunda_quinzena: second, atualizado_em: new Date().toISOString() }).eq('id', rateId).select().single());
+      }
       if (table === 'tarifas_redes' && method === 'PUT' && rateId) {
         return unwrap(await sb.from(table).update({ valor_recebido_centavos: money(p.valor_recebido), valor_padrao_centavos: money(p.valor_padrao), atualizado_em: new Date().toISOString() }).eq('id', rateId).select().single());
       }

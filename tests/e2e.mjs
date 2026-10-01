@@ -287,6 +287,8 @@ async function runFinancialWorkflow() {
     await page.locator('#invoice-network').selectOption('Super do Povo');
     await page.locator('#invoice-start').fill('2026-09-21');
     await page.locator('#invoice-end').fill('2026-09-28');
+    await page.locator('#invoice-end').dispatchEvent('change');
+    assert.equal(await page.locator('#invoice-due').inputValue(), '2026-10-15', 'Cobrança deve sugerir o calendário da rede');
     await page.locator('#invoice-due').fill('2026-10-10');
     await page.locator('#invoice-note').fill('QA-2026');
     await page.getByText('2 presença(s) ainda não cobradas').waitFor();
@@ -301,6 +303,7 @@ async function runFinancialWorkflow() {
     await page.locator('#invoice-receive-form button').click();
     await page.waitForFunction(() => document.querySelector('#invoice-detail-summary')?.textContent.includes('168,00'));
     await page.locator('#invoice-detail-dialog [data-close-dialog]').last().click();
+    await page.locator('#finance-month').fill('2026-10');
     await page.locator('#finance-rows .finance-group-row button').first().click();
     await page.getByRole('button', { name: 'Fechar pagamento (2)' }).click();
     assert.match(await page.locator('#batch-total').innerText(), /180,00/);
@@ -308,6 +311,7 @@ async function runFinancialWorkflow() {
     await page.locator('#batch-method').fill('Pix');
     await page.locator('#batch-submit').click();
     await page.locator('#batch-list .workflow-entry').waitFor();
+    await page.locator('#finance-month').fill('2026-09');
     assert.match(await page.locator('#finance-out').innerText(), /180,00/);
     assert.ok(scaleRequests.length > 0 && scaleRequests.every(path => path.endsWith('/api/escalas')),
       `Carregamento fez chamadas individuais por pedido: ${scaleRequests.join(', ')}`);
@@ -494,6 +498,38 @@ async function runPartialRegistration() {
   }
 }
 
+async function runPaymentCalendars() {
+  for (const [engine, name] of [[chromium, 'Chromium'], [webkit, 'WebKit']]) {
+    const browser = await engine.launch({headless:true});
+    try {
+      const context = await browser.newContext({viewport:{width:320,height:700},isMobile:true,hasTouch:true});
+      const page = await context.newPage(), errors=[];
+      page.on('pageerror', error=>errors.push(error.message));
+      await page.goto(`${url}#configuracoes`);
+      const form = page.getByRole('form', {name:'Calendário de Super do Povo',exact:true});
+      await form.getByRole('button', {name:'Salvar calendário'}).waitFor();
+      const inputs = form.locator('input');
+      assert.equal(await inputs.nth(0).inputValue(),'30'); assert.equal(await inputs.nth(1).inputValue(),'15');
+      assert.ok(await inputs.nth(1).evaluate(e=>parseFloat(getComputedStyle(e).fontSize))>=16,'Input deve evitar zoom de foco');
+      for(const theme of ['light','dark']) {
+        await page.evaluate(value=>document.documentElement.dataset.theme=value,theme);
+        assert.ok(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth+2),'Calendários cabem em 320px');
+      }
+      await inputs.nth(1).fill('18'); await form.getByRole('button',{name:'Salvar calendário'}).click();
+      await page.getByText('Calendário de Super do Povo atualizado para recebimentos e pagamentos.',{exact:true}).waitFor();
+      await page.waitForLoadState('networkidle'); await page.reload();
+      await form.getByRole('button', {name:'Salvar calendário'}).waitFor(); assert.equal(await form.locator('input').nth(1).inputValue(),'18');
+      await form.locator('input').nth(1).fill('15');await form.getByRole('button',{name:'Salvar calendário'}).click();
+      await page.getByText('Calendário de Super do Povo atualizado para recebimentos e pagamentos.',{exact:true}).waitFor();
+      const unknown=page.getByRole('form',{name:'Calendário de Pinheiro',exact:true});
+      assert.equal(await unknown.locator('input').nth(0).inputValue(),'');assert.match(await unknown.innerText(),/Prazo não informado/);
+      await page.waitForLoadState('networkidle'); assert.deepEqual(errors,[]);
+      console.log(`${name} 320px: calendários, persistência, tema, prazo desconhecido e foco sem zoom OK`);
+      await context.close();
+    } finally { await browser.close(); }
+  }
+}
+
 try {
   await ready();
   await runBrowser(chromium, 'Chromium');
@@ -506,6 +542,7 @@ try {
   await runAssignmentPersistence();
   await runCRMWorkflow();
   await runPartialRegistration();
+  await runPaymentCalendars();
 } finally {
   child.kill();
   await rm(work, { recursive: true, force: true });

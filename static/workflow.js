@@ -4,7 +4,8 @@
   const send = (url, method, data) => request(url, {
     method, headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(data),
   });
-  let invoices = [], batches = [], finance = [], orders = [], scales = {};
+  let invoices = [], batches = [], finance = [], orders = [], scales = {}, calendarRates = [];
+  let invoiceDueManual = false;
   let selectedInvoiceId = null, selectedWorkerId = null, payable = [];
 
   function row(title, detail, amount) {
@@ -125,9 +126,14 @@
     const billed = new Set(invoices.flatMap(item => item.itens.map(x => x.diaria_id)));
     const days = finance.filter(item => item.origem === 'diaria' && item.pedido_escala_id && !billed.has(item.id) && item.data >= start && item.data <= end &&
       orderByScale.get(item.pedido_escala_id)?.order.supermercado.toLocaleLowerCase('pt-BR') === network);
+    const deadlines = [...new Set(days.map(item => item.vencimento_recebimento || window.DirectPaymentCalendar.forNetwork(item.data, network, calendarRates)).filter(Boolean))];
+    const rangeDue = window.DirectPaymentCalendar.forNetwork(end, network, calendarRates);
+    const suggestedDue = days.length ? (deadlines.length === 1 && days.every(item => item.vencimento_recebimento || window.DirectPaymentCalendar.forNetwork(item.data, network, calendarRates)) ? deadlines[0] : null) : (window.DirectPaymentCalendar.forNetwork(start, network, calendarRates) === rangeDue ? rangeDue : null);
+    if (!invoiceDueManual) get('invoice-due').value = suggestedDue || '';
+    const calendarHint = suggestedDue ? ` · prazo da rede: ${dateLabel(suggestedDue)}` : deadlines.length > 1 ? ' · mais de um vencimento: separe por quinzena ou informe uma data negociada.' : ' · prazo não informado para todo o período: informe o vencimento antes de gerar.';
     const missing = days.filter(item => item.valor_recebido_centavos == null).length;
     const sum = days.reduce((total, item) => total + (item.valor_recebido_centavos || 0), 0);
-    get('invoice-preview').textContent = `${days.length} presença(s) ainda não cobradas · ${moneyLabel(sum)}${missing ? ` · ${missing} sem tarifa: corrija antes de gerar.` : ''}`;
+    get('invoice-preview').textContent = `${days.length} presença(s) ainda não cobradas · ${moneyLabel(sum)}${missing ? ` · ${missing} sem tarifa: corrija antes de gerar.` : ''}${calendarHint}${invoiceDueManual ? ' · vencimento manual mantido' : ''}`;
   }
   function renderInvoiceDetail() {
     const invoice = invoices.find(item => item.id === selectedInvoiceId);
@@ -192,8 +198,8 @@
     const chosen = new Set([...get('batch-choices').querySelectorAll('input:checked')].map(input => Number(input.value)));
     get('batch-total').textContent = `${chosen.size} diária(s) · ${moneyLabel(payable.reduce((sum, item) => sum + (chosen.has(item.id) ? item.valor_centavos : 0), 0))}`;
   }
-  window.renderWorkflow = async (records, orderRows, orderScales) => {
-    finance = records; orders = orderRows; scales = orderScales;
+  window.renderWorkflow = async (records, orderRows, orderScales, rates = []) => {
+    finance = records; orders = orderRows; scales = orderScales; calendarRates = rates;
     invoices = records.filter(item => item.origem === 'cobranca');
     // Cobranças canceladas não aparecem no razão, mas permanecem no histórico.
     const [allInvoices, allBatches] = await Promise.all([request('/api/cobrancas'), request('/api/pagamento-lotes')]);
@@ -207,9 +213,10 @@
     const select = get('invoice-network'); select.replaceChildren();
     for (const name of networks) { const option = document.createElement('option'); option.value = name; option.textContent = name; select.append(option); }
     get('invoice-start').value = `${financeToday().slice(0, 7)}-01`;
-    get('invoice-end').value = financeToday(); get('invoice-due').value = financeToday(); get('invoice-note').value = '';
+    get('invoice-end').value = financeToday(); invoiceDueManual = false; get('invoice-due').value = ''; get('invoice-note').value = '';
     get('invoice-create-error').hidden = true; renderInvoicePreview(); get('invoice-create-dialog').showModal();
   });
+  get('invoice-due').addEventListener('input', () => { invoiceDueManual = Boolean(get('invoice-due').value); });
   for (const id of ['invoice-network', 'invoice-start', 'invoice-end']) get(id).addEventListener('change', renderInvoicePreview);
   get('invoice-create-form').addEventListener('submit', async event => {
     event.preventDefault();

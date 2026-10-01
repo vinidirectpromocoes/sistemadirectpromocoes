@@ -443,7 +443,7 @@ async function loadFinance() {
     financeForecastInput = { orders, tariffs: { ...tariffs, extras, contratos:contracts }, scales };
     renderFinance();
     window.DirectOperations?.renderStoreResults(financeForecastInput);
-    if (typeof window.renderWorkflow === 'function') await window.renderWorkflow(financeRecords, orders, scales);
+    if (typeof window.renderWorkflow === 'function') await window.renderWorkflow(financeRecords, orders, scales, tariffs.redes);
   }
   catch (err) { if (sequence === financeLoadSequence) showFinanceFeedback(`Não foi possível carregar o financeiro: ${err.message}`, true); }
 }

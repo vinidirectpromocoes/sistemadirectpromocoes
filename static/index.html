@@ -23,6 +23,7 @@
   <link rel="stylesheet" href="/hub.css">
   <link rel="manifest" href="/manifest.webmanifest">
   <script src="/vendor/supabase-2.117.2.js" defer></script>
+  <script src="/payment-calendar.js" defer></script>
   <script src="/remote.js" defer></script>
   <script src="/app.js" defer></script>
   <script src="/stores.js" defer></script>
@@ -279,6 +280,10 @@
       <section class="settings-section" aria-labelledby="settings-network-title">
         <div class="settings-heading"><div><h2 id="settings-network-title">Valores por rede</h2><p>Os valores são por diarista e por diária. A diferença exibida é bruta, antes de outros custos.</p></div></div>
         <div id="settings-network-grid" class="settings-network-grid"></div>
+      </section>
+      <section class="settings-section" aria-labelledby="settings-calendar-title">
+        <div class="settings-heading"><div><h2 id="settings-calendar-title">Calendário de pagamentos</h2><p>Mesmo prazo para receber da rede e pagar aos diaristas. Dias 1–15: mês da diária. Dias 16–31: mês seguinte. Se o dia não existir, usamos o último dia do mês. Alterações atualizam diárias automáticas abertas; preservam pagamentos, fechamentos e vencimentos manuais.</p></div></div>
+        <div id="settings-calendar-grid" class="settings-network-grid"></div>
       </section>
       <section class="settings-section settings-sector-section" aria-labelledby="settings-sector-title">
         <div class="settings-heading"><div><h2 id="settings-sector-title">Valores por setor</h2><p>Preencha o valor de cada setor. Um campo vazio mantém a diária padrão da rede.</p></div><button class="button button-primary" id="new-sector-rate" type="button"><span aria-hidden="true">＋</span> Adicionar setor</button></div>
