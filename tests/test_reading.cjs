@@ -23,7 +23,7 @@ Quantidade de dias: 7`;
   assert.equal(items[1].dados.turnos.at(-1).data, '2026-10-05');
   assert.equal(items[1].dados.quantidade_diaristas, 1);
   assert.deepEqual(items[1].faltando, []);
-  assert.ok(items[0].faltando.includes('setor de experiência'));
+  assert.ok(items[0].completar.includes('setor de experiência'));
 });
 
 test('não confunde sete dias com sete diaristas', () => {
@@ -100,3 +100,5 @@ test('Cambeba: reconhece a função e as seis datas; pede a rede ambígua', () =
   const [complete] = parser.parse(`Rede: Pinheiro\n${message}`, { stores: catalog, sectors, today });
   assert.deepEqual(complete.faltando, []);
 });
+
+test('nome e CPF válido permitem cadastro parcial sem inventar disponibilidade ou locomoção',()=>{const [r]=parser.parse('Nome Completo: Pessoa Parcial\nCPF: 529.982.247-25');assert.deepEqual(r.faltando,[]);assert.deepEqual(r.dados.disponibilidade,[]);assert.equal(r.dados.pode_se_deslocar,null);assert.equal(r.dados.trabalhando,null);assert.ok(r.completar.includes('setor de experiência'));const [bad]=parser.parse('Nome Completo: Pessoa\nCPF: 529.982.247-25\nCEP: 123');assert.deepEqual(bad.faltando,['CEP válido']);});

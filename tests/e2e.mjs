@@ -458,6 +458,28 @@ async function runAssignmentPersistence() {
   }
 }
 
+async function runPartialRegistration() {
+  const api=async(method,route,body)=>{const r=await fetch(new URL(route,url),{method,headers:{'Content-Type':'application/json'},...(body?{body:JSON.stringify(body)}:{})});const d=await r.json();assert.ok(r.ok,JSON.stringify(d));return d;};
+  function cpfFor(n){let v=String(n);for(let size=9;size<=10;size++){const sum=[...v].reduce((n,x,i)=>n+Number(x)*(size+1-i),0),digit=(sum*10)%11;v+=digit===10?'0':String(digit);}return v;}
+  let serial=999003000;
+  for(const [name,engine] of [['Chromium',chromium],['WebKit',webkit]]) {
+    const browser=await engine.launch();try{for(const width of [1280,390,320]){
+      const context=await browser.newContext({viewport:{width,height:844},isMobile:width<500,hasTouch:width<500});const page=await context.newPage();const errors=[];page.on('pageerror',e=>errors.push(e.message));const cpf=cpfFor(++serial),label=`Cadastro Parcial ${name} ${width}`;
+      await page.goto(url+'#diaristas');await page.locator('#new-button').click();await page.locator('#nome').fill(label);await page.locator('#cpf').fill(cpf);await page.locator('#save-button').click();await page.locator('#form-dialog').waitFor({state:'hidden'});
+      let saved=(await api('GET','/api/diaristas')).find(x=>x.cpf===cpf);assert.ok(saved);assert.equal(saved.trabalhando,null);assert.equal(saved.pode_se_deslocar,null);assert.deepEqual(saved.disponibilidade,[]);
+      await page.reload();await page.getByRole('row').filter({hasText:label}).getByRole('button',{name:`Ver ficha e histórico de ${label}`,exact:true}).click();await page.locator('#detail-dialog').waitFor({state:'visible'});assert.match(await page.locator('#detail-status').innerText(),/Cadastro parcial/);assert.match(await page.locator('#detail-fields').innerText(),/Não informado/);
+      await page.locator('#edit-button').click();assert.equal(await page.locator('input[name=trabalhando][value=unknown]').isChecked(),true);assert.equal(await page.locator('input[name=pode_se_deslocar][value=unknown]').isChecked(),true);
+      await page.locator('#setores').fill('FLV');await page.locator('#cep').fill('60000000');await page.locator('#logradouro').fill('Rua Teste');await page.locator('#numero').fill('1');await page.locator('#bairro').fill('Centro');await page.locator('input[name=trabalhando][value=false]').check();await page.locator('input[name=pode_se_deslocar][value=false]').check();await page.locator('.day-row[data-day=segunda] .day-enabled').check();await page.locator('#save-button').click();await page.locator('#form-dialog').waitFor({state:'hidden'});
+      saved=(await api('GET','/api/diaristas')).find(x=>x.cpf===cpf);assert.equal(saved.trabalhando,false);assert.equal(saved.pode_se_deslocar,false);assert.equal(saved.setores[0],'FLV');assert.equal(saved.disponibilidade.length,1);await page.reload();await page.getByRole('row').filter({hasText:label}).getByRole('button',{name:`Ver ficha e histórico de ${label}`,exact:true}).click();await page.locator('#detail-dialog').waitFor({state:'visible'});assert.doesNotMatch(await page.locator('#detail-status').innerText(),/Cadastro parcial/);await page.locator('#detail-close-button').click();
+      if(name==='Chromium'&&width===1280){
+        const aiCpf=cpfFor(++serial);await page.locator('#nav-leitura').click();await page.locator('#reading-text').fill(`Nome Completo: Leitura Parcial\nCPF: ${aiCpf}`);await page.locator('#reading-submit').click();await page.locator('#reading-result-items .reading-item.saved').waitFor();const partial=(await api('GET','/api/diaristas')).find(x=>x.cpf===aiCpf);assert.ok(partial);assert.equal(partial.trabalhando,null);assert.deepEqual(partial.setores,[]);await api('DELETE',`/api/diaristas/${partial.id}`);
+        await page.locator('#reading-text').fill(`Nome Completo: ${label}\nCPF: ${cpf}\nBairro: Meireles`);await page.locator('#reading-submit').click();await page.locator('#reading-result-items .reading-item.duplicate').waitFor();await page.locator('#reading-result-items').getByRole('button',{name:'Completar no formulário',exact:true}).click();await page.locator('#form-dialog').waitFor({state:'visible'});assert.equal(await page.locator('#setores').inputValue(),'FLV');assert.equal(await page.locator('#logradouro').inputValue(),'Rua Teste');assert.equal(await page.locator('#bairro').inputValue(),'Meireles');await page.locator('#save-button').click();await page.locator('#form-dialog').waitFor({state:'hidden'});assert.equal((await api('GET','/api/diaristas')).filter(x=>x.cpf===cpf).length,1);
+      }
+      assert.deepEqual(errors,[]);console.log(`${name} ${width}: cadastro com nome/CPF, respostas não informadas, completar, recarregar e preservar dados OK`);await page.waitForLoadState('networkidle');await api('DELETE',`/api/diaristas/${saved.id}`);await context.close();
+    }}finally{await browser.close();}
+  }
+}
+
 try {
   await ready();
   await runBrowser(chromium, 'Chromium');
@@ -469,6 +491,7 @@ try {
   await runExtendedWorkflow();
   await runAssignmentPersistence();
   await runCRMWorkflow();
+  await runPartialRegistration();
 } finally {
   child.kill();
   await rm(work, { recursive: true, force: true });
