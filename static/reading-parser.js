@@ -33,10 +33,17 @@
     const result = []; let current = [];
     const flush = () => { const value = current.join('\n').trim(); if (value) result.push(value); current = []; };
     for (const line of String(text || '').replace(/\r/g, '').split('\n')) {
-      const startsWorker = /^\s*\*?\s*(?:nome completo|nome do operador|nome da diarista)\s*\*?\s*:/i.test(line);
-      const startsOrder = /^\s*\*?\s*(?:loja|unidade)\s*\*?\s*:/i.test(line);
-      const hasRecord = current.some(item => /\b(?:nome completo|nome do operador|nome da diarista|loja|unidade|cpf|cep|hor[aá]rio|fun[cç][aã]o|setor|data de in[ií]cio)\s*:/i.test(item));
-      if ((startsWorker || startsOrder) && hasRecord) flush();
+      const startsWorker = /^\s*\*?\s*(?:nome completo|nome do operador|nome da diarista|nome|diarista escalado)\s*\*?\s*:/i.test(line);
+      const startsOrder = /^\s*\*?\s*(?:loja|unidade|rede|supermercado)\s*\*?\s*:/i.test(line);
+      const hasWorker = current.some(item => /^\s*\*?\s*(?:nome completo|nome do operador|nome da diarista|nome|diarista escalado|cpf)\s*\*?\s*:/i.test(item));
+      const hasStore = current.some(item => /^\s*\*?\s*(?:loja|unidade)\s*\*?\s*:/i.test(item));
+      const hasNetwork = current.some(item => /^\s*\*?\s*(?:rede|supermercado)\s*\*?\s*:/i.test(item));
+      const hasDetails = current.some(item => /^\s*\*?\s*(?:hor[aá]rio|fun[cç][aã]o|setor|data(?: de in[ií]cio)?)\s*\*?\s*:/i.test(item));
+      const hasOrder = hasStore || hasNetwork;
+      // A name following an order belongs to that order. A new store/network starts another record.
+      const isNetwork = /^\s*\*?\s*(?:rede|supermercado)\s*\*?\s*:/i.test(line);
+      const beginsNewOrder = startsOrder && (isNetwork ? hasNetwork || (hasStore && hasDetails) || hasWorker : hasStore || (hasWorker && !hasOrder));
+      if (beginsNewOrder || (startsWorker && hasWorker && !hasOrder)) flush();
       current.push(line);
     }
     flush();
@@ -46,7 +53,7 @@
     const value = normal(text);
     const worker = /\bcpf\b/.test(value) || /\bnome completo\b/.test(value);
     const order = /\bloja\b|\bunidade\b|\bsupermercado\b/.test(value) && /\bhorario\b|\bdata\b|\bfuncao\b|\bsetor\b/.test(value);
-    return worker && !order ? 'diarista' : order && !worker ? 'pedido' : 'indefinido';
+    return order ? 'pedido' : worker ? 'diarista' : 'indefinido';
   }
   function sector(value, known) {
     const key = normal(value);
@@ -140,11 +147,14 @@
   }
 
   function order(text, stores, sectors, today) {
-    const unit = field(text, ['Loja', 'Unidade']);
+    let unit = field(text, ['Loja', 'Unidade']);
+    const storeName = value => normal(value).replace(/^loja /, '');
     let market = field(text, ['Rede', 'Supermercado']);
-    const matches = (stores || []).filter(item => normal(item.nome) === normal(unit));
+    const matches = (stores || []).filter(item => storeName(item.nome) === storeName(unit));
     if (!market && matches.length === 1) market = matches[0].rede;
-    const validStore = !unit || (stores || []).some(item => normal(item.nome) === normal(unit) && normal(item.rede) === normal(market));
+    const selectedStore = matches.find(item => normal(item.rede) === normal(market));
+    if (selectedStore) { market = selectedStore.rede; unit = selectedStore.nome; }
+    const validStore = !unit || (stores || []).some(item => storeName(item.nome) === storeName(unit) && normal(item.rede) === normal(market));
     const setor = sector(field(text, ['Função', 'Funcao', 'Setor', 'Cargo']), sectors || []);
     const [inicio, fim] = clocks(field(text, ['Horário', 'Horario', 'Turno']));
     const period = field(text, ['Data de inicio', 'Data de início', 'Datas', 'Período', 'Periodo', 'Data']) || text;
@@ -155,6 +165,10 @@
       if (when) turnos = [{ data: iso(when), inicio, fim }];
     }
     const reported = Number(digits(field(text, ['Quantidade de dias', 'Número de dias', 'Numero de dias'])) || 0);
+    if (turnos.length === 1 && reported > 1 && reported <= 90 && !range(period, today, inicio, fim).length) {
+      const first = dateUTC(...turnos[0].data.split('-').map(Number));
+      turnos = Array.from({length:reported}, (_, index) => ({data:iso(new Date(first.getTime()+index*86400000)), inicio, fim}));
+    }
     const peopleField = field(text, ['Quantidade de diaristas', 'Diaristas por dia', 'Quantidade de pessoas', 'Vagas']);
     const people = Number(digits(peopleField) || 1);
     const data = { supermercado: market, unidade: unit, contato: field(text, ['Contato']), setor, quantidade_diaristas: people, turnos, situacao: 'novo', observacoes: field(text, ['Observações', 'Observacoes']) };
@@ -187,6 +201,21 @@
     return split(text).map(part => {
       const kind = classify(part);
       const item = kind === 'diarista' ? worker(part, context.sectors) : kind === 'pedido' ? order(part, context.stores, context.sectors, today) : { tipo: 'indefinido', dados: {}, faltando: ['identificar cadastro ou pedido'], texto: part };
+      if (kind === 'pedido') {
+        const names = part.split('\n').filter(line => /^\s*\*?\s*(?:nome completo|nome do operador|nome da diarista|nome|diarista escalado)\s*\*?\s*:/i.test(line));
+        let nome = field(part, ['Nome Completo','Nome do operador','Nome da diarista','Nome','Diarista escalado']);
+        let cpf = digits(field(part, ['CPF']));
+        if (nome || cpf) {
+          const known = context.workers || [];
+          if (!cpf && nome) { const matches = known.filter(w => normal(w.nome) === normal(nome)); if (matches.length === 1) cpf = matches[0].cpf; }
+          if (!nome && cpf) nome = known.find(w => w.cpf === cpf)?.nome || '';
+          item.dados.diarista_escalado = {nome, cpf};
+          if (!nome) item.faltando.push('nome do diarista escalado');
+          if (!validCpf(cpf)) item.faltando.push('CPF válido do diarista escalado');
+          if (names.length > 1) item.faltando.push('revisar mais de um diarista informado no mesmo pedido');
+          item.avisos.push('A pessoa informada será escalada em todos os dias deste pedido. A disponibilidade vale apenas para estas datas e horários.');
+        }
+      }
       item.chave = fingerprint(item);
       return item;
     });

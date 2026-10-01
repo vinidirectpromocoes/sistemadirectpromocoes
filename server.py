@@ -15,6 +15,7 @@ from urllib.parse import urlparse
 from zoneinfo import ZoneInfo
 
 from catalogo_lojas import LOJAS
+import linked_reading
 import payment_calendar as calendar
 import workflow_local as workflow
 import operations_extended as extended
@@ -201,6 +202,9 @@ def init_db():
                            ("falta_confirmada_em", "TEXT"), ("substituida_por_escala_id", "INTEGER")):
             if name not in scale_columns:
                 db.execute(f"ALTER TABLE pedido_escalas ADD COLUMN {name} {kind}")
+        scale_columns = {row['name'] for row in db.execute('PRAGMA table_info(pedido_escalas)')}
+        if 'disponibilidade_pedido_confirmada' not in scale_columns:
+            db.execute('ALTER TABLE pedido_escalas ADD COLUMN disponibilidade_pedido_confirmada INTEGER NOT NULL DEFAULT 0 CHECK(disponibilidade_pedido_confirmada IN (0,1))')
         db.execute("CREATE UNIQUE INDEX IF NOT EXISTS idx_escala_substituta ON pedido_escalas(substituida_por_escala_id) WHERE substituida_por_escala_id IS NOT NULL")
         db.execute("CREATE INDEX IF NOT EXISTS idx_pedido_escalas_pedido_data ON pedido_escalas(pedido_id, data)")
         db.execute("CREATE UNIQUE INDEX IF NOT EXISTS idx_diarias_pedido_escala ON diarias(pedido_escala_id)")
@@ -267,7 +271,7 @@ def init_db():
         for table, fields in {
             "diarias": ("id", "diarista_id", "data", "local", "setor", "valor_centavos", "vencimento_pagamento", "vencimento_recebimento", "vencimento_origem", "data_pagamento", "forma_pagamento", "motivo_ajuste"),
             "financeiro_lancamentos": ("id", "tipo", "descricao", "contraparte", "valor_centavos", "vencimento", "data_pagamento", "forma_pagamento", "motivo_ajuste"),
-            "pedido_escalas": ("id", "pedido_id", "diarista_id", "data", "status"),
+            "pedido_escalas": ("id", "pedido_id", "diarista_id", "data", "status", "disponibilidade_pedido_confirmada"),
             "tarifas_redes": ("id", "rede", "valor_recebido_centavos", "valor_padrao_centavos", "pagamento_primeira_quinzena", "pagamento_segunda_quinzena"),
             "tarifas_setores": ("id", "rede", "setor", "valor_pago_centavos"),
         }.items():
@@ -606,13 +610,13 @@ def order_shift(order, day):
     return next((shift for shift in json.loads(order["turnos"]) if shift["data"] == day), None)
 
 
-def validate_worker_shift(db, worker, order, day):
+def validate_worker_shift(db, worker, order, day, scoped_availability=False):
     shift = order_shift(order, day)
     if shift is None:
         raise ValueError("A data escolhida não consta no pedido.")
     weekday = WEEKDAYS[date.fromisoformat(day).weekday()]
     slots = json.loads(worker["disponibilidade"])
-    if not any(slot["dia"] == weekday and slot["inicio"] <= shift["inicio"] and slot["fim"] >= shift["fim"] for slot in slots):
+    if not scoped_availability and not any(slot["dia"] == weekday and slot["inicio"] <= shift["inicio"] and slot["fim"] >= shift["fim"] for slot in slots):
         raise ValueError("A diarista não está disponível nesse dia e horário.")
     other_scales = db.execute("""SELECT e.data, p.turnos FROM pedido_escalas e
         JOIN pedidos p ON p.id = e.pedido_id
@@ -814,6 +818,8 @@ class Handler(BaseHTTPRequestHandler):
         if not self._allowed_origin():
             return self.respond(HTTPStatus.FORBIDDEN, {"erro": "Acesso não permitido."})
         path = urlparse(self.path).path
+        if path == "/api/leitura/pedido-escalado":
+            return linked_reading.handle(self, sys.modules[__name__])
         if extended.handle(self, "POST", sys.modules[__name__]): return
         if path == "/api/cobrancas" or re.fullmatch(r"/api/cobrancas/\d+/recebimentos", path):
             try:
@@ -1212,6 +1218,10 @@ class Handler(BaseHTTPRequestHandler):
                                 raise ValueError("Esta presença já entrou numa cobrança. Cancele a cobrança antes de corrigir a falta.")
                             db.execute("DELETE FROM diarias WHERE pedido_escala_id = ?", (scale["id"],))
                         if scale["status"] == "falta" and status != "falta":
+                            person = db.execute("SELECT * FROM diaristas WHERE id=?", (scale["diarista_id"],)).fetchone()
+                            if not person or person["bloqueada"] or order["situacao"] in {"cancelado", "concluido"}:
+                                raise ValueError("Confira o cadastro e a situação do pedido antes de reativar a escala.")
+                            validate_worker_shift(db, person, order, scale["data"], scoped_availability=bool(scale["disponibilidade_pedido_confirmada"]))
                             count = db.execute("SELECT count(*) FROM pedido_escalas WHERE pedido_id = ? AND data = ? AND status != 'falta'", (scale_route[0], scale["data"])).fetchone()[0]
                             if count >= order["quantidade_diaristas"]:
                                 raise ValueError("A quantidade de diaristas deste dia já foi preenchida.")

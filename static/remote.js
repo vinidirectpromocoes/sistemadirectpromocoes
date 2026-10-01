@@ -294,6 +294,10 @@
         email: String(p.email || '').trim().toLowerCase(), role: p.role, active: Boolean(p.active),
       }, { onConflict: 'email' }).select().single());
     }
+    if (entity === 'leitura' && parts[2] === 'pedido-escalado' && method === 'POST') {
+      if (!['admin','operacao'].includes(currentRole)) throw new Error('Sem permissão para cadastrar e escalar.');
+      return unwrap(await sb.rpc('direct_read_order_assignment', {p_pedido:orderPayload(p.pedido),p_nome:p.diarista.nome,p_cpf:String(p.diarista.cpf || '').replace(/\D/g,''),p_confirmar_cadastro:p.confirmar_cadastro === true,p_chave:p.chave_operacao,p_pedido_id:p.pedido_id || null,p_pendencia_id:p.pendencia_id || null}));
+    }
     if (entity === 'leituras-pendentes') {
       if (method === 'GET') return (await rows('leituras_pendentes')).sort((a,b)=>b.id-a.id);
       if (method === 'POST') return unwrap(await sb.from('leituras_pendentes').upsert({

@@ -530,6 +530,42 @@ async function runPaymentCalendars() {
   }
 }
 
+async function runLinkedReading() {
+  const api=async(method,route,data)=>{const response=await fetch(url.slice(0,-1)+route,{method,headers:{'Content-Type':'application/json'},body:data?JSON.stringify(data):undefined});const result=await response.json();assert.ok(response.ok,JSON.stringify(result));return result;};
+  function cpfFor(n){let v=String(n);for(let size=9;size<=10;size++){const sum=[...v].reduce((total,x,i)=>total+Number(x)*(size+1-i),0),digit=(sum*10)%11;v+=digit===10?'0':String(digit);}return v;}
+  let serial=999004000;
+  for(const [engine,name] of [[chromium,'Chromium'],[webkit,'WebKit']]) {
+    const browser=await engine.launch({headless:true});
+    try {for(const width of [1280,390,320]) {
+      const cpf=cpfFor(++serial),workerName=`Pessoa Leitura ${name} ${width}`;
+      const message=`Rede: Hipermarket\n*Loja:* LOJA VILA UNIÃO\n*Função:* Repositor de mercearia\n*Horário:* 6:00 às 14:20\n*Data de início:* 03/10/2026\n*Quantidade de dias:* 2 dias\n\n*nome: ${workerName}*\nCPF: ${cpf}`;
+      const context=await browser.newContext({viewport:{width,height:844},isMobile:width<500,hasTouch:width<500}),page=await context.newPage(),errors=[];
+      page.on('pageerror',error=>errors.push(error.message));
+      const existingOrder=width===390?await api('POST','/api/pedidos',{supermercado:'hipermarket',unidade:'vila união',setor:'repositor de mercearia',quantidade_diaristas:1,turnos:[{data:'2026-10-03',inicio:'06:00',fim:'14:20'},{data:'2026-10-04',inicio:'06:00',fim:'14:20'}]}):null;
+      await page.goto(url+'#leitura');await page.locator('#reading-text').fill(message);await page.locator('#reading-submit').click();
+      await page.locator('#reading-result-items .reading-link-save').waitFor();
+      assert.equal((await api('GET','/api/diaristas')).filter(w=>w.cpf===cpf).length,0,'Sugestão não cadastra automaticamente pessoa desconhecida');
+      assert.ok(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth+2),'Sugestão cabe no celular');
+      if(width===320) {await page.waitForLoadState('networkidle');await page.reload();await page.locator('#reading-pending-items .reading-link-save').filter({hasText:'Cadastrar diarista e salvar pedido'}).last().click();}
+      else await page.locator('#reading-result-items .reading-link-save').click();
+      await page.waitForFunction(()=>document.querySelector('#reading-result-items .reading-item.saved')?.textContent.includes('2 dia(s) escalado(s)'));
+      assert.equal(await page.locator('#reading-result-items').getByRole('button',{name:'Desfazer este registro',exact:true}).count(),0,'Cadastro e escala conjuntos são gerenciados no pedido');
+      const worker=(await api('GET','/api/diaristas')).find(w=>w.cpf===cpf);assert.ok(worker);assert.deepEqual(worker.disponibilidade,[]);assert.deepEqual(worker.setores,[]);assert.equal(worker.trabalhando,null);
+      const assignments=(await api('GET','/api/escalas')).filter(e=>e.diarista_id===worker.id);
+      assert.equal(assignments.length,2);assert.deepEqual(assignments.map(e=>e.data),['2026-10-03','2026-10-04']);assert.ok(assignments.every(e=>e.status==='escalada'&&e.disponibilidade_pedido_confirmada));
+      if(existingOrder) assert.ok(assignments.every(e=>e.pedido_id===existingOrder.id),'Vincula pedido existente com diferenças de maiúsculas');
+      await page.locator('#reading-text').fill(message);await page.locator('#reading-submit').click();await page.locator('#reading-result-items .reading-item.duplicate').waitFor();
+      assert.equal((await api('GET','/api/escalas')).filter(e=>e.diarista_id===worker.id).length,2,'Releitura não duplica escala');
+      await page.locator('#reading-result-items').getByRole('button',{name:'Ver pedido e escala',exact:true}).click();await page.locator('#order-detail-dialog').waitFor({state:'visible'});await page.waitForFunction(name=>document.querySelector('#order-detail-shifts')?.textContent.includes(name),workerName);assert.match(await page.locator('#order-detail-shifts').innerText(),new RegExp(workerName));await page.locator('#order-detail-close-bottom').click();
+      await page.waitForLoadState('networkidle');assert.deepEqual(errors,[]);
+      for(const scale of assignments) await api('DELETE',`/api/pedidos/${scale.pedido_id}/escalas/${scale.id}`);
+      await api('DELETE',`/api/pedidos/${assignments[0].pedido_id}`);await api('DELETE',`/api/diaristas/${worker.id}`);
+      console.log(`${name} ${width}: pedido com nome/CPF, sugestão, cadastro básico, 2 escalas, releitura e navegação OK`);
+      await context.close();
+    }}finally{await browser.close();}
+  }
+}
+
 try {
   await ready();
   await runBrowser(chromium, 'Chromium');
@@ -543,6 +579,7 @@ try {
   await runCRMWorkflow();
   await runPartialRegistration();
   await runPaymentCalendars();
+  await runLinkedReading();
 } finally {
   child.kill();
   await rm(work, { recursive: true, force: true });
