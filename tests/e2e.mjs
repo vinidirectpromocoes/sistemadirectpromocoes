@@ -567,6 +567,54 @@ async function runLinkedReading() {
   }
 }
 
+async function runOrderFilters() {
+  const api=async(method,route,data)=>{const response=await fetch(url.slice(0,-1)+route,{method,headers:{'Content-Type':'application/json'},body:data?JSON.stringify(data):undefined});const result=await response.json();assert.ok(response.ok,JSON.stringify(result));return result;};
+  const created=[];
+  for(const [network,store,sector,quantity,status,days] of [
+    ['Super do Povo','Meireles','FLV',2,'novo',[1,3,5]],
+    ['Super do Povo','Cambeba','Operador de caixa',1,'confirmado',[2,4]],
+    ['Hipermarket','Vila União','FLV',3,'novo',[1,6]],
+    ['Super do Povo','Meireles','Operador de caixa',1,'cancelado',[3]]]) {
+    created.push(await api('POST','/api/pedidos',{supermercado:network,unidade:store,setor:sector,quantidade_diaristas:quantity,situacao:status,contato:'Teste Filtros QA',turnos:days.map(d=>({data:`2026-10-${String(d).padStart(2,'0')}`,inicio:'07:00',fim:'15:20'}))}));
+  }
+  const total=(await api('GET','/api/pedidos')).length;
+  try {for(const [engine,name] of [[chromium,'Chromium'],[webkit,'WebKit']]) {
+    const browser=await engine.launch({headless:true});
+    try {for(const width of [1280,390,320]) {
+      const context=await browser.newContext({viewport:{width,height:844},isMobile:width<500,hasTouch:width<500}),page=await context.newPage(),errors=[];
+      page.on('pageerror',e=>errors.push(e.message));
+      await page.goto(url+'#pedidos');await page.locator('#orders-search').fill('Filtros QA');
+      await page.waitForFunction(()=>document.querySelectorAll('#orders-rows tr').length===4);
+      assert.equal(await page.locator('#orders-open-count').innerText(),'2');assert.equal(await page.locator('#orders-demand-count').innerText(),'12');
+      await page.locator('#orders-filter-toggle').click();
+      await page.locator('#orders-network-filter').selectOption('super do povo');
+      assert.equal(await page.locator('#orders-rows tr').count(),3);assert.equal(await page.locator('#orders-confirmed-count').innerText(),'1');
+      await page.locator('#orders-store-filter').selectOption('meireles');assert.equal(await page.locator('#orders-rows tr').count(),2);
+      await page.locator('#orders-sector-filter').selectOption('flv');assert.equal(await page.locator('#orders-rows tr').count(),1);
+      await page.locator('#orders-start-filter').fill('2026-10-03');await page.locator('#orders-end-filter').fill('2026-10-04');
+      await page.waitForFunction(()=>document.querySelector('#orders-demand-count').textContent==='2');
+      assert.equal(await page.locator('#weekly-days .weekly-day').count(),1);assert.match(await page.locator('#weekly-days').innerText(),/03\/10\/2026/);assert.doesNotMatch(await page.locator('#weekly-days').innerText(),/01\/10\/2026|05\/10\/2026/);
+      assert.match(await page.locator('#orders-rows').innerText(),/1 dia.*2 diárias no período/);assert.equal(await page.locator('#weekly-date').isVisible(),false);
+      await page.locator('#orders-status-filter').selectOption('confirmado');assert.equal(await page.locator('#orders-rows tr').count(),0);assert.ok(await page.locator('#orders-no-results').isVisible());
+      await page.locator('#orders-status-filter').selectOption('novo');
+      await page.locator('#orders-start-filter').fill('2026-10-05');await page.locator('#orders-end-filter').fill('2026-10-03');assert.ok(await page.locator('#orders-filter-error').isVisible());assert.equal(await page.locator('#orders-rows tr').count(),0);
+      await page.locator('#orders-end-filter').fill('2026-10-06');assert.equal(await page.locator('#orders-demand-count').innerText(),'2');assert.equal(await page.locator('#orders-filter-error').isVisible(),false);
+      await page.locator('#orders-start-filter').fill('');await page.locator('#orders-end-filter').fill('2026-10-02');assert.equal(await page.locator('#orders-demand-count').innerText(),'2');assert.match(await page.locator('#weekly-days').innerText(),/01\/10\/2026/);
+      await page.locator('#orders-end-filter').fill('');await page.locator('#orders-start-filter').fill('2026-10-03');assert.equal(await page.locator('#orders-demand-count').innerText(),'4');assert.equal(await page.locator('#weekly-days .weekly-day').count(),2);
+      for(const theme of ['light','dark']) {
+        await page.evaluate(value=>document.documentElement.dataset.theme=value,theme);
+        assert.ok(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth+2),'Filtros cabem na tela');
+        if(width<500) assert.equal(await page.locator('#orders-filter-fields input, #orders-filter-fields select').evaluateAll(elements=>elements.some(e=>parseFloat(getComputedStyle(e).fontSize)<16)),false,'Filtros não provocam zoom de foco');
+      }
+      await page.locator('#orders-filter-toggle').click();assert.equal(await page.locator('#orders-filter-fields').isVisible(),false);assert.equal(await page.locator('#orders-rows tr').count(),1,'Fechar filtros preserva seleção');
+      await page.locator('#orders-filter-clear').click();assert.equal(await page.locator('#orders-rows tr').count(),total);assert.equal(await page.locator('#orders-search').inputValue(),'');assert.equal(await page.locator('#orders-filter-clear').isDisabled(),true);
+      await page.locator('#orders-filter-toggle').click();await page.locator('#orders-search').fill('Filtros QA');await page.locator('#orders-network-filter').selectOption('super do povo');await page.locator('#orders-store-filter').selectOption('cambeba');
+      await page.locator('#orders-network-filter').selectOption('hipermarket');assert.equal(await page.locator('#orders-store-filter').inputValue(),'todos');assert.equal(await page.locator('#orders-rows tr').count(),1,'Mudar rede remove loja incompatível');
+      await page.waitForLoadState('networkidle');assert.deepEqual(errors,[]);console.log(`${name} ${width}: rede, loja, setor, situação, período, cards, escala, intervalo inválido, limpar e temas OK`);await context.close();
+    }}finally{await browser.close();}
+  }} finally {for(const order of created)await api('DELETE',`/api/pedidos/${order.id}`);}
+}
+
 try {
   await ready();
   await runBrowser(chromium, 'Chromium');
@@ -581,6 +629,7 @@ try {
   await runPartialRegistration();
   await runPaymentCalendars();
   await runLinkedReading();
+  await runOrderFilters();
 } finally {
   child.kill();
   await rm(work, { recursive: true, force: true });

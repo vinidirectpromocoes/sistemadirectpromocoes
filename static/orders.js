@@ -10,6 +10,38 @@ const weeklyPageSize = 7;
 let orderCatalogStores = [];
 let orderCatalogSectors = [];
 
+function orderFilters() {
+  return {query:orderNormalize($('#orders-search').value),network:$('#orders-network-filter').value,store:$('#orders-store-filter').value,sector:$('#orders-sector-filter').value,status:$('#orders-status-filter').value,start:$('#orders-start-filter').value,end:$('#orders-end-filter').value};
+}
+function orderFilteredShifts(order, filters=orderFilters()) {
+  if(filters.start && filters.end && filters.start>filters.end) return [];
+  return (order.turnos || []).filter(shift=>(!filters.start || shift.data>=filters.start) && (!filters.end || shift.data<=filters.end));
+}
+function filteredOrderRecords(filters=orderFilters()) {
+  return orderRecords.filter(order=>
+    (filters.network==='todos' || orderNormalize(order.supermercado)===filters.network) &&
+    (filters.store==='todos' || orderNormalize(order.unidade)===filters.store) &&
+    (filters.sector==='todos' || orderNormalize(order.setor)===filters.sector) &&
+    (filters.status==='todos' || order.situacao===filters.status) &&
+    (!filters.query || orderNormalize(`${order.supermercado} ${order.unidade} ${order.setor} ${order.contato || ''} ${order.id}`).includes(filters.query)) &&
+    orderFilteredShifts(order,filters).length>0);
+}
+function updateOrderFilterOptions() {
+  const populate=(selector,values,label)=>{
+    const select=$(selector),previous=select.value,unique=new Map();
+    for(const value of values) if(value && !unique.has(orderNormalize(value))) unique.set(orderNormalize(value),value);
+    select.replaceChildren(new Option(label,'todos'),...Array.from(unique).sort((a,b)=>a[1].localeCompare(b[1],'pt-BR')).map(([key,label])=>new Option(label,key)));
+    select.value=unique.has(previous)?previous:'todos';
+  };
+  populate('#orders-network-filter',orderRecords.map(o=>o.supermercado),'Todas as redes');
+  const network=$('#orders-network-filter').value;
+  const orders=orderRecords.filter(o=>network==='todos' || orderNormalize(o.supermercado)===network);
+  populate('#orders-store-filter',orders.map(o=>o.unidade),'Todas as lojas');
+  const store=$('#orders-store-filter').value;
+  populate('#orders-sector-filter',orders.filter(o=>store==='todos' || orderNormalize(o.unidade)===store).map(o=>o.setor),'Todos os setores');
+}
+function applyOrderFilters() { weeklyPage=0;updateOrderFilterOptions();renderOrders();renderWeekly(); }
+
 const orderNormalize = value => String(value || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').trim().toLocaleLowerCase('pt-BR');
 
 function matchingOrderStore(market, unit) {
@@ -42,11 +74,13 @@ async function loadOrderCatalog() {
 
 function renderWeekly() {
   const target = $('#weekly-days'); target.replaceChildren();
+  const filters=orderFilters(),records=filteredOrderRecords(filters);
   let demand = 0, filled = 0, present = 0, absent = 0, awaiting = 0;
-  for (const order of orderRecords) {
+  for (const order of records) {
     if (order.situacao === 'cancelado') continue;
-    demand += order.total_diarias;
-    const scales = weeklyScales[order.id] || [];
+    const dates=new Set(orderFilteredShifts(order,filters).map(shift=>shift.data));
+    demand += dates.size*order.quantidade_diaristas;
+    const scales = (weeklyScales[order.id] || []).filter(scale=>dates.has(scale.data));
     filled += scales.filter(scale => scale.status !== 'falta').length;
     present += scales.filter(scale => scale.status === 'presente').length;
     absent += scales.filter(scale => scale.status === 'falta').length;
@@ -55,11 +89,14 @@ function renderWeekly() {
   $('#orders-fill-rate').textContent = `${demand ? Math.round(filled / demand * 100) : 0}%`;
   $('#orders-absence-rate').textContent = `${present + absent ? Math.round(absent / (present + absent) * 100) : 0}%`;
   $('#orders-awaiting-attendance').textContent = String(awaiting);
-  const firstDate = $('#weekly-date').value || orderToday();
+  const hasPeriod=!!(filters.start || filters.end);
+  $('#weekly-date').closest('label').hidden=hasPeriod;
+  $('#weekly-help').textContent=hasPeriod?'Mostra somente os dias com diárias no período filtrado.':'Mostra somente os dias com pedidos a partir da data escolhida.';
+  const firstDate = filters.start || (filters.end ? '0000-00-00' : $('#weekly-date').value || orderToday());
   const shiftsByDate = new Map();
-  for (const order of orderRecords) {
+  for (const order of records) {
     if (order.situacao === 'cancelado') continue;
-    for (const shift of order.turnos || []) {
+    for (const shift of orderFilteredShifts(order,filters)) {
       if (shift.data < firstDate) continue;
       const shifts = shiftsByDate.get(shift.data) || [];
       shifts.push({ order, shift });
@@ -77,7 +114,7 @@ function renderWeekly() {
   $('#weekly-next').disabled = weeklyPage >= pageCount - 1;
   if (!visibleDates.length) {
     const empty = document.createElement('p'); empty.className = 'weekly-empty';
-    empty.textContent = 'Nenhuma diária a partir desta data.';
+    empty.textContent = 'Nenhuma diária para os filtros e a data escolhidos.';
     target.append(empty);
   }
   for (const key of visibleDates) {
@@ -118,18 +155,19 @@ function showOrderFeedback(message, isError = false) {
 }
 
 function renderOrders() {
-  const open = orderRecords.filter(item => item.situacao === 'novo' || item.situacao === 'em_selecao');
+  updateOrderFilterOptions();
+  const filters=orderFilters(),records=filteredOrderRecords(filters);
+  const open = records.filter(item => item.situacao === 'novo' || item.situacao === 'em_selecao');
   $('#orders-open-count').textContent = open.length;
-  $('#orders-demand-count').textContent = open.reduce((sum, item) => sum + item.total_diarias, 0);
-  $('#orders-confirmed-count').textContent = orderRecords.filter(item => item.situacao === 'confirmado').length;
-  $('#orders-done-count').textContent = orderRecords.filter(item => item.situacao === 'concluido').length;
-
-  const query = $('#orders-search').value.trim().toLocaleLowerCase('pt-BR');
-  const status = $('#orders-status-filter').value;
-  const filtered = orderRecords.filter(item => {
-    if (status !== 'todos' && item.situacao !== status) return false;
-    return !query || `${item.supermercado} ${item.unidade} ${item.setor} ${item.contato}`.toLocaleLowerCase('pt-BR').includes(query);
-  }).sort((a, b) => {
+  $('#orders-demand-count').textContent = open.reduce((sum,item)=>sum+orderFilteredShifts(item,filters).length*item.quantidade_diaristas,0);
+  $('#orders-confirmed-count').textContent = records.filter(item => item.situacao === 'confirmado').length;
+  $('#orders-done-count').textContent = records.filter(item => item.situacao === 'concluido').length;
+  const active=Object.entries(filters).filter(([key,value])=>value && (!['network','store','sector','status'].includes(key) || value!=='todos')).length;
+  $('#orders-filter-toggle').textContent=active?`Filtros (${active})`:'Filtros';
+  $('#orders-filter-clear').disabled=!active;
+  $('#orders-filter-count').textContent=`${records.length} de ${orderPlural(orderRecords.length,'pedido','pedidos')} · ${orderPlural(records.reduce((sum,o)=>sum+orderFilteredShifts(o,filters).length*o.quantidade_diaristas,0),'diária','diárias')} no período${active?' · filtros aplicados':''}`;
+  $('#orders-filter-error').hidden=!(filters.start && filters.end && filters.start>filters.end);
+  const filtered = records.sort((a, b) => {
     const closedA = ['concluido', 'cancelado'].includes(a.situacao);
     const closedB = ['concluido', 'cancelado'].includes(b.situacao);
     if (closedA !== closedB) return closedA ? 1 : -1;
@@ -140,22 +178,23 @@ function renderOrders() {
   $('#orders-table-wrap').hidden = filtered.length === 0;
   const body = $('#orders-rows'); body.replaceChildren();
   filtered.forEach(item => {
+    const shifts=orderFilteredShifts(item,filters),days=shifts.length,totalDemand=days*item.quantidade_diaristas;
     const row = document.createElement('tr');
     const market = document.createElement('td');
     const name = document.createElement('strong'); name.textContent = item.supermercado;
     const unit = document.createElement('small'); unit.textContent = item.unidade || 'Unidade não informada';
     market.append(name, unit); row.append(market, cell(item.setor));
     const dates = document.createElement('td');
-    const first = item.turnos[0];
+    const first = shifts[0];
     const dateTitle = document.createElement('strong');
-    dateTitle.textContent = item.quantidade_dias === 1 ? dateLabel(first.data) : `${dateLabel(first.data)} + ${item.quantidade_dias - 1} ${item.quantidade_dias === 2 ? 'data' : 'datas'}`;
+    dateTitle.textContent = days === 1 ? dateLabel(first.data) : `${dateLabel(first.data)} + ${days - 1} ${days === 2 ? 'data' : 'datas'}`;
     const hours = document.createElement('small');
-    const sameHours = item.turnos.every(shift => shift.inicio === first.inicio && shift.fim === first.fim);
+    const sameHours = shifts.every(shift => shift.inicio === first.inicio && shift.fim === first.fim);
     hours.textContent = sameHours ? `${first.inicio} às ${first.fim}` : 'Horários variáveis · veja a ficha';
     dates.append(dateTitle, hours); row.append(dates);
     const demand = document.createElement('td');
     const perDay = document.createElement('strong'); perDay.textContent = orderPlural(item.quantidade_diaristas, 'diarista/dia', 'diaristas/dia');
-    const total = document.createElement('small'); total.textContent = `${orderPlural(item.quantidade_dias, 'dia', 'dias')} · ${orderPlural(item.total_diarias, 'diária', 'diárias')}`;
+    const total = document.createElement('small'); total.textContent = `${orderPlural(days, 'dia', 'dias')} · ${orderPlural(totalDemand, 'diária', 'diárias')}${filters.start || filters.end?' no período':''}`;
     demand.append(perDay, total); row.append(demand);
     const state = document.createElement('td');
     const badge = document.createElement('span'); badge.className = `order-status ${item.situacao}`;
@@ -584,8 +623,10 @@ function orderDialogBackdrop(event) {
 
 $('#new-order-button').addEventListener('click', () => openOrderForm());
 $('#orders-empty-new').addEventListener('click', () => openOrderForm());
-$('#orders-search').addEventListener('input', renderOrders);
-$('#orders-status-filter').addEventListener('change', renderOrders);
+$('#orders-search').addEventListener('input', applyOrderFilters);
+for(const id of ['orders-network-filter','orders-store-filter','orders-sector-filter','orders-status-filter','orders-start-filter','orders-end-filter']) $('#'+id).addEventListener('change',applyOrderFilters);
+$('#orders-filter-toggle').addEventListener('click',()=>{const panel=$('#orders-filter-fields');panel.hidden=!panel.hidden;$('#orders-filter-toggle').setAttribute('aria-expanded',String(!panel.hidden));});
+$('#orders-filter-clear').addEventListener('click',()=>{for(const id of ['orders-search','orders-start-filter','orders-end-filter']) $('#'+id).value='';for(const id of ['orders-network-filter','orders-store-filter','orders-sector-filter','orders-status-filter']) $('#'+id).value='todos';applyOrderFilters();});
 $('#weekly-date').value = orderToday();
 $('#weekly-date').addEventListener('change', () => { weeklyPage = 0; renderWeekly(); });
 $('#weekly-prev').addEventListener('click', () => { if (weeklyPage > 0) { weeklyPage--; renderWeekly(); } });

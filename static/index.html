@@ -241,6 +241,17 @@
         <div><div class="eyebrow">OPERAÇÃO <span>/</span> PEDIDOS</div><h1>Pedidos dos supermercados</h1><p>Registre a demanda de diaristas por setor, data e horário.</p></div>
         <button class="button button-primary" id="new-order-button" type="button" aria-label="Novo pedido" title="Novo pedido"><span aria-hidden="true">＋</span><span class="button-label">Novo pedido</span></button>
       </header>
+      <section class="list-card orders-filter-panel" aria-label="Filtros dos pedidos">
+        <div class="orders-filter-toolbar"><div class="search-wrap"><span aria-hidden="true">⌕</span><input id="orders-search" type="search" placeholder="Rede, loja, setor ou número" aria-label="Buscar pedidos"></div><button id="orders-filter-toggle" class="button button-outline" type="button" aria-expanded="false" aria-controls="orders-filter-fields">Filtros</button><button id="orders-filter-clear" class="button button-quiet" type="button" title="Limpar todos os filtros" disabled>Limpar</button></div>
+        <div id="orders-filter-fields" class="orders-filter-fields" hidden>
+          <label>Rede<select id="orders-network-filter"><option value="todos">Todas as redes</option></select></label>
+          <label>Loja<select id="orders-store-filter"><option value="todos">Todas as lojas</option></select></label>
+          <label>Setor<select id="orders-sector-filter"><option value="todos">Todos os setores</option></select></label>
+          <label>Situação<select id="orders-status-filter"><option value="todos">Todas as situações</option><option value="novo">Novos</option><option value="em_selecao">Em seleção</option><option value="confirmado">Confirmados</option><option value="concluido">Concluídos</option><option value="cancelado">Cancelados</option></select></label>
+          <label>Diárias de<input id="orders-start-filter" type="date"></label><label>Até<input id="orders-end-filter" type="date"></label>
+        </div>
+        <p id="orders-filter-error" class="feedback error" role="alert" hidden>A data inicial deve ser anterior ou igual à data final.</p><p id="orders-filter-count" class="orders-filter-count" aria-live="polite"></p>
+      </section>
       <section class="order-stats" aria-label="Resumo dos pedidos">
         <div class="finance-stat"><span>Pedidos em aberto</span><strong id="orders-open-count">0</strong></div>
         <div class="finance-stat"><span>Diárias solicitadas · em aberto</span><strong id="orders-demand-count">0</strong></div>
@@ -248,13 +259,12 @@
         <div class="finance-stat"><span>Pedidos concluídos</span><strong id="orders-done-count">0</strong></div>
       </section>
       <section class="order-stats operation-kpis" aria-label="Indicadores da operação"><div class="finance-stat"><span>Vagas preenchidas</span><strong id="orders-fill-rate">0%</strong></div><div class="finance-stat"><span>Taxa de faltas confirmadas</span><strong id="orders-absence-rate">0%</strong></div><div class="finance-stat"><span>Presenças por confirmar</span><strong id="orders-awaiting-attendance">0</strong></div></section>
-      <section class="list-card weekly-card" aria-labelledby="weekly-title"><div class="list-top"><div><h2 id="weekly-title">Escala de diárias</h2><p>Mostra somente os dias com pedidos a partir da data escolhida.</p></div><label class="weekly-start-label">A partir de<input id="weekly-date" type="date" aria-label="Mostrar diárias a partir de"></label></div><div id="weekly-pagination" class="weekly-pagination" hidden><span id="weekly-page-label" aria-live="polite"></span><div><button id="weekly-prev" class="button button-quiet" type="button">← Anterior</button><button id="weekly-next" class="button button-outline" type="button">Próxima →</button></div></div><div id="weekly-days" class="weekly-days"></div></section>
+      <section class="list-card weekly-card" aria-labelledby="weekly-title"><div class="list-top"><div><h2 id="weekly-title">Escala de diárias</h2><p id="weekly-help">Mostra somente os dias com pedidos a partir da data escolhida.</p></div><label class="weekly-start-label">A partir de<input id="weekly-date" type="date" aria-label="Mostrar diárias a partir de"></label></div><div id="weekly-pagination" class="weekly-pagination" hidden><span id="weekly-page-label" aria-live="polite"></span><div><button id="weekly-prev" class="button button-quiet" type="button">← Anterior</button><button id="weekly-next" class="button button-outline" type="button">Próxima →</button></div></div><div id="weekly-days" class="weekly-days"></div></section>
       <section class="list-card" aria-labelledby="orders-list-title">
         <div class="list-top order-list-top"><div><h2 id="orders-list-title">Solicitações recebidas</h2><p>Acompanhe cada pedido desde o recebimento até a conclusão.</p></div></div>
-        <div class="order-filters"><div class="search-wrap"><span aria-hidden="true">⌕</span><input id="orders-search" type="search" placeholder="Buscar supermercado, unidade ou setor" aria-label="Buscar pedidos"></div><select id="orders-status-filter" aria-label="Filtrar pedidos por situação"><option value="todos">Todas as situações</option><option value="novo">Novos</option><option value="em_selecao">Em seleção</option><option value="confirmado">Confirmados</option><option value="concluido">Concluídos</option><option value="cancelado">Cancelados</option></select></div>
         <div id="orders-feedback" class="feedback" role="status" aria-live="polite" hidden></div>
         <div id="orders-empty" class="empty-state" hidden><div class="empty-illustration" aria-hidden="true">▤</div><h3>Nenhum pedido registrado</h3><p>Cadastre a primeira solicitação recebida de um supermercado.</p><button class="button button-outline" id="orders-empty-new" type="button">Registrar pedido</button></div>
-        <div id="orders-no-results" class="empty-state compact" hidden><h3>Nenhum pedido encontrado</h3><p>Altere a busca ou o filtro de situação.</p></div>
+        <div id="orders-no-results" class="empty-state compact" hidden><h3>Nenhum pedido encontrado</h3><p>Altere a busca, as datas ou use Limpar para remover os filtros.</p></div>
         <div id="orders-table-wrap" class="table-scroll" hidden><table class="orders-table"><thead><tr><th>SUPERMERCADO</th><th>SETOR</th><th>DIAS E HORÁRIOS</th><th>DEMANDA</th><th>SITUAÇÃO</th><th><span class="sr-only">Ver pedido</span></th></tr></thead><tbody id="orders-rows"></tbody></table></div>
       </section>
     </main>
