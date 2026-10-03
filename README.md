@@ -133,3 +133,7 @@ Para evoluir o sistema por partes, novos módulos podem usar este mesmo servidor
 `supabase/tests/operacao_completa.sql` realiza gravações de teste em uma transação e termina em ROLLBACK. Executar apenas em ambiente controlado com o administrador e banco previstos, sem transformar fixtures em registros de produção. Não cria contas de Auth.
 
 Em Configurações → Conferência neste aparelho, o administrador pode gerar um diagnóstico do aparelho físico. O diagnóstico de largura não substitui a conferência com teclado aberto, rotação e zoom.
+
+## Links públicos dos diaristas
+
+Cadastro: `https://sistemadirectpromocoes-zeta.vercel.app/cadastro.html`. Vagas: `https://sistemadirectpromocoes-zeta.vercel.app/vagas.html`. Os links também podem ser copiados em Configurações → Links dos diaristas. A conta do portal usa e-mail confirmado e senha e não dá acesso ao painel da empresa. Um CPF já cadastrado exige vínculo aprovado pela Direct. Assumir dias salva a escala com confirmação de comparecimento, sem registrar presença antecipadamente. Detalhes e evidências: `PORTAL_DIARISTAS_2026-10-03.md`.

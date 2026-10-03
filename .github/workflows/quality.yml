@@ -30,4 +30,6 @@ jobs:
       - name: Testes de regras de negócio
         run: pnpm test:unit
       - name: Navegação, perfis e telas móveis
-        run: pnpm test:e2e
+        run: |
+          pnpm test:e2e
+          node tests/portal_e2e.mjs

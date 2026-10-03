@@ -31,6 +31,7 @@
     return invoice.vencimento < financeToday() ? 'Atrasada' : 'A receber';
   }
   function renderInvoices() {
+    if (!get('invoice-list')) return;
     const active = invoices.filter(item => item.status === 'aberta');
     get('invoice-billed').textContent = moneyLabel(active.reduce((sum, item) => sum + item.valor_centavos, 0));
     get('invoice-received').textContent = moneyLabel(active.reduce((sum, item) => sum + item.valor_recebido_centavos, 0));
@@ -209,14 +210,15 @@
     if (get('invoice-detail-dialog').open) renderInvoiceDetail();
   };
 
-  get('invoice-new').addEventListener('click', () => {
+  window.openInvoiceCreate = () => {
     const networks = [...new Set(orders.map(item => item.supermercado))].sort((a,b) => a.localeCompare(b,'pt-BR'));
     const select = get('invoice-network'); select.replaceChildren();
     for (const name of networks) { const option = document.createElement('option'); option.value = name; option.textContent = name; select.append(option); }
     get('invoice-start').value = `${financeToday().slice(0, 7)}-01`;
     get('invoice-end').value = financeToday(); invoiceDueManual = false; get('invoice-due').value = ''; get('invoice-note').value = '';
     get('invoice-create-error').hidden = true; renderInvoicePreview(); get('invoice-create-dialog').showModal();
-  });
+  };
+  get('invoice-new')?.addEventListener('click', window.openInvoiceCreate);
   get('invoice-due').addEventListener('input', () => { invoiceDueManual = Boolean(get('invoice-due').value); });
   for (const id of ['invoice-network', 'invoice-start', 'invoice-end']) get(id).addEventListener('change', renderInvoicePreview);
   get('invoice-create-form').addEventListener('submit', async event => {
