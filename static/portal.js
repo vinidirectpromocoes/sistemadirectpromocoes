@@ -54,10 +54,11 @@
     b.disabled=true;
     try{
       if(!session){
-        const result=await sb.auth.signUp({email:String(f.get('email')).trim(),password:String(f.get('senha')),options:{data:{direct_cadastro:data,direct_convite:invitation},emailRedirectTo:new URL('/cadastro.html#convite='+invitation,location.origin).href}});
-        if(result.error)throw result.error;
+        const result=await sb.functions.invoke('portal-cadastro',{body:{convite:invitation,email:String(f.get('email')).trim(),senha:String(f.get('senha')),dados:data}});
+        if(result.error){let detail;try{detail=await result.error.context?.json();}catch{}throw new Error(detail?.error||'Não foi possível criar o acesso. Tente novamente.');}
+        if(result.data?.error)throw new Error(result.data.error);
+        const login=await sb.auth.signInWithPassword({email:String(f.get('email')).trim(),password:String(f.get('senha'))});if(login.error)throw login.error;
         form.elements.senha.value='';form.elements.confirmar.value='';
-        if(!result.data.session){feedback('Enviamos a confirmação para seu e-mail. Confirme e volte a este link para entrar com sua senha e concluir o cadastro. Se já tiver acesso, use “Já tenho acesso”.');return;}
       }
       await rpc('direct_portal_register',{p_dados:data,p_convite:invitation});await refreshAccount();feedback(account.status==='ativo'?'Cadastro salvo! Use o link de vagas enviado pela Direct.':'Pedido de acesso enviado para conferência da Direct.');
     }catch(error){feedback(friendly(error),true);}finally{b.disabled=false;}
