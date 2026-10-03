@@ -9,6 +9,10 @@ begin
  if result->>'status'<>'ativo' then raise exception 'Use uma base em que o CPF sintético não exista.'; end if;
  select diarista_id into w1 from public.portal_cadastros where user_id=u1;
  if (public.direct_portal_register('{"nome":"Portal teste sintético","cpf":"52998224725"}')->>'status')<>'ativo' then raise exception 'Cadastro não é idempotente'; end if;
+ insert into public.tarifas_redes(rede,valor_recebido_centavos,valor_padrao_centavos) values('Portal teste',8100,5100);
+ insert into public.tarifas_setores(rede,setor,valor_pago_centavos) values('Portal teste','FLV',5200);
+ insert into public.contratos(rede,loja,setor,inicio,valor_pago_centavos) values('Portal teste','Unidade sintética','FLV',d,5300);
+ if direct_private.portal_daily_value('Portal teste','Unidade sintética','FLV',d)<>5300 or direct_private.portal_daily_value('Portal teste','Outra sintética','FLV',d)<>5200 then raise exception 'Valor publicado não acompanha contrato/setor';end if;
  insert into public.pedidos(supermercado,unidade,setor,quantidade_diaristas,turnos) values('Portal teste','Unidade sintética','FLV',1,jsonb_build_array(jsonb_build_object('data',d,'inicio','07:00','fim','15:20'))) returning id into oid;
  result:=public.direct_portal_accept(oid,array[d]);
  if (result->>'dias')::int<>1 or not exists(select 1 from public.pedido_escalas where pedido_id=oid and diarista_id=w1 and confirmacao='confirmou' and status='escalada') then raise exception 'Escala/confirmou não persistiu'; end if;

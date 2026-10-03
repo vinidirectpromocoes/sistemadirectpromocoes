@@ -68,9 +68,10 @@
     const visible=jobs.filter(o=>normalized(`${o.rede} ${o.loja} ${o.setor} ${o.endereco||''}`).includes(query));
     if(!visible.length){list.append(node('p',jobs.length&&query?'Nenhuma vaga corresponde à busca.':'Nenhuma diária disponível no momento. Volte mais tarde.'));return;}
     for(const o of visible){
-      const card=node('article','','card');card.append(node('h3',`${o.rede} · ${o.loja}`),node('p',o.setor),node('p',o.endereco||'Confira o endereço com a Direct.'),node('p',o.valor_centavos==null?'Valor da diária: confirmar com a Direct.':`${money(o.valor_centavos)} por diária`,'price'));
+      const values=new Set(o.turnos.map(t=>t.valor_centavos===undefined?o.valor_centavos:t.valor_centavos));const varies=values.size>1;
+      const card=node('article','','card');card.append(node('h3',`${o.rede} · ${o.loja}`),node('p',o.setor),node('p',o.endereco||'Confira o endereço com a Direct.'),node('p',varies?'Confira o valor de cada dia abaixo.':o.valor_centavos==null?'Valor da diária: confirmar com a Direct.':`${money(o.valor_centavos)} por diária`,'price'));
       const choices=node('div','');
-      for(const t of o.turnos){const label=node('label','','shift-choice'),input=document.createElement('input');input.type='checkbox';input.value=t.data;input.checked=true;input.setAttribute('aria-label',`Selecionar ${date(t.data)} no pedido ${o.id}`);label.append(input,node('span',`${date(t.data)} · ${t.inicio} às ${t.fim}\n${t.vagas} vaga(s)`));choices.append(label);}
+      for(const t of o.turnos){const label=node('label','','shift-choice'),input=document.createElement('input');input.type='checkbox';input.value=t.data;input.checked=true;input.setAttribute('aria-label',`Selecionar ${date(t.data)} no pedido ${o.id}`);label.append(input,node('span',`${date(t.data)} · ${t.inicio} às ${t.fim}\n${t.vagas} vaga(s)${varies?` · ${t.valor_centavos==null?'valor a confirmar':money(t.valor_centavos)}`:''}`));choices.append(label);}
       const button=node('button','Quero estes dias','primary');button.type='button';
       button.addEventListener('click',()=>{
         if(!session){feedback('Entre no seu cadastro para confirmar uma diária.');access();return;}

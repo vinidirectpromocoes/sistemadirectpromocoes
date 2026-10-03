@@ -299,7 +299,7 @@ async function runFinancialWorkflow() {
     await page.locator('#invoice-create-dialog').waitFor({state:'hidden'});
     const createdInvoices=await api('GET','/api/cobrancas');
     assert.ok(createdInvoices.some(i=>i.valor_centavos===26800));
-    await page.evaluate(id=>window.openInvoiceDetail(id),createdInvoices.find(i=>i.valor_centavos===26800).id);
+    await page.evaluate(async id=>{await loadFinance();window.openInvoiceDetail(id);},createdInvoices.find(i=>i.valor_centavos===26800).id);
     assert.equal(await page.locator('#invoice-detail-items .workflow-line').count(), 2);
     await page.locator('#invoice-receive-value').fill('100.00');
     await page.locator('#invoice-receive-form button').click();
