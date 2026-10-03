@@ -260,7 +260,7 @@ async function runFinancialWorkflow() {
     assert.match(await page.locator('#confirmed-cost').innerText(), /90,00/);
     assert.match(await page.locator('#confirmed-profit').innerText(), /39,00/);
     assert.match(await page.locator('#forecast-net').innerText(), /39,00/);
-    assert.match(await page.locator('#reconciliation-summary').innerText(), /1 presença/);
+    assert.equal(await page.locator('#batch-title, #reconciliation-title, #review-section').count(),0,'Os três blocos removidos não aparecem no financeiro');
     await page.locator('#forecast-period').selectOption('week');
     assert.match(await page.locator('#forecast-period-note').innerText(), /28\/09\/2026 a 04\/10\/2026/);
     assert.match(await page.locator('#confirmed-revenue').innerText(), /134,00/);
@@ -297,8 +297,7 @@ async function runFinancialWorkflow() {
     await page.getByText('2 presença(s) ainda não cobradas').waitFor();
     await page.locator('#invoice-create-submit').click();
     await page.locator('#invoice-list .workflow-entry').waitFor();
-    await page.waitForFunction(() => document.querySelector('#reconciliation-summary')?.textContent.includes('2 cobradas'));
-    assert.match(await page.locator('#reconciliation-summary').innerText(), /0 em cobranças integralmente recebidas/);
+
     assert.match(await page.locator('#invoice-billed').innerText(), /268,00/);
     await page.locator('#invoice-list .workflow-entry button').first().click();
     assert.equal(await page.locator('#invoice-detail-items .workflow-line').count(), 2);
@@ -313,7 +312,8 @@ async function runFinancialWorkflow() {
     await page.locator('#batch-date').fill('2026-09-30');
     await page.locator('#batch-method').fill('Pix');
     await page.locator('#batch-submit').click();
-    await page.locator('#batch-list .workflow-entry').waitFor();
+    await page.locator('#batch-dialog').waitFor({state:'hidden'});
+    const paidBatch=await api('GET','/api/pagamento-lotes');assert.ok(paidBatch.some(b=>b.valor_centavos===18000),'Pagamento em lote continua gravado sem o bloco na página');
     await page.locator('#finance-month').fill('2026-09');
     assert.match(await page.locator('#finance-out').innerText(), /180,00/);
     assert.ok(scaleRequests.length > 0 && scaleRequests.every(path => path.endsWith('/api/escalas')),
@@ -350,9 +350,7 @@ async function runExtendedWorkflow() {
     await page.locator('#theme-toggle').click();assert.equal(await page.locator('html').getAttribute('data-theme'),'dark');
     await page.locator('#contract-list').getByRole('button',{name:'↗ Nova versão'}).click();await page.locator('#extended-cancel').click();
     await page.locator('#device-section').getByRole('button',{name:'▶ Executar diagnóstico'}).click();assert.match(await page.locator('#device-result').innerText(),/serviceWorker/);
-    await page.locator('#nav-financeiro').click();await page.locator('#invoice-review-list .extended-entry').waitFor();
-    await page.locator('#invoice-review-list').getByRole('button',{name:'✓ Conferir'}).first().click();await page.locator('#ext-conferencia').selectOption('contestada');await page.locator('#ext-responsavel').fill('Marcos');await page.locator('#ext-motivo').fill('Conferir horário solicitado pela loja');await page.locator('#extended-save').click();await page.locator('#extended-dialog').waitFor({state:'hidden'});await page.locator('#invoice-review-list').getByText(/contestada/).waitFor();
-    await page.evaluate(()=>{window.print=()=>{window.qaPrinted=document.getElementById('print-demonstrative').innerText;};});await page.locator('#invoice-review-list').getByRole('button',{name:'▤ PDF / imprimir'}).first().click();assert.match(await page.evaluate(()=>window.qaPrinted),/Pessoa Financeira de Teste/);assert.match(await page.evaluate(()=>window.qaPrinted),/Total: R\$\s*268,00/);
+    await page.locator('#nav-financeiro').click();assert.equal(await page.locator('#review-section').count(),0);
     await page.locator('#nav-pedidos').click();await page.waitForFunction(id=>orderRecords.some(x=>x.id===id),order.id);await page.evaluate(id=>openOrderDetail(id),order.id);await page.locator('#order-repeat-button').click();await page.locator('#ext-inicio').fill('2026-10-12');await page.locator('#extended-save').click();await page.getByText('Conferir pedido repetido').waitFor();assert.equal(await page.locator('.order-shift-date').first().inputValue(),'2026-10-12');
     // Guardar rascunho com a conexão cortada; nenhum pedido é gravado nessa etapa.
     await page.evaluate(async()=>{await navigator.serviceWorker.ready;});await context.setOffline(true);await page.locator('#order-save-draft').click();await page.locator('#order-dialog').waitFor({state:'hidden'});await page.locator('#nav-crm').click();if(!await page.locator('#crm-support').evaluate(e=>e.open))await page.locator('#crm-support > summary').click();await page.locator('details.crm-tool').filter({has:page.locator('#offline-panel')}).locator('summary').click();await page.locator('#offline-drafts .extended-entry').waitFor();
@@ -360,7 +358,7 @@ async function runExtendedWorkflow() {
     await context.setOffline(false);const before=(await api('GET','/api/pedidos')).length;await page.locator('#offline-drafts').getByRole('button',{name:'↗ Revisar'}).click();await page.locator('#order-save-button').click();await page.locator('#order-dialog').waitFor({state:'hidden'});assert.equal((await api('GET','/api/pedidos')).length,before+1);await page.locator('#nav-crm').click();await page.getByText('Nenhum rascunho guardado.').waitFor();
     const cached=await page.evaluate(async()=>{const keys=await caches.keys();const paths=[];for(const key of keys)for(const r of await(await caches.open(key)).keys())paths.push(new URL(r.url).pathname);return paths;});assert.ok(cached.length>10);assert.ok(cached.every(p=>!p.startsWith('/api/')),'Cache não deve armazenar respostas da API');
     await page.screenshot({path:path.join(root,'.design-qa/operacao-mobile-dark.png'),fullPage:true,animations:'disabled'});assert.deepEqual(errors,[],'Fluxos integrados com erro JavaScript');
-    console.log('Operação ampliada: reserva, confirmação, validação, ocorrência, contrato, contestação, PDF, repetição e rascunho offline OK');await context.close();
+    console.log('Operação ampliada: reserva, confirmação, validação, ocorrência, contrato, financeiro compacto, repetição e rascunho offline OK');await context.close();
   }finally{await browser.close();}
 }
 
@@ -733,7 +731,8 @@ async function runAssistantFlow(){
 
 try {
   await ready();
-  if(process.env.DIRECT_ASSISTANT_ONLY==='1'){await runAssistantFlow();}
+  if(process.env.DIRECT_FINANCE_ONLY==='1'){await runFinancialWorkflow();}
+  else if(process.env.DIRECT_ASSISTANT_ONLY==='1'){await runAssistantFlow();}
   else if(process.env.DIRECT_REMAINING_ONLY==='1'){await runLinkedReading();await runOrderFilters();await runScaleLifecycle();await runRecentOrderAttendance();await runAssistantFlow();}
   else {
   await runBrowser(chromium, 'Chromium');

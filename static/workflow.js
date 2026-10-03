@@ -52,7 +52,7 @@
     }
   }
   function renderBatches() {
-    const list = get('batch-list'); list.replaceChildren();
+    const list = get('batch-list'); if (!list) return; list.replaceChildren();
     if (!batches.length) { list.textContent = 'Ainda não há pagamentos fechados em lote.'; return; }
     for (const item of batches.slice(0, 100)) {
       const entry = document.createElement('article'); entry.className = 'workflow-entry';
@@ -80,6 +80,7 @@
     }
   }
   function renderReconciliation() {
+    if (!get('reconciliation-list')) return;
     const month = financeForecastPeriod();
     const result = window.DirectReconciliation.build(orders, scales, finance, invoices, month, financeToday());
     const total = result.summary;
