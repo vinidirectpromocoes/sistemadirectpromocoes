@@ -44,6 +44,7 @@
   <script src="/operations-extended.js" defer></script>
   <script src="/crm-model.js" defer></script>
   <script src="/hub.js" defer></script>
+  <script src="/portal-admin.js" defer></script>
 </head>
 <body>
   <div id="global-loading" class="global-loading" role="progressbar" aria-label="Carregando dados" hidden><span></span></div>
@@ -214,14 +215,6 @@
           <article class="finance-chart-card"><div><h3>Pagamentos</h3><p>Quantidade de lançamentos</p></div><div class="finance-chart-body"><div id="finance-status-chart" class="finance-donut" aria-label="Distribuição de pagamentos"></div><div id="finance-status-legend" class="finance-chart-legend"></div></div></article>
         </div>
       </section>
-      <section class="list-card forecast-order-section" aria-label="Pedidos incluídos na previsão">
-        <details class="forecast-orders"><summary id="forecast-orders-summary">Conferir pedidos incluídos</summary><div id="forecast-orders-list"></div></details>
-      </section>
-      <section class="list-card workflow-section" aria-labelledby="invoice-title">
-        <div class="list-top workflow-header"><div><span class="eyebrow">PEDIDO → PRESENÇA → RECEBIMENTO</span><h2 id="invoice-title">Cobranças das redes</h2><p>Gere cobranças das presenças confirmadas. Cada diária entra em uma única cobrança.</p></div><button id="invoice-new" class="button button-primary" type="button">＋ Gerar cobrança</button></div>
-        <div class="workflow-stats"><div><span>Faturado</span><strong id="invoice-billed">R$ 0,00</strong></div><div><span>Recebido</span><strong id="invoice-received">R$ 0,00</strong></div><div><span>A receber</span><strong id="invoice-open">R$ 0,00</strong></div></div>
-        <div id="invoice-list" class="workflow-list"></div>
-      </section>
       <div id="finance-warning" class="finance-warning" hidden></div>
       <section class="list-card finance-list" aria-labelledby="finance-list-title">
         <div class="list-top finance-list-top"><div><h2 id="finance-list-title">Lançamentos</h2><p>Diárias da mesma pessoa aparecem somadas no período selecionado. Abra o grupo para conferir cada pagamento.</p></div></div>
@@ -299,6 +292,13 @@
         <div id="settings-extra-grid" class="settings-network-grid"></div>
       </section>
       <p class="settings-note">Alterações nos valores servem para novos pagamentos. Diárias já registradas mantêm o valor que foi salvo nelas.</p>
+      <section id="portal-settings" class="settings-section" aria-labelledby="portal-settings-title" hidden>
+        <div class="settings-heading"><div><h2 id="portal-settings-title">Links dos diaristas</h2><p>Gere dois links privados por pessoa e envie separadamente. As vagas exigem cadastro ativo e aceitação da escala inteira.</p></div></div>
+        <form id="portal-invite-form" class="staff-form"><label>CPF da pessoa (opcional)<input id="portal-invite-cpf" inputmode="numeric" maxlength="14" placeholder="Vincular convite ao CPF"></label><label>Validade<select id="portal-invite-days"><option value="7">7 dias</option><option value="30" selected>30 dias</option><option value="90">90 dias</option></select></label><button class="button button-primary" type="submit">Gerar links privados</button></form>
+        <div id="portal-invite-links" hidden><p id="portal-invite-expiry" class="section-help"></p><label>Link exclusivo de cadastro<input id="portal-cadastro-url" readonly></label><button type="button" class="button button-outline" data-copy-portal="cadastro">Copiar cadastro</button><label>Link exclusivo de vagas<input id="portal-vagas-url" readonly></label><button type="button" class="button button-outline" data-copy-portal="vagas">Copiar vagas</button></div>
+        <p id="portal-admin-feedback" class="section-help" role="status"></p>
+        <details><summary>Conferir acessos de quem já tinha cadastro <span id="portal-pending-count"></span></summary><div id="portal-pending-list" class="staff-list"></div></details>
+      </section>
       <section id="staff-settings" class="settings-section" aria-labelledby="staff-settings-title" hidden>
         <div class="settings-heading"><div><h2 id="staff-settings-title">Acesso dos funcionários</h2><p>Autorize cada e-mail individualmente. Operação gerencia cadastros e escalas; Financeiro gerencia pagamentos e tarifas; Consulta apenas visualiza.</p></div></div>
         <form id="staff-form" class="staff-form"><label>E-mail<input id="staff-email" type="email" required autocomplete="off" placeholder="funcionario@empresa.com"></label><label>Permissão<select id="staff-role"><option value="operacao">Operação</option><option value="financeiro">Financeiro</option><option value="consulta">Consulta</option></select></label><button class="button button-primary" type="submit">Autorizar e-mail</button></form>

@@ -133,3 +133,7 @@ Para evoluir o sistema por partes, novos módulos podem usar este mesmo servidor
 `supabase/tests/operacao_completa.sql` realiza gravações de teste em uma transação e termina em ROLLBACK. Executar apenas em ambiente controlado com o administrador e banco previstos, sem transformar fixtures em registros de produção. Não cria contas de Auth.
 
 Em Configurações → Conferência neste aparelho, o administrador pode gerar um diagnóstico do aparelho físico. O diagnóstico de largura não substitui a conferência com teclado aberto, rotação e zoom.
+
+## Links públicos dos diaristas
+
+Em Configurações → Links dos diaristas, gere dois links privados e separados por pessoa: cadastro e vagas. Cada um exige seu próprio convite com validade. O link de vagas mostra apenas escalas completas disponíveis e o botão “Quero pegar essa vaga”. Exige conta cadastrada ativa e aceite de todos os dias, sem seleção de datas. Confirmar que vai salva a escala; presença/falta continuam sendo registradas pela Direct. Detalhes e evidências: `PORTAL_DIARISTAS_2026-10-03.md`.

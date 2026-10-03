@@ -52,21 +52,8 @@ function renderFinanceForecast() {
   ring.setAttribute('aria-label', `Faturamento ${moneyLabel(data.expected.revenue)}, diárias ${moneyLabel(data.expected.cost)}, extras ${moneyLabel(data.expected.extras)}, resultado líquido estimado ${moneyLabel(data.expected.net)}`);
   $('#forecast-ring-total').textContent = moneyLabel(data.expected.revenue);
   $('#forecast-presence-note').textContent = `${count(data.byOrder.length, 'pedido', 'pedidos')} · ${count(data.demand, 'diária solicitada', 'diárias solicitadas')} · ${count(data.expectedDays, 'prevista', 'previstas')} · ${count(data.present, 'presença', 'presenças')} · ${count(data.absent, 'falta', 'faltas')}`;
-  $('#forecast-orders-summary').textContent = `Conferir ${count(data.byOrder.length, 'pedido incluído', 'pedidos incluídos')}`;
   if (typeof window.renderReconciliation === 'function') window.renderReconciliation();
   window.DirectOperations?.renderStoreResults(financeForecastInput);
-  const orderList = $('#forecast-orders-list'); orderList.replaceChildren();
-  if (!data.byOrder.length) orderList.textContent = 'Nenhum pedido neste período.';
-  data.byOrder.forEach(order => {
-    const row = document.createElement('div'); row.className = 'forecast-order';
-    const title = document.createElement('strong'); title.textContent = `Pedido #${order.id} · ${order.network}${order.unit ? ` · ${order.unit}` : ''} · ${order.sector}`;
-    const detail = document.createElement('span'); detail.textContent = `${order.days}/${order.requested} diárias previstas · ${count(order.present, 'presença', 'presenças')} · ${count(order.absent, 'falta', 'faltas')}`;
-    const values = document.createElement('small'); values.textContent = `Faturamento ${moneyLabel(order.revenue)} · diárias ${moneyLabel(order.cost)} · extras ${moneyLabel(order.extras)} · líquido estimado ${moneyLabel(order.net)}`;
-    const open = document.createElement('button'); open.type = 'button'; open.className = 'text-button forecast-order-open'; open.textContent = 'Abrir pedido';
-    open.setAttribute('aria-label', `Abrir pedido número ${order.id}`);
-    open.addEventListener('click', async () => { location.hash = '#pedidos'; await loadOrders(); openOrderDetail(order.id); });
-    row.append(title, detail, values, open); orderList.append(row);
-  });
   const list = $('#forecast-networks'); list.replaceChildren();
   if (!data.byNetwork.some(item => item.days)) { list.textContent = data.byOrder.length ? 'Nenhuma diária prevista após as faltas registradas.' : 'Nenhum pedido neste período.'; return; }
   const max = Math.max(1, ...data.byNetwork.map(item => item.revenue));

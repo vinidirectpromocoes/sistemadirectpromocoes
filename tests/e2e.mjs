@@ -260,7 +260,7 @@ async function runFinancialWorkflow() {
     assert.match(await page.locator('#confirmed-cost').innerText(), /90,00/);
     assert.match(await page.locator('#confirmed-profit').innerText(), /39,00/);
     assert.match(await page.locator('#forecast-net').innerText(), /39,00/);
-    assert.equal(await page.locator('#batch-title, #reconciliation-title, #review-section').count(),0,'Os três blocos removidos não aparecem no financeiro');
+    assert.equal(await page.locator('#batch-title, #reconciliation-title, #review-section, #invoice-title, #forecast-orders-summary').count(),0,'Os blocos removidos não aparecem no financeiro');
     await page.locator('#forecast-period').selectOption('week');
     assert.match(await page.locator('#forecast-period-note').innerText(), /28\/09\/2026 a 04\/10\/2026/);
     assert.match(await page.locator('#confirmed-revenue').innerText(), /134,00/);
@@ -286,7 +286,7 @@ async function runFinancialWorkflow() {
     await page.screenshot({path:path.join(root,'.design-qa/financeiro-dashboard-desktop.png'),fullPage:true,animations:'disabled'});
     await page.setViewportSize({width:390,height:844});
 
-    await page.locator('#invoice-new').click();
+    await page.evaluate(() => window.openInvoiceCreate());
     await page.locator('#invoice-network').selectOption('Super do Povo');
     await page.locator('#invoice-start').fill('2026-09-21');
     await page.locator('#invoice-end').fill('2026-09-28');
@@ -296,10 +296,10 @@ async function runFinancialWorkflow() {
     await page.locator('#invoice-note').fill('QA-2026');
     await page.getByText('2 presença(s) ainda não cobradas').waitFor();
     await page.locator('#invoice-create-submit').click();
-    await page.locator('#invoice-list .workflow-entry').waitFor();
-
-    assert.match(await page.locator('#invoice-billed').innerText(), /268,00/);
-    await page.locator('#invoice-list .workflow-entry button').first().click();
+    await page.locator('#invoice-create-dialog').waitFor({state:'hidden'});
+    const createdInvoices=await api('GET','/api/cobrancas');
+    assert.ok(createdInvoices.some(i=>i.valor_centavos===26800));
+    await page.evaluate(async id=>{await loadFinance();window.openInvoiceDetail(id);},createdInvoices.find(i=>i.valor_centavos===26800).id);
     assert.equal(await page.locator('#invoice-detail-items .workflow-line').count(), 2);
     await page.locator('#invoice-receive-value').fill('100.00');
     await page.locator('#invoice-receive-form button').click();

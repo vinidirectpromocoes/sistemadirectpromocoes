@@ -54,3 +54,7 @@ html[data-theme="dark"] .settings-margin.negative strong, html[data-theme="dark"
   .settings-sector-amounts { flex: 1; width: auto; }
   .settings-sector-actions { width: 100%; justify-content: flex-end; }
 }
+
+/* Vínculos do portal: nomes e e-mails longos cabem também no celular. */
+#portal-pending-list .staff-row { flex-wrap: wrap; justify-content: flex-start; }
+#portal-pending-list .staff-row p { width: 100%; margin: 0; overflow-wrap: anywhere; }
