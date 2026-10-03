@@ -62,8 +62,10 @@
         const version = generation; view.disabled = true;
         try {
           // Reutiliza a ficha principal, inclusive edição, disponibilidade e histórico.
-          records = await request('/api/diaristas');
+          const workers = await request('/api/diaristas');
           if (version !== generation || !allowed()) return;
+          records = workers;
+          window.render();
           if (!records.some(w => w.id === item.id)) { await loadRegistrations(); return; }
           await openDetail(item.id);
         } catch (error) { if (version === generation) msg('Não foi possível abrir a ficha: ' + error.message); }
