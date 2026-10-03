@@ -136,4 +136,4 @@ Em Configurações → Conferência neste aparelho, o administrador pode gerar u
 
 ## Links públicos dos diaristas
 
-Cadastro: `https://sistemadirectpromocoes-zeta.vercel.app/cadastro.html`. Vagas: `https://sistemadirectpromocoes-zeta.vercel.app/vagas.html`. Os links também podem ser copiados em Configurações → Links dos diaristas. A conta do portal usa e-mail confirmado e senha e não dá acesso ao painel da empresa. Um CPF já cadastrado exige vínculo aprovado pela Direct. Assumir dias salva a escala com confirmação de comparecimento, sem registrar presença antecipadamente. Detalhes e evidências: `PORTAL_DIARISTAS_2026-10-03.md`.
+Em Configurações → Links dos diaristas, gere dois links privados e separados por pessoa: cadastro e vagas. Cada um exige seu próprio convite com validade. O link de vagas mostra apenas escalas completas disponíveis e o botão “Quero pegar essa vaga”. Exige conta cadastrada ativa e aceite de todos os dias, sem seleção de datas. Confirmar que vai salva a escala; presença/falta continuam sendo registradas pela Direct. Detalhes e evidências: `PORTAL_DIARISTAS_2026-10-03.md`.

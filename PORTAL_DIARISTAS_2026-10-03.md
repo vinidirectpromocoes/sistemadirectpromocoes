@@ -1,22 +1,23 @@
-# Links dos diaristas e Financeiro simplificado
+# Convites privados dos diaristas e Financeiro simplificado
 
 ## Funcionamento
 
-- `/cadastro.html`: nome e CPF, e-mail e senha próprios; endereço e experiência opcionais. A confirmação do e-mail antecede a gravação. O acesso é separado da sessão administrativa.
-- `/vagas.html`: somente turnos com vagas que ainda não começaram, de pedidos ativos. Rede, loja, endereço, setor, datas, horários e valor pago por diária. Busca por rede, loja e setor; atualização automática a cada 45 segundos e botão Atualizar.
-- A pessoa seleciona os dias, revisa e confirma que vai. O banco salva a escala e a resposta confirmada; a Direct registra presença/falta posteriormente. A presença continua criando a diária e alimentando os cálculos financeiros.
-- Somente uma conta com e-mail confirmado e cadastro ativo pode assumir vagas. CPF válido, bloqueio, lotação e conflito de horários são verificados no banco. Todos os dias selecionados são gravados em uma transação. Uma falha em um dia não deixa os demais parcialmente escalados.
-- Um CPF que já existe exige vínculo aprovado pela Direct em Configurações → Links dos diaristas. Nenhum cadastro existente é apropriado somente pelo conhecimento de nome e CPF. O vínculo não duplica nem substitui os dados internos.
-- A página pública não expõe nomes da equipe, CPF, contato dos clientes, observações internas, faturamento ou lucro da empresa. O valor mostrado é o pagamento ao diarista, conforme configuração vigente.
-- Financeiro: removidos Cobranças das redes e Conferir pedidos incluídos. Gráficos, previsões e lançamentos continuam operacionais. As cobranças existentes continuam preservadas; as pendências podem abrir sua ficha.
+- Configurações → Links dos diaristas → Gerar links privados cria **dois links diferentes por pessoa**, com validade de 7/30/90 dias. CPF opcional vincula o convite àquela pessoa. Os tokens são distintos, armazenados no banco como hashes e transportados no fragmento da URL. Envie cada link no privado; gere outro par para o próximo diarista.
+- `/cadastro.html#convite=…`: nome e CPF, e-mail e senha próprios; endereço e experiência opcionais. A confirmação do e-mail antecede a gravação. A sessão é separada da equipe administrativa. Não há acesso às vagas nessa página.
+- `/vagas.html#convite=…`: somente escalas com disponibilidade em **todos os dias** e que ainda não começaram. Rede, loja, endereço, setor, datas, horários e valor pago por diária, com apenas o botão **Quero pegar essa vaga**. Sem busca, filtros, atualização manual, seleção de datas ou navegação para cadastro. Atualiza em segundo plano a cada 45 segundos.
+- Ao clicar, a pessoa entra na própria conta cadastrada, revisa todos os dias e confirma que vai. O banco escala a pessoa em **todos os dias do pedido, numa única transação**. Conflito ou lotação em qualquer dia cancela a operação inteira. A Direct continua registrando presença/falta; o compromisso de comparecer não gera presença ou pagamento antecipado.
+- Sem convite válido/ativo ou cadastro ativo não se assume a escala. Convite vencido, de outro acesso, CPF incompatível, diarista bloqueado e sobreposição de horários são rejeitados no banco. As antigas APIs sem convite foram fechadas.
+- CPF preexistente em convite genérico exige vínculo aprovado pela Direct. Convite emitido especificamente para aquele CPF pode vincular o cadastro existente, se não houver outro proprietário e o diarista estiver liberado. Não duplica nem substitui os dados internos.
+- O link de vagas não expõe nomes da equipe, CPF, contatos, observações internas, faturamento ou lucro. Os valores exibidos acompanham contrato, setor e tarifa da rede.
+- Financeiro: removidos Cobranças das redes e Conferir pedidos incluídos. Gráficos, previsões e lançamentos preservados. Cobranças existentes continuam no banco e pendências podem abrir sua ficha.
 
-## Verificação
+## Testes
 
-- `tests/portal_database.sql`: cadastro, validação e vínculo; registro da escala/confirmou que vai; idempotência; vaga preenchida; conflito; datas indisponíveis; bloqueio; conta sem cadastro; vínculo de CPF existente; autorização por operador; permissões de acesso. Executado no Supabase em transação revertida, sem conservar dados sintéticos.
-- `tests/portal_e2e.mjs`: Chromium e WebKit, 1280/390/320 px, APIs sintéticas isoladas. CPF/senha inválidos, confirmação de e-mail, sessão, busca, seleção de dias, revisão, confirmação, saída, fonte de campos e ausência de transbordamento/erros JS. Integração incluída no fluxo de publicação.
-- `node tests/e2e.mjs`: navegação, perfis, escalas, substituição, pendências, leitura, financeiro e cópia em base temporária.
+- `tests/portal_database.sql`: executado no Supabase em transação revertida. Cadastro e idempotência, escala/confirmou que vai, lotação, conflito, bloqueio, conta sem cadastro, vínculo autorizado, CPF, permissões e fechamento das APIs antigas. Testa dois dias completos, nenhuma gravação parcial em conflito, tokens separados, convite usado por outra conta e vencimento. Nenhum dado sintético permanece.
+- `tests/portal_e2e.mjs`: Chromium e WebKit, 1280/390/320 px, APIs sintéticas isoladas. Páginas sem convite bloqueadas, CPF/senha, confirmação de e-mail, conta sem cadastro rejeitada, separação dos links, ausência de filtros e seleção de dias, revisão, escala completa, campos de 16 px, ausência de transbordamento e erros JavaScript. Integrado ao fluxo de publicação.
+- `node tests/e2e.mjs`: navegação, perfis, escalas, substituição, pendências, leitura e financeiro em base temporária.
 - `DIRECT_FINANCE_ONLY=1 node tests/e2e.mjs`: cards, períodos, temas, layout móvel, ausência dos blocos removidos, cobrança/recebimento parcial e pagamento agrupado em SQLite temporário.
 
-## Limites práticos
+## Limites dos testes
 
-A confirmação de e-mail depende da entrega do serviço de Auth, sujeita aos limites gratuitos existentes. Testes de e-mail usam respostas sintéticas e o banco confirma o requisito; não enviam e-mails reais de teste. Os testes móveis simulam tamanhos e motores de navegador; não equivalem a conferir fisicamente um iPhone ou Android. O portal público conecta ao Supabase publicado; o SQLite local continua isolado.
+O serviço de Auth usa os limites gratuitos existentes. Os testes automatizados simulam a entrega de e-mail; não enviam e-mails reais. Os testes móveis simulam dimensões e motores de navegador; não equivalem a testar fisicamente um iPhone ou Android. O portal conecta ao Supabase publicado; SQLite local permanece isolado.

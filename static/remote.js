@@ -71,7 +71,7 @@
     if (!role) {
       const isPortalAccount=Boolean(session.user.user_metadata?.direct_cadastro);
       await sb.auth.signOut();
-      if(isPortalAccount){location.replace('/cadastro.html');return false;}
+      if(isPortalAccount){location.replace('/cadastro.html#convite='+encodeURIComponent(session.user.user_metadata?.direct_convite||''));return false;}
       showLogin();
       message('Esta conta não tem permissão para acessar o sistema.', true);
       return false;
