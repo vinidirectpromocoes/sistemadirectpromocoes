@@ -14,6 +14,7 @@
 
 - `tests/portal_database.sql`: cadastro, validação e vínculo; registro da escala/confirmou que vai; idempotência; vaga preenchida; conflito; datas indisponíveis; bloqueio; conta sem cadastro; vínculo de CPF existente; autorização por operador; permissões de acesso. Executado no Supabase em transação revertida, sem conservar dados sintéticos.
 - `tests/portal_e2e.mjs`: Chromium e WebKit, 1280/390/320 px, APIs sintéticas isoladas. CPF/senha inválidos, confirmação de e-mail, sessão, busca, seleção de dias, revisão, confirmação, saída, fonte de campos e ausência de transbordamento/erros JS. Integração incluída no fluxo de publicação.
+- `node tests/e2e.mjs`: navegação, perfis, escalas, substituição, pendências, leitura, financeiro e cópia em base temporária.
 - `DIRECT_FINANCE_ONLY=1 node tests/e2e.mjs`: cards, períodos, temas, layout móvel, ausência dos blocos removidos, cobrança/recebimento parcial e pagamento agrupado em SQLite temporário.
 
 ## Limites práticos

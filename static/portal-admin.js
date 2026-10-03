@@ -12,5 +12,6 @@
    for(const [label,approve] of [['Liberar acesso',true],['Recusar',false]]){const b=document.createElement('button');b.type='button';b.className='button button-outline';b.textContent=label;b.addEventListener('click',async()=>{if(!confirm(`${label} para ${c.nome} (${c.email})? Confira se o acesso pertence a essa pessoa.`))return;b.disabled=true;const result=await remote.client.rpc('direct_portal_approve',{p_user_id:c.user_id,p_aprovar:approve});if(result.error){msg(result.error.message);b.disabled=false;return;}msg('Acesso conferido.');await load();});row.append(b);}list.append(row);}
  }
  window.addEventListener('direct:authorized',load);window.addEventListener('hashchange',()=>{if(location.hash==='#configuracoes')load();});
+ if(window.directRemote?.role)load();
  window.addEventListener('direct:signed-out',()=>{$('portal-settings').hidden=true;$('portal-pending-list').replaceChildren();});
 })();
