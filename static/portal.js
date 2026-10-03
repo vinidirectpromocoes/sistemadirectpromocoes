@@ -79,7 +79,7 @@
       const button=node('button','Quero pegar essa vaga','primary');button.type='button';button.addEventListener('click',()=>reviewJob(o));card.append(dates,button);list.append(card);
     }
   }
-  async function loadJobs(){if(!validInvitation||loading||!$('jobs-list'))return;loading=true;try{jobs=await rpc('direct_portal_orders',{p_convite:invitation});renderJobs();}catch(error){feedback(friendly(error),true);$('jobs-list').replaceChildren(node('p','Não foi possível carregar as vagas. Use Atualizar para tentar novamente.'));}finally{loading=false;}}
+  async function loadJobs(){if(!validInvitation||loading||!$('jobs-list'))return;loading=true;try{jobs=await rpc('direct_portal_orders',{p_convite:invitation});renderJobs();}catch(error){feedback(friendly(error),true);$('jobs-list').replaceChildren(node('p','Não foi possível carregar as vagas. Reabra este link para tentar novamente.'));}finally{loading=false;}}
 
 
   for(const id of ['confirm-close','confirm-cancel'])$(id)?.addEventListener('click',()=>$('confirm-dialog').close());
