@@ -85,3 +85,7 @@ html[data-theme="dark"] .portal-registration-row small { color: var(--dark-muted
   #portal-invite-links .button { justify-self: start; }
   .portal-registration-row { padding: 12px 14px; }
 }
+#convites-page .list-header { padding: 20px 20px 12px; }
+#convites-page .list-header h2 { margin: 0 0 8px; }
+#convites-page .list-header .section-help, .portal-invite-card .section-help { margin: 0 0 12px; line-height: 1.5; }
+@media (max-width: 700px) { #convites-page .list-header { padding: 14px 14px 8px; } }
