@@ -65,7 +65,7 @@ end $$;
 create function public.direct_portal_orders() returns jsonb language sql stable security definer set search_path='' as $$
  select coalesce(jsonb_agg(o.item order by o.first_date,o.id),'[]'::jsonb) from (
  select p.id,min(t->>'data') first_date,jsonb_build_object('id',p.id,'rede',p.supermercado,'loja',p.unidade,'setor',p.setor,
- 'endereco',(select l.endereco from public.lojas l where lower(l.rede)=lower(p.supermercado) and lower(l.nome)=lower(p.unidade) limit 1),
+ 'endereco',(select l.endereco || case when l.bairro<>'' and position(lower(l.bairro) in lower(l.endereco))=0 then ' · '||l.bairro else '' end || case when position(lower(l.cidade) in lower(l.endereco))=0 then ' · '||l.cidade||'/'||l.uf else '' end from public.lojas l where lower(l.rede)=lower(p.supermercado) and lower(l.nome)=lower(p.unidade) limit 1),
  'valor_centavos',coalesce((select ts.valor_pago_centavos from public.tarifas_setores ts where lower(ts.rede)=lower(p.supermercado) and lower(ts.setor)=lower(p.setor)),
  (select ts.valor_pago_centavos from public.tarifas_setores ts where ts.rede='' and lower(ts.setor)=lower(p.setor)),
  (select tr.valor_padrao_centavos from public.tarifas_redes tr where lower(tr.rede)=lower(p.supermercado))),
