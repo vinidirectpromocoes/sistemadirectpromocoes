@@ -21,6 +21,7 @@
     feedback.hidden = false;
   }
   function showLogin() {
+    window.dispatchEvent(new Event('direct:signed-out'));
     authorized = false;
     currentRole = null;
     shell.hidden = true;

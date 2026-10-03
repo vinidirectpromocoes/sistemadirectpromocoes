@@ -78,3 +78,30 @@ html[data-theme="dark"] .reading-item small { color: #ffd291; }
 }
 
 .reading-link-save { margin-top:12px; max-width:100%; white-space:normal; overflow-wrap:anywhere; }
+
+/* Conversa e revisão compactas; os campos mantêm 16px no celular. */
+.reading-chat { display:grid; gap:10px; padding:16px 28px 0; max-height:320px; overflow:auto; }
+.reading-chat:empty { display:none; }
+.reading-bubble { border:1px solid var(--brand-border); border-radius:14px 14px 14px 3px; padding:12px 14px; background:#f3f7ff; max-width:95%; min-width:0; }
+.reading-bubble.user { justify-self:end; background:#e7efff; border-radius:14px 14px 3px 14px; }
+.reading-bubble strong { font-size:11px; color:#174fba; }
+.reading-bubble p { margin:5px 0 0; white-space:pre-wrap; overflow-wrap:anywhere; font-size:13px; line-height:1.5; max-height:180px; overflow:auto; }
+.reading-help { margin:16px 28px 0; font-size:13px; line-height:1.5; }
+.reading-help summary { cursor:pointer; color:#174fba; font-weight:700; }
+.reading-help p { color:#617494; }
+.reading-suggestions { display:flex; flex-wrap:wrap; gap:7px; }
+.reading-suggestions button { padding:8px 10px; border:1px solid var(--brand-border); background:transparent; color:var(--brand-dark); border-radius:9px; cursor:pointer; min-height:36px; }
+.reading-review-fields { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:10px; margin:14px 0; }
+.reading-review-fields div { min-width:0; }
+.reading-review-fields dt { font-size:11px; color:#617494; }
+.reading-review-fields dd { margin:3px 0 0; font-size:13px; font-weight:600; overflow-wrap:anywhere; }
+.reading-availability { display:flex; gap:8px; align-items:center; margin-top:12px; font-size:13px; }
+.reading-preview { animation:reading-review-in .2s ease-out; }
+@keyframes reading-review-in { from { opacity:0; transform:translateY(5px); } to { opacity:1; transform:translateY(0); } }
+html[data-theme="dark"] .reading-bubble { background:var(--dark-raised); color:var(--dark-text); border-color:var(--dark-border); }
+html[data-theme="dark"] .reading-bubble.user { background:#203f67; }
+html[data-theme="dark"] .reading-bubble strong, html[data-theme="dark"] .reading-help summary { color:#9ec3ff; }
+html[data-theme="dark"] .reading-help p, html[data-theme="dark"] .reading-review-fields dt { color:var(--dark-muted); }
+html[data-theme="dark"] .reading-suggestions button { border-color:var(--dark-border); color:var(--dark-text); }
+@media(max-width:700px) { .reading-chat { padding:14px 15px 0; } .reading-help { margin:14px 15px 0; } .reading-review-fields { gap:9px; } .reading-form textarea { font-size:16px; } #reading-review-actions { position:sticky; bottom:0; background:var(--surface,#fff); border-radius:0 0 16px 16px; padding-top:12px; } html[data-theme="dark"] #reading-review-actions { background:var(--dark-raised); } }
+@media(prefers-reduced-motion:reduce) { .reading-preview { animation:none; } }
