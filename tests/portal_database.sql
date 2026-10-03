@@ -2,21 +2,26 @@
 begin;
 do $$
 declare uid uuid:=gen_random_uuid();i1 jsonb;i2 jsonb;i3 jsonb;result jsonb;w1 bigint;oid bigint;other_oid bigint;
- d date:=(now() at time zone 'America/Fortaleza')::date+2;users_before int;payload jsonb:='{"nome":"Portal sintético completo","cpf":"52998224725","data_nascimento":"1990-04-10","cep":"61600000","logradouro":"Rua sintética","numero":"12","bairro":"Centro","cidade":"Caucaia","uf":"CE","setores":["FLV"],"disponibilidade":[{"dia":"segunda","inicio":"00:00","fim":"23:59"}],"trabalhando":false,"rede_trabalho":"","local_trabalho":"","pode_se_deslocar":false,"observacoes_locomocao":"Centro","transporte":"Ônibus, Bike","consentimento":true}';
+ d date:=(now() at time zone 'America/Fortaleza')::date+2;users_before int;tracking_before int;payload jsonb:='{"nome":"Portal sintético completo","cpf":"52998224725","data_nascimento":"1990-04-10","cep":"61600000","logradouro":"Rua sintética","numero":"12","bairro":"Centro","cidade":"Caucaia","uf":"CE","setores":["FLV"],"disponibilidade":[{"dia":"segunda","inicio":"00:00","fim":"23:59"}],"trabalhando":false,"rede_trabalho":"","local_trabalho":"","pode_se_deslocar":false,"observacoes_locomocao":"Centro","transporte":"Ônibus, Bike","consentimento":true}';
 begin
  insert into auth.users(id,email,email_confirmed_at) values(uid,'portal-operador-sintetico@example.invalid',now());
  insert into public.direct_staff(email,role,active) values('portal-operador-sintetico@example.invalid','operacao',true);
  perform set_config('request.jwt.claims',jsonb_build_object('sub',uid,'email','portal-operador-sintetico@example.invalid','role','authenticated')::text,true);
  i1:=public.direct_portal_create_invite(null,30);i2:=public.direct_portal_create_invite(null,30);i3:=public.direct_portal_create_invite(null,30);
  select count(*) into users_before from auth.users;
+ select count(*) into tracking_before from direct_private.portal_registros;
  perform set_config('request.jwt.claims','{}',true);
  begin perform public.direct_portal_settings('5585999999999','');raise exception 'FALHOU: anônimo mudou contato';exception when others then if sqlerrm like 'FALHOU:%' then raise;end if;end;
  begin perform public.direct_portal_submit(payload||'{"data_nascimento":"2099-01-01"}',i1->>'cadastro_token');raise exception 'FALHOU: nascimento futuro';exception when others then if sqlerrm like 'FALHOU:%' then raise;end if;end;
  result:=public.direct_portal_submit(payload,i1->>'cadastro_token');
  if not (result->>'cadastrado')::boolean or (select count(*) from auth.users)<>users_before then raise exception 'Cadastro não salvou ou criou conta Auth';end if;
  select id into w1 from public.diaristas where cpf='52998224725';
+ if not exists(select 1 from direct_private.portal_registros where diarista_id=w1) then raise exception 'Origem do cadastro não registrada';end if;
+ begin perform public.direct_portal_registrations();raise exception 'FALHOU: anônimo leu cadastros';exception when others then if sqlerrm like 'FALHOU:%' then raise;end if;end;
+
  if not exists(select 1 from public.diaristas where id=w1 and data_nascimento='1990-04-10' and cidade='Caucaia' and transporte='Ônibus, Bike' and not pode_se_deslocar) then raise exception 'Campos não persistiram';end if;
  if (public.direct_portal_submit(payload,i1->>'cadastro_token')->>'vagas_token') is distinct from result->>'vagas_token' then raise exception 'Repetição não é idempotente';end if;
+ if (select count(*) from direct_private.portal_registros)<>tracking_before+1 then raise exception 'Repetição duplicou origem';end if;
  perform public.direct_portal_orders(result->>'vagas_token');perform public.direct_portal_orders(i1->>'vagas_token');
  begin perform public.direct_portal_submit(payload,i2->>'cadastro_token');raise exception 'FALHOU: CPF existente apropriado';exception when others then if sqlerrm like 'FALHOU:%' then raise;end if;end;
  begin perform public.direct_portal_submit(payload||'{"cpf":"11111111111"}',i2->>'cadastro_token');raise exception 'FALHOU: CPF inválido';exception when others then if sqlerrm like 'FALHOU:%' then raise;end if;end;
@@ -50,9 +55,28 @@ begin
  if has_function_privilege('authenticated','public.direct_portal_register(jsonb,text)','execute') or has_function_privilege('service_role','public.direct_portal_signup_prepare(text,text,text,text)','execute') or has_function_privilege('anon','public.direct_portal_orders_internal()','execute') then raise exception 'API de contas antiga aberta';end if;
  if not has_function_privilege('anon','public.direct_portal_submit(jsonb,text)','execute') then raise exception 'Cadastro sem Auth indisponível';end if;
  perform set_config('request.jwt.claims',jsonb_build_object('sub',uid,'email','portal-operador-sintetico@example.invalid','role','authenticated')::text,true);
+ result:=public.direct_portal_registrations();
+ if (result->>'total')::int<>tracking_before+1 or not (result->'items') @> jsonb_build_array(jsonb_build_object('id',w1)) then raise exception 'Operação não leu o cadastro recebido';end if;
+ if jsonb_array_length(public.direct_portal_registrations(100000)->'items')<>0 then raise exception 'Paginação inválida';end if;
+ begin perform public.direct_portal_registrations(-1);raise exception 'FALHOU: página negativa';exception when others then if sqlerrm like 'FALHOU:%' then raise;end if;end;
+ update direct_private.portal_convites set ativo=false where diarista_id=w1;
+ if not (public.direct_portal_registrations()->'items') @> jsonb_build_array(jsonb_build_object('id',w1)) then raise exception 'Cadastro sumiu após convite desativado';end if;
  i3:=public.direct_portal_create_invite('52998224725',30);
+ if (select count(*) from direct_private.portal_registros)<>tracking_before+1 then raise exception 'Convite existente duplicou origem';end if;
+ insert into public.diaristas(nome,cpf) values('Manual sintético','11144477735');
+ perform public.direct_portal_create_invite('11144477735',30);
+ if (select count(*) from direct_private.portal_registros)<>tracking_before+1 then raise exception 'Cadastro manual confundido com cadastro por link';end if;
+ update public.direct_staff set role='financeiro' where email='portal-operador-sintetico@example.invalid';
+ begin perform public.direct_portal_registrations();raise exception 'FALHOU: financeiro leu cadastros do link';exception when others then if sqlerrm like 'FALHOU:%' then raise;end if;end;
+ update public.direct_staff set role='consulta' where email='portal-operador-sintetico@example.invalid';
+ begin perform public.direct_portal_registrations();raise exception 'FALHOU: consulta leu cadastros do link';exception when others then if sqlerrm like 'FALHOU:%' then raise;end if;end;
+ if has_function_privilege('anon','public.direct_portal_registrations(integer)','execute') or has_table_privilege('authenticated','direct_private.portal_registros','select') then raise exception 'Origem privada exposta';end if;
+
  perform set_config('request.jwt.claims','{}',true);
  if not (public.direct_portal_context(i3->>'vagas_token','vagas')->>'cadastrado')::boolean then raise exception 'Convite CPF não vinculou existente';end if;
+ delete from public.pedido_escalas where diarista_id=w1;
+ delete from public.diaristas where id=w1;
+ if exists(select 1 from direct_private.portal_registros where diarista_id=w1) then raise exception 'Cadastro excluído continua na lista';end if;
  raise notice 'PORTAL OK: sem Auth, campos completos, duplicidade, idempotência, vínculos, convite, confirmação, empresa, bloqueio, conflito, escala inteira e permissões';
 end $$;
 rollback;

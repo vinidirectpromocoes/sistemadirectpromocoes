@@ -561,13 +561,13 @@ async function openFinanceAudit() {
 }
 
 function showPage() {
-  let page = ['inicio', 'crm', 'diaristas', 'financeiro', 'pedidos', 'leitura', 'redes', 'configuracoes'].includes(window.location.hash.slice(1)) ? window.location.hash.slice(1) : 'inicio';
+  let page = ['inicio', 'crm', 'diaristas', 'financeiro', 'pedidos', 'leitura', 'redes', 'configuracoes', 'convites'].includes(window.location.hash.slice(1)) ? window.location.hash.slice(1) : 'inicio';
   const role = window.directRemote?.role;
-  if (role && ({ financeiro: ['admin', 'financeiro'], configuracoes: ['admin', 'financeiro'], leitura: ['admin', 'operacao'], diaristas: ['admin', 'financeiro', 'operacao'] }[page] || ['admin', 'financeiro', 'operacao', 'consulta']).includes(role) === false) {
+  if (role && ({ financeiro: ['admin', 'financeiro'], configuracoes: ['admin', 'financeiro'], convites: ['admin', 'operacao'], leitura: ['admin', 'operacao'], diaristas: ['admin', 'financeiro', 'operacao'] }[page] || ['admin', 'financeiro', 'operacao', 'consulta']).includes(role) === false) {
     page = 'inicio';
     if (location.hash !== '#inicio') location.hash = '#inicio';
   }
-  for (const name of ['inicio', 'crm', 'diaristas', 'pedidos', 'leitura', 'redes', 'financeiro', 'configuracoes']) {
+  for (const name of ['inicio', 'crm', 'diaristas', 'pedidos', 'leitura', 'redes', 'financeiro', 'configuracoes', 'convites']) {
     const active = name === page;
     $(`#${name}-page`).hidden = !active;
     const link = $(`#nav-${name}`);
@@ -575,7 +575,7 @@ function showPage() {
     if (active) link.setAttribute('aria-current', 'page');
     else link.removeAttribute('aria-current');
   }
-  document.title = `${{ inicio: 'Início', crm: 'Pendências', diaristas: 'Diaristas', pedidos: 'Pedidos', leitura: 'Leitura IA', redes: 'Redes e lojas', financeiro: 'Financeiro', configuracoes: 'Configurações' }[page]} | Direct Promoções`;
+  document.title = `${{ convites: 'Cadastros por link', inicio: 'Início', crm: 'Pendências', diaristas: 'Diaristas', pedidos: 'Pedidos', leitura: 'Leitura IA', redes: 'Redes e lojas', financeiro: 'Financeiro', configuracoes: 'Configurações' }[page]} | Direct Promoções`;
   window.scrollTo(0, 0);
   if (page === 'inicio' || page === 'crm') loadHome();
   if (page === 'financeiro') loadFinance();
