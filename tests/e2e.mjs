@@ -193,9 +193,12 @@ async function runReadingFlow() {
       await page.locator('#reading-submit').click();
       await page.locator('#reading-result-items .reading-item').waitFor();
       const state = confidence < 75 ? 'pending' : 'saved';
+      await page.locator('#reading-result-items .reading-preview').waitFor();
+      if(state==='saved') await page.locator('#reading-confirm').click();
       await page.locator(`#reading-result-items .reading-item.${state}`).waitFor();
       if (state === 'pending') {
         assert.match(await page.locator('#reading-result-items').innerText(), /Fotografe novamente/);
+        await page.getByRole('button',{name:'Guardar pendência',exact:true}).click();await page.getByRole('button',{name:'Pendência guardada',exact:true}).waitFor();
       } else {
         await page.getByRole('button', { name: 'Desfazer este registro' }).click();
         await page.getByText('Desfeito').waitFor();
@@ -490,8 +493,8 @@ async function runPartialRegistration() {
       await page.locator('#setores').fill('FLV');await page.locator('#cep').fill('60000000');await page.locator('#logradouro').fill('Rua Teste');await page.locator('#numero').fill('1');await page.locator('#bairro').fill('Centro');await page.locator('input[name=trabalhando][value=false]').check();await page.locator('input[name=pode_se_deslocar][value=false]').check();await page.locator('.day-row[data-day=segunda] .day-enabled').check();await page.locator('#save-button').click();await page.locator('#form-dialog').waitFor({state:'hidden'});
       saved=(await api('GET','/api/diaristas')).find(x=>x.cpf===cpf);assert.equal(saved.trabalhando,false);assert.equal(saved.pode_se_deslocar,false);assert.equal(saved.setores[0],'FLV');assert.equal(saved.disponibilidade.length,1);await page.reload();await page.getByRole('row').filter({hasText:label}).getByRole('button',{name:`Ver ficha e histórico de ${label}`,exact:true}).click();await page.locator('#detail-dialog').waitFor({state:'visible'});assert.doesNotMatch(await page.locator('#detail-status').innerText(),/Cadastro parcial/);await page.locator('#detail-close-button').click();
       if(name==='Chromium'&&width===1280){
-        const aiCpf=cpfFor(++serial);await page.locator('#nav-leitura').click();await page.locator('#reading-text').fill(`Nome Completo: Leitura Parcial\nCPF: ${aiCpf}`);await page.locator('#reading-submit').click();await page.locator('#reading-result-items .reading-item.saved').waitFor();const partial=(await api('GET','/api/diaristas')).find(x=>x.cpf===aiCpf);assert.ok(partial);assert.equal(partial.trabalhando,null);assert.deepEqual(partial.setores,[]);await api('DELETE',`/api/diaristas/${partial.id}`);
-        await page.locator('#reading-text').fill(`Nome Completo: ${label}\nCPF: ${cpf}\nBairro: Meireles`);await page.locator('#reading-submit').click();await page.locator('#reading-result-items .reading-item.duplicate').waitFor();await page.locator('#reading-result-items').getByRole('button',{name:'Completar no formulário',exact:true}).click();await page.locator('#form-dialog').waitFor({state:'visible'});assert.equal(await page.locator('#setores').inputValue(),'FLV');assert.equal(await page.locator('#logradouro').inputValue(),'Rua Teste');assert.equal(await page.locator('#bairro').inputValue(),'Meireles');await page.locator('#save-button').click();await page.locator('#form-dialog').waitFor({state:'hidden'});assert.equal((await api('GET','/api/diaristas')).filter(x=>x.cpf===cpf).length,1);
+        const aiCpf=cpfFor(++serial);await page.locator('#nav-leitura').click();await page.locator('#reading-text').fill(`Nome Completo: Leitura Parcial\nCPF: ${aiCpf}`);await page.locator('#reading-submit').click();await page.locator('#reading-confirm').click();await page.locator('#reading-result-items .reading-item.saved').waitFor();const partial=(await api('GET','/api/diaristas')).find(x=>x.cpf===aiCpf);assert.ok(partial);assert.equal(partial.trabalhando,null);assert.deepEqual(partial.setores,[]);await api('DELETE',`/api/diaristas/${partial.id}`);
+        await page.locator('#reading-text').fill(`Nome Completo: ${label}\nCPF: ${cpf}\nBairro: Meireles`);await page.locator('#reading-submit').click();await page.locator('#reading-confirm').click();await page.locator('#reading-result-items .reading-item.duplicate').waitFor();await page.locator('#reading-result-items').getByRole('button',{name:'Completar no formulário',exact:true}).click();await page.locator('#form-dialog').waitFor({state:'visible'});assert.equal(await page.locator('#setores').inputValue(),'FLV');assert.equal(await page.locator('#logradouro').inputValue(),'Rua Teste');assert.equal(await page.locator('#bairro').inputValue(),'Meireles');await page.locator('#save-button').click();await page.locator('#form-dialog').waitFor({state:'hidden'});assert.equal((await api('GET','/api/diaristas')).filter(x=>x.cpf===cpf).length,1);
       }
       assert.deepEqual(errors,[]);console.log(`${name} ${width}: cadastro com nome/CPF, respostas não informadas, completar, recarregar e preservar dados OK`);await page.waitForLoadState('networkidle');await api('DELETE',`/api/diaristas/${saved.id}`);await context.close();
     }}finally{await browser.close();}
@@ -544,11 +547,10 @@ async function runLinkedReading() {
       page.on('pageerror',error=>errors.push(error.message));
       const existingOrder=width===390?await api('POST','/api/pedidos',{supermercado:'hipermarket',unidade:'vila união',setor:'repositor de mercearia',quantidade_diaristas:1,turnos:[{data:'2026-10-03',inicio:start,fim:end},{data:'2026-10-04',inicio:start,fim:end}]}):null;
       await page.goto(url+'#leitura');await page.locator('#reading-text').fill(message);await page.locator('#reading-submit').click();
-      await page.locator('#reading-result-items .reading-link-save').waitFor();
+      await page.locator('#reading-confirm').waitFor();
       assert.equal((await api('GET','/api/diaristas')).filter(w=>w.cpf===cpf).length,0,'Sugestão não cadastra automaticamente pessoa desconhecida');
       assert.ok(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth+2),'Sugestão cabe no celular');
-      if(width===320) {await page.waitForLoadState('networkidle');await page.reload();await page.locator('#reading-pending-items .reading-link-save').filter({hasText:'Cadastrar diarista e salvar pedido'}).last().click();}
-      else await page.locator('#reading-result-items .reading-link-save').click();
+      await page.locator('#reading-confirm').click();
       await page.waitForFunction(()=>document.querySelector('#reading-result-items .reading-item.saved')?.textContent.includes('2 dia(s) escalado(s)'));
       assert.equal(await page.locator('#reading-result-items').getByRole('button',{name:'Desfazer este registro',exact:true}).count(),0,'Cadastro e escala conjuntos são gerenciados no pedido');
       const worker=(await api('GET','/api/diaristas')).find(w=>w.cpf===cpf);assert.ok(worker);assert.deepEqual(worker.disponibilidade,[]);assert.deepEqual(worker.setores,[]);assert.equal(worker.trabalhando,null);
@@ -556,7 +558,7 @@ async function runLinkedReading() {
       assert.equal(assignments.length,2);assert.deepEqual(assignments.map(e=>e.data),['2026-10-03','2026-10-04']);assert.ok(assignments.every(e=>e.status==='escalada'&&e.disponibilidade_pedido_confirmada));
       if(existingOrder) assert.ok(assignments.every(e=>e.pedido_id===existingOrder.id),'Vincula pedido existente com diferenças de maiúsculas');
       assert.equal((await api('GET','/api/pedidos')).find(o=>o.id===assignments[0].pedido_id).situacao,'confirmado');
-      await page.locator('#reading-text').fill(message);await page.locator('#reading-submit').click();await page.locator('#reading-result-items .reading-item.duplicate').waitFor();
+      await page.locator('#reading-text').fill(message);await page.locator('#reading-submit').click();await page.locator('#reading-confirm').click();await page.locator('#reading-result-items .reading-item.duplicate').waitFor();
       assert.equal((await api('GET','/api/escalas')).filter(e=>e.diarista_id===worker.id).length,2,'Releitura não duplica escala');
       await page.locator('#reading-result-items').getByRole('button',{name:'Ver pedido e escala',exact:true}).click();await page.locator('#order-detail-dialog').waitFor({state:'visible'});await page.waitForFunction(name=>document.querySelector('#order-detail-shifts')?.textContent.includes(name),workerName);assert.match(await page.locator('#order-detail-shifts').innerText(),new RegExp(workerName));await page.locator('#order-detail-close-bottom').click();
       let orderRow=page.locator('#orders-rows tr').filter({hasText:workerName});assert.equal(await orderRow.count(),1);assert.match(await orderRow.innerText(),/Confirmado/);
@@ -671,7 +673,7 @@ async function runRecentOrderAttendance() {
       const before=await amounts();
       await page.locator('#nav-leitura').click();
       await page.locator('#reading-text').fill(`Rede: Super do Povo\nLoja: Meireles\nFunção: Mercearia\nHorário: 13:40 às 22:00\nData de início: ${display.slice(0,5)}\nQuantidade de dias: 7\nNome: ${person}\nCPF: ${cpf}`);
-      await page.locator('#reading-submit').click();await page.locator('#reading-result-items .reading-link-save').click();await page.locator('#reading-result-items .reading-item.saved').waitFor();
+      await page.locator('#reading-submit').click();await page.locator('#reading-confirm').click();await page.locator('#reading-result-items .reading-item.saved').waitFor();
       const worker=(await api('GET','/api/diaristas')).find(w=>w.cpf===cpf),scales=(await api('GET','/api/escalas')).filter(e=>e.diarista_id===worker.id);
       assert.equal(scales.length,7);assert.equal(scales[0].data,firstDay);
       await page.locator('#reading-result-items').getByRole('button',{name:'Ver pedido e escala',exact:true}).click();
@@ -693,8 +695,47 @@ async function runRecentOrderAttendance() {
   }
 }
 
+async function runAssistantFlow(){
+  const api=async(method,route,body)=>{const response=await fetch(url.slice(0,-1)+route,{method,headers:{'Content-Type':'application/json'},body:body?JSON.stringify(body):undefined});const result=await response.json();assert.ok(response.ok,JSON.stringify(result));return result;};
+  let serial=720001;const cpfFor=n=>{let s=String(n).padStart(9,'0');for(const size of [9,10]){const sum=[...s].reduce((a,d,i)=>a+Number(d)*(size+1-i),0);const digit=(sum*10)%11;s+=digit===10?0:digit;}return s;};
+  const today=new Intl.DateTimeFormat('en-CA',{timeZone:'America/Fortaleza',year:'numeric',month:'2-digit',day:'2-digit'}).format(new Date());
+  for(const [engine,name]of [[chromium,'Chromium'],[webkit,'WebKit']]){
+    const browser=await engine.launch({headless:true});try{for(const width of [1280,390,320]){
+      const context=await browser.newContext({viewport:{width,height:844},isMobile:width<500,hasTouch:width<500}),page=await context.newPage(),errors=[],writes=[];
+      page.on('pageerror',error=>errors.push(error.message));page.on('request',r=>{if(r.url().includes('/api/')&&r.method()!=='GET')writes.push(r.url());});
+      const cpf=cpfFor(++serial),person=`Assistente Teste ${name} ${width===1280?'Desktop':width===390?'Celular':'Compacto'}`;
+      await page.goto(url+'#leitura');
+      const message=`Rede: Hipermarket\n*Região:* LOJA VILA UNIÃO\n*Função:* Repositor de mercearia\n*Horário:* 06:00 às 14:20\n*Data de início:* ${today.split('-').reverse().join('/')}\n*Quantidade de dias:* 2 dias\n\n*${person}*\nCPF: ${cpf}`;
+      await page.locator('#reading-text').fill(message);await page.locator('#reading-submit').click();await page.locator('.reading-preview').waitFor().catch(async error=>{console.log('Diagnóstico assistente:',await page.locator('#reading-feedback').textContent(),errors);throw error;});
+      assert.match(await page.locator('#reading-result-items').innerText(),/Vila União/);assert.equal(writes.length,0,'Interpretar não grava nem pendência');assert.equal((await api('GET','/api/diaristas')).filter(w=>w.cpf===cpf).length,0);
+      await page.locator('#reading-text').fill('Corrigir horário para 07:00 às 15:20');await page.locator('#reading-submit').click();await page.waitForFunction(()=>document.querySelector('.reading-preview')?.textContent.includes('07:00 às 15:20'));assert.equal(writes.length,0);
+      await page.locator('#reading-cancel').click();assert.equal(writes.length,0,'Cancelar não altera dados');
+      await page.locator('#reading-text').fill(message);await page.locator('#reading-submit').click();await page.locator('.reading-preview').waitFor();await page.locator('#reading-confirm').click();await page.locator('.reading-item.saved').waitFor();
+      const worker=(await api('GET','/api/diaristas')).find(w=>w.cpf===cpf),scales=(await api('GET','/api/escalas')).filter(s=>s.diarista_id===worker.id);assert.equal(scales.length,2);assert.equal((await api('GET','/api/pedidos')).find(o=>o.id===scales[0].pedido_id).situacao,'confirmado');
+      const send=async text=>{await page.locator('#reading-text').fill(text);await page.locator('#reading-submit').click();await page.locator('.reading-preview').waitFor();};
+      const countBefore=writes.length;await send(`Marcar presença\nCPF: ${cpf}\nData: hoje\nPedido: ${scales[0].pedido_id}`);assert.equal(writes.length,countBefore);await page.locator('#reading-text').fill('está certo');await page.locator('#reading-submit').click();await page.locator('.reading-item.saved').waitFor();assert.equal((await api('GET','/api/escalas')).find(s=>s.id===scales[0].id).status,'presente');assert.equal((await api('GET',`/api/diaristas/${worker.id}/diarias`)).length,1);
+      await send(`Marcar falta\nCPF: ${cpf}\nData: hoje\nPedido: ${scales[0].pedido_id}`);assert.equal(await page.locator('#reading-confirm').isEnabled(),false,'Falta sem motivo pede complemento');
+      await page.locator('.reading-preview').getByRole('button',{name:'✎ Corrigir',exact:true}).click();await page.locator('#reading-text').fill(`Marcar falta\nCPF: ${cpf}\nData: hoje\nPedido: ${scales[0].pedido_id}\nMotivo: Correção controlada de teste`);await page.locator('#reading-submit').click();await page.locator('#reading-confirm').click();await page.locator('.reading-item.saved').waitFor();assert.equal((await api('GET',`/api/diaristas/${worker.id}/diarias`)).length,0,'Falta remove pagamento e faturamento de presença');
+      await api('PATCH',`/api/pedidos/${scales[0].pedido_id}/escalas/${scales[0].id}`,{status:'escalada'});
+      await send(`Confirmar que vai\nCPF: ${cpf}\nData: hoje\nPedido: ${scales[0].pedido_id}`);
+      await api('PATCH',`/api/operacao/escalas/${scales[0].id}`,{acao:'confirmacao',confirmacao:'confirmou'});await page.locator('#reading-confirm').click();await page.locator('.reading-item.error').waitFor();assert.match(await page.locator('#reading-result-items').innerText(),/mudou depois da leitura/);
+      await send(`Completar cadastro\nCPF: ${cpf}\nBairro: Meireles\nCEP: 60165-000`);const beforeUpdate=(await api('GET','/api/diaristas')).find(w=>w.id===worker.id);assert.equal(beforeUpdate.bairro,'');await page.locator('#reading-confirm').click();await page.locator('.reading-item.saved').waitFor();const updated=(await api('GET','/api/diaristas')).find(w=>w.id===worker.id);assert.equal(updated.bairro,'Meireles');assert.equal(updated.cpf,cpf);assert.deepEqual(updated.disponibilidade,[]);
+      const queryWrites=writes.length;await page.locator('#reading-text').fill('Consultar financeiro de hoje');await page.locator('#reading-submit').click();await page.waitForFunction(()=>document.querySelector('#reading-result-items')?.textContent.includes('faturamento previsto'));assert.equal(writes.length,queryWrites,'Consulta não altera dados');
+      await page.locator('#reading-text').fill('Apagar todos os pedidos');await page.locator('#reading-submit').click();await page.locator('.reading-preview').waitFor();assert.equal(await page.locator('#reading-confirm').isEnabled(),false,'Comando não suportado não é executado');
+      assert.deepEqual(errors,[]);assert.ok(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth+2));
+      const finalReplacement=name==='WebKit'&&width===320;
+      if(finalReplacement){const substitute=await api('POST','/api/diaristas',{nome:'Substituto Assistente Teste',cpf:cpfFor(++serial)});await send(`Registrar desistência\nCPF: ${cpf}\nData: hoje\nPedido: ${scales[0].pedido_id}\nMotivo: Não pode comparecer hoje`);await page.locator('#reading-confirm').click();await page.locator('.reading-item.saved').waitFor();assert.equal((await api('GET','/api/escalas')).find(s=>s.id===scales[0].id).status,'desistiu');await send(`Substituir\nCPF: ${cpf}\nData: hoje\nPedido: ${scales[0].pedido_id}\nSubstituto: ${substitute.nome}\nMotivo: Não pode comparecer hoje`);assert.equal(await page.locator('#reading-confirm').isEnabled(),false);await page.getByText('Confirmei a disponibilidade do substituto',{exact:true}).click();await page.locator('#reading-confirm').click();await page.locator('.reading-item.saved').waitFor();assert.ok((await api('GET','/api/escalas')).some(s=>s.pedido_id===scales[0].pedido_id&&s.diarista_id===substitute.id));console.log('WebKit 320: desistência e substituição pelo assistente preservam histórico OK');}
+      await page.waitForLoadState('networkidle');if(!finalReplacement){for(const scale of scales)await api('DELETE',`/api/pedidos/${scale.pedido_id}/escalas/${scale.id}`);await api('DELETE',`/api/pedidos/${scales[0].pedido_id}`);await api('DELETE',`/api/diaristas/${worker.id}`);}
+      console.log(`${name} ${width}: assistente interpreta sem gravar, corrige, cancela, confirma, registra 2 escalas, presença/falta, conflito e consulta OK`);await context.close();
+    }}finally{await browser.close();}
+  }
+}
+
 try {
   await ready();
+  if(process.env.DIRECT_ASSISTANT_ONLY==='1'){await runAssistantFlow();}
+  else if(process.env.DIRECT_REMAINING_ONLY==='1'){await runLinkedReading();await runOrderFilters();await runScaleLifecycle();await runRecentOrderAttendance();await runAssistantFlow();}
+  else {
   await runBrowser(chromium, 'Chromium');
   await runBrowser(webkit, 'WebKit');
   await runRoleNavigation();
@@ -710,6 +751,8 @@ try {
   await runOrderFilters();
   await runScaleLifecycle();
   await runRecentOrderAttendance();
+  await runAssistantFlow();
+  }
 } finally {
   child.kill();
   await rm(work, { recursive: true, force: true });

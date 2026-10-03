@@ -19,7 +19,7 @@
     }
     return '';
   };
-  const nameLabels = ['Nome Completo', 'Nome do operador', 'Nome da diarista', 'Nome', 'Diarista escalado'];
+  const nameLabels = ['Nome Completo', 'Nome do operador', 'Nome da diarista', 'Nome', 'Diarista', 'Diarista escalado', 'Escalado'];
   const cpfLine = line => /^\s*\*?\s*CPF\s*\*?\s*:/i.test(line);
   function plainName(line) {
     const value = String(line || '').trim().replace(/^[*_]+|[\\*_]+$/g, '').trim();
@@ -29,7 +29,7 @@
   }
   function identityNames(text) {
     const lines = text.split('\n').map(line => line.trim()).filter(Boolean);
-    const names = lines.filter(line => /^\s*\*?\s*(?:nome completo|nome do operador|nome da diarista|nome|diarista escalado)\s*\*?\s*:/i.test(line))
+    const names = lines.filter(line => /^\s*\*?\s*(?:nome completo|nome do operador|nome da diarista|nome|diarista|diarista escalado|escalado)\s*\*?\s*:/i.test(line))
       .map(line => field(line, nameLabels)).filter(Boolean);
     for (let i = 1; i < lines.length; i++) {
       if (cpfLine(lines[i])) { const name = plainName(lines[i - 1]); if (name) names.push(name); }
@@ -54,9 +54,9 @@
       const line = lines[index];
       const bareName = plainName(line);
       const next = bareName ? lines.slice(index + 1).find(value => value.trim()) : '';
-      const startsWorker = /^\s*\*?\s*(?:nome completo|nome do operador|nome da diarista|nome|diarista escalado)\s*\*?\s*:/i.test(line) || (!!bareName && cpfLine(next || ''));
+      const startsWorker = /^\s*\*?\s*(?:nome completo|nome do operador|nome da diarista|nome|diarista|diarista escalado|escalado)\s*\*?\s*:/i.test(line) || (!!bareName && cpfLine(next || ''));
       const startsOrder = /^\s*\*?\s*(?:loja|unidade|regi[aã]o|rede|supermercado)\s*\*?\s*:/i.test(line);
-      const hasWorker = current.some(item => /^\s*\*?\s*(?:nome completo|nome do operador|nome da diarista|nome|diarista escalado|cpf)\s*\*?\s*:/i.test(item));
+      const hasWorker = current.some(item => /^\s*\*?\s*(?:nome completo|nome do operador|nome da diarista|nome|diarista|diarista escalado|escalado|cpf)\s*\*?\s*:/i.test(item));
       const hasStore = current.some(item => /^\s*\*?\s*(?:loja|unidade|regi[aã]o)\s*\*?\s*:/i.test(item));
       const hasNetwork = current.some(item => /^\s*\*?\s*(?:rede|supermercado)\s*\*?\s*:/i.test(item));
       const hasDetails = current.some(item => /^\s*\*?\s*(?:hor[aá]rio|fun[cç][aã]o|setor|data(?: de in[ií]cio)?)\s*\*?\s*:/i.test(item));
@@ -72,7 +72,7 @@
   }
   function classify(text) {
     const value = normal(text);
-    const worker = /\bcpf\b/.test(value) || /\bnome completo\b/.test(value);
+    const worker = /\bcpf\b/.test(value) || /^\s*\*?\s*(?:nome(?: completo)?|diarista(?: escalado)?)\s*\*?\s*:/im.test(text);
     const order = /^\s*\*?\s*(?:loja|unidade|regi[aã]o|supermercado|rede)\s*\*?\s*:/im.test(text) && /\bhorario\b|\bdata\b|\bfuncao\b|\bsetor\b/.test(value);
     return order ? 'pedido' : worker ? 'diarista' : 'indefinido';
   }
@@ -232,7 +232,15 @@
     }
     return textKey(item.texto);
   }
+  function prepareText(text) {
+    // WhatsApp labels may share a line, use '=' or '-' and contain emphasis.
+    return String(text || '').replace(/\r/g, '').replace(/\\(?=\n|$)/g, '')
+      .replace(/[;|]\s*(?=\*?(?:CPF|Nome|Rede|Loja|Região|Função|Horário|Data|Quantidade|Bairro|CEP)\b)/gi, '\n')
+      .replace(/([\p{L}\p{M}*])\s+(?=\*?CPF\*?\s*[:=])/gu, '$1\n')
+      .replace(/^(\s*\*?(?:Nome(?: Completo)?|Diarista(?: escalado)?|CPF|Rede|Loja|Região|Função|Horário|Data(?: de início)?|Quantidade de dias|Bairro|CEP)\*?)\s*[=–-]\s*/gim, '$1: ');
+  }
   function parse(text, context = {}) {
+    text = prepareText(text);
     const today = context.today || new Intl.DateTimeFormat('en-CA', { timeZone: 'America/Fortaleza', year: 'numeric', month: '2-digit', day: '2-digit' }).format(new Date());
     return split(text).map(part => {
       const kind = classify(part);
@@ -256,5 +264,5 @@
       return item;
     });
   }
-  return { parse, split, classify, range, validCpf, fingerprint, textKey };
+  return { parse, split, classify, range, validCpf, fingerprint, textKey, prepareText };
 });

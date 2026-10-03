@@ -1,6 +1,8 @@
 (() => {
   const pick = selector => document.querySelector(selector);
   const parser = window.DirectReadingParser;
+  const assistant = window.DirectReadingAssistant;
+  let review = null, applying = false;
   const maxFileBytes = 10 * 1024 * 1024;
   const tesseractUrl = 'https://cdn.jsdelivr.net/npm/tesseract.js@6.0.1/dist/tesseract.min.js';
   const workerUrl = 'https://cdn.jsdelivr.net/npm/tesseract.js@6.0.1/dist/worker.min.js';
@@ -96,11 +98,11 @@
   }
   const body = value => JSON.stringify(value);
   async function getData() {
-    const [workers, orders, stores, drafts, tariffs] = await Promise.all([
+    const [workers, orders, stores, drafts, tariffs, scales] = await Promise.all([
       request('/api/diaristas'), request('/api/pedidos'), request('/api/lojas'),
-      request('/api/leituras-pendentes'), request('/api/tarifas').catch(() => ({ setores: [] })),
+      request('/api/leituras-pendentes'), request('/api/tarifas').catch(() => ({ setores: [] })), request('/api/escalas'),
     ]);
-    return { workers, orders, stores, drafts, sectors: (tariffs.setores || []).map(item => item.setor) };
+    return { workers, orders, stores, drafts, tariffs, scales, today:orderToday(), sectors: (tariffs.setores || []).map(item => item.setor) };
   }
   function tag(label, className) {
     const element = document.createElement('span');
@@ -114,7 +116,7 @@
     if(item.dados?.diarista_escalado) card.dataset.assignmentKey=item.dados.leitura_chave_operacao || parser.textKey(item.texto);
     const head = document.createElement('div'); head.className = 'reading-item-head';
     const title = document.createElement('strong');
-    title.textContent = item.tipo === 'diarista' ? (item.dados.nome || 'Diarista sem nome') : item.tipo === 'pedido' ? [item.dados.supermercado, item.dados.unidade].filter(Boolean).join(' · ') || 'Pedido sem loja' : 'Tipo não identificado';
+    title.textContent = item.tipo === 'diarista' ? (item.dados.nome || 'Diarista sem nome') : item.tipo === 'pedido' ? [item.dados.supermercado, item.dados.unidade].filter(Boolean).join(' · ') || 'Pedido sem loja' : ['comando','atualizacao'].includes(item.tipo)?assistant.describe(item)[0][1]:'Tipo não identificado';
     head.append(title, tag(state === 'saved' ? 'Registrado' : state === 'duplicate' ? 'Já existente' : state === 'pending' ? 'Pendente' : 'Erro', 'reading-state'));
     const detail = document.createElement('p'); detail.textContent = description;
     card.append(head, detail);
@@ -129,7 +131,7 @@
     if (item.tipo !== 'indefinido') {
       const detail = document.createElement('details'); detail.className = 'reading-identified';
       const summary = document.createElement('summary'); summary.textContent = 'Dados identificados';
-      const values = document.createElement('pre'); values.textContent = JSON.stringify({ ...item.dados, leitura_chave_operacao: undefined }, null, 2);
+      const values = fields(item);
       detail.append(summary, values); card.append(detail);
     }
     if (item.tipo === 'diarista' && ['saved','duplicate'].includes(state)) {
@@ -207,7 +209,7 @@
     };
     if(item.faltando.length) return preserve(`Falta confirmar: ${item.faltando.join(', ')}.`);
     try {
-      const saved=await saveLinked(item,existing,false,previous?.id || existing.reviewPendingId);
+      const saved=await saveLinked(item,existing,true,previous?.id || existing.reviewPendingId);
       if(saved.requires_registration) return preserve(`${saved.nome} ainda não tem cadastro. Confira o nome e CPF em Dados identificados e clique abaixo para cadastrar e salvar o pedido com a escala.`,true,true);
       if(!existing.workers.has(item.dados.diarista_escalado.cpf)) existing.workers.add(item.dados.diarista_escalado.cpf);
       if(saved.pedido_criado) existing.orderRows.push({...item.dados,id:saved.pedido_id});
@@ -257,65 +259,132 @@
       return { state: 'error', description: `Falha ao registrar: ${error.message}` };
     }
   }
-  async function submit(event) {
-    event.preventDefault();
-    const typed = pick('#reading-text').value.trim();
-    const files = [...pick('#reading-file').files];
-    if (!typed && !files.length) return feedback('Cole uma mensagem ou anexe fotos e PDFs.', true);
-    const button = pick('#reading-submit'); button.disabled = true; button.textContent = 'Lendo e registrando...';
-    feedback('Buscando cadastros, pedidos e lojas...');
-    const resultArea = pick('#reading-result'); resultArea.hidden = false;
-    const list = pick('#reading-result-items'); list.replaceChildren();
-    const counts = { saved: 0, pending: 0, duplicate: 0, error: 0 };
-    const sourceReport = [];
-    try {
-      const data = await getData();
-      const existing = {
-        workers: new Set(data.workers.map(row => row.cpf)),
-        orders: new Set(data.orders.map(orderKey)),
-        drafts: new Set(data.drafts.filter(row => row.status === 'pendente').map(row => row.chave)),
-        draftRecords: data.drafts, orderRows:data.orders, reviewPendingId,
-      };
-      const sources = [];
-      if (typed) sources.push({ name: 'Texto colado', text: typed });
-      for (const file of files) {
-        try { lastOcrConfidence = 100; sources.push({ name: file.name, text: await fileText(file), confidence: lastOcrConfidence }); }
-        catch (error) { counts.error++; sourceReport.push(`${file.name}: erro de leitura`); list.append(resultCard({ tipo: 'indefinido', dados: {}, fonte: file.name }, 'error', error.message)); }
+
+  function fields(item) {
+    const grid=document.createElement('dl');grid.className='reading-review-fields';
+    for(const [label,value] of assistant.describe(item)) {if(value==null||value==='')continue;const cell=document.createElement('div'),dt=document.createElement('dt'),dd=document.createElement('dd');dt.textContent=label;dd.textContent=String(value);cell.append(dt,dd);grid.append(cell);}
+    return grid;
+  }
+  function chat(who,text){
+    const row=document.createElement('div');row.className=`reading-bubble ${who==='Você'?'user':'assistant'}`;
+    const label=document.createElement('strong'),content=document.createElement('p');label.textContent=who;content.textContent=text;row.append(label,content);
+    const log=pick('#reading-chat');log.append(row);while(log.children.length>12)log.firstElementChild.remove();
+  }
+  function reviewCard(item,index){
+    const card=resultCard(item,'pending',item.faltando.length?`Preciso que você confirme: ${item.faltando.join(' ')}`:'Entendi estas informações. Confira e confirme abaixo.');
+    card.classList.add('reading-preview');card.dataset.reviewIndex=index;
+    card.querySelector('.reading-state').textContent=item.faltando.length?'Completar':'Aguardando confirmação';
+    card.querySelector('details')?.remove();card.insertBefore(fields(item),card.querySelector('p'));
+    if(item.tipo==='pedido'&&item.dados.diarista_escalado&&!review.data.workers.some(w=>w.cpf===item.dados.diarista_escalado.cpf)){
+      const note=document.createElement('p');note.textContent='Essa pessoa ainda não tem cadastro. Ao confirmar, será criada apenas com nome e CPF e escalada nos dias deste pedido.';card.append(note);
+    }
+    const actions=document.createElement('div');actions.className='reading-item-actions';
+    const edit=document.createElement('button');edit.type='button';edit.className='button button-outline';edit.textContent='✎ Corrigir';edit.addEventListener('click',()=>{
+      if(applying)return;pick('#reading-text').value=item.texto;review.editIndex=index;pick('#reading-file').value='';showFiles();
+      feedback('Edite os dados da mensagem e envie novamente. A revisão será atualizada sem salvar.');pick('#reading-text').focus();pick('#reading-form').scrollIntoView({block:'center',behavior:'smooth'});
+    });actions.append(edit);
+    if(item.faltando.length&&!item.commandOnly){const save=document.createElement('button');save.type='button';save.className='button button-quiet';save.textContent='Guardar pendência';save.addEventListener('click',async()=>{
+      save.disabled=true;try{await request('/api/leituras-pendentes',{method:'POST',headers:{'Content-Type':'application/json'},body:body({...item,chave:`rascunho:${parser.textKey(item.texto)}`})});item.guarded=true;save.textContent='Pendência guardada';await loadPending();}catch(error){feedback(error.message,true);save.disabled=false;}
+    });actions.append(save);}
+    if(item.tipo==='comando'&&item.dados.acao==='substituir'){
+      const label=document.createElement('label'),input=document.createElement('input');label.className='reading-availability';input.type='checkbox';input.checked=!!item.availability;
+      input.addEventListener('change',()=>{item.availability=input.checked;updateReview();});label.append(input,' Confirmei a disponibilidade do substituto');card.append(label);
+    }
+    card.append(actions);return card;
+  }
+  function updateReview(){
+    const actionable=review?.items.filter(i=>!i.applied&&!i.faltando.length&&i.tipo!=='indefinido'&&i.tipo!=='consulta')||[];
+    const missing=review?.items.filter(i=>!i.applied&&i.faltando.length).length||0;
+    pick('#reading-result-summary').textContent=`${actionable.length} ação(ões) pronta(s) · ${missing} informação(ões) para completar. Nada é salvo antes da confirmação.`;
+    pick('#reading-review-actions').hidden=!review;
+    pick('#reading-confirm').disabled=applying||!actionable.length||actionable.some(i=>i.tipo==='comando'&&i.dados.acao==='substituir'&&!i.availability);
+    pick('#reading-confirm').textContent=missing?'Confirmar ações completas':'Confirmar e aplicar';
+  }
+  async function executeCommand(item,data){
+    if(window.directRemote&&!['admin','operacao'].includes(window.directRemote.role))throw Error('Seu perfil não pode alterar escalas.');
+    const d=item.dados,current=data.scales.find(s=>s.id===d.escala_id);
+    if(!current||assistant.stamp(current)!==d.snapshot)throw Error('A escala mudou depois da leitura. Envie a mensagem novamente para conferir a versão atual.');
+    let route=`/api/pedidos/${d.pedido_id}/escalas/${d.escala_id}`,method='PATCH',payload={status:d.acao,motivo:d.motivo};
+    if(d.acao==='confirmou'){route=`/api/operacao/escalas/${d.escala_id}`;payload={acao:'confirmacao',confirmacao:'confirmou'};}
+    if(d.acao==='substituir'){route+='/substituir';method='POST';payload={diarista_id:d.substituto_id,motivo:d.motivo,disponibilidade_confirmada:item.availability===true};}
+    await request(route,{method,headers:{'Content-Type':'application/json'},body:body(payload)});
+    return {state:'saved',description:`${assistant.describe(item)[0][1]} · ${d.pessoa} · ${d.data.split('-').reverse().join('/')} · pedido #${d.pedido_id}.`,orderId:d.pedido_id};
+  }
+  async function confirmReview(){
+    if(applying||!review||pick('#reading-confirm').disabled)return;
+    if(window.directRemote&&!['admin','operacao'].includes(window.directRemote.role))return feedback('Seu perfil não pode aplicar ações neste assistente.',true);
+    applying=true;pick('#reading-submit').disabled=true;pick('#reading-cancel').disabled=true;pick('#reading-text').disabled=true;updateReview();
+    const current=review;let saved=0,failed=0;
+    try{
+      const data=await getData();const existing={workers:new Set(data.workers.map(w=>w.cpf)),orders:new Set(data.orders.map(orderKey)),drafts:new Set(data.drafts.filter(r=>r.status==='pendente').map(r=>r.chave)),draftRecords:data.drafts,orderRows:data.orders,reviewPendingId:current.pendingId};
+      for(let index=0;index<current.items.length;index++){
+        const item=current.items[index];if(item.applied||item.faltando.length||['indefinido','consulta'].includes(item.tipo))continue;
+        let outcome;
+        try{if(item.tipo==='atualizacao'){
+            const currentWorker=data.workers.find(w=>w.id===item.dados.diarista_id);
+            if(!currentWorker||JSON.stringify(currentWorker)!==item.dados.snapshot)throw Error('O cadastro mudou depois da leitura. Envie a mensagem novamente para revisar.');
+            await request(`/api/diaristas/${currentWorker.id}`,{method:'PUT',headers:{'Content-Type':'application/json'},body:body({...currentWorker,...item.dados.changes})});
+            outcome={state:'saved',description:`Cadastro de ${currentWorker.nome} atualizado. Demais informações preservadas.`};
+          }else outcome=item.tipo==='comando'?await executeCommand(item,data):await processItem(item,existing);}catch(error){outcome={state:'error',description:error.message};}
+        if(['saved','duplicate'].includes(outcome.state)){item.applied=true;saved++;}else failed++;
+        const undo=outcome.state==='saved'&&['pedidos','diaristas'].includes(outcome.entity)&&(!window.directRemote||outcome.entity==='pedidos'||window.directRemote.role==='admin')?async()=>{await request(`/api/${outcome.entity}/${outcome.id}`,{method:'DELETE'});await Promise.all([load(),loadOrders(),loadPending()]);}:null;
+        const card=resultCard(item,outcome.state,outcome.description,undo,outcome);
+        if(outcome.orderId&&item.tipo==='comando'){const view=document.createElement('button');view.type='button';view.className='button button-outline';view.textContent='Ver pedido';view.addEventListener('click',async()=>{location.hash='#pedidos';await loadOrders();const order=orders.find(o=>o.id===outcome.orderId);if(order)await openOrderDetail(order);});card.append(view);}
+        const old=pick(`#reading-result-items [data-review-index="${index}"]`);card.dataset.reviewIndex=index;if(old)old.replaceWith(card);
       }
-      for (const source of sources) {
-        const before = { ...counts };
-        const parts = parser.parse(source.text, { stores: data.stores, sectors: data.sectors, workers:data.workers, today: orderToday() });
-        if (!parts.length) { counts.error++; sourceReport.push(`${source.name}: nenhum registro reconhecido`); list.append(resultCard({ tipo: 'indefinido', dados: {}, fonte: source.name, confianca: source.confidence ?? null }, 'error', `${source.name}: nenhum texto reconhecido. Envie uma imagem mais nítida ou um PDF com melhor resolução.`)); continue; }
-        for (const item of parts) {
-          item.fonte = source.name;
-          item.confianca = source.confidence ?? null;
-          if (source.confidence < 75) {
-            item.faltando.push('Conferir dados reconhecidos na imagem');
-            const advice = source.confidence < 45
-              ? 'A leitura ficou pouco legível. Fotografe novamente com boa luz, sem reflexos e com o documento inteiro enquadrado; confira todos os campos antes de registrar.'
-              : 'Confira nomes, números, datas e horários antes de registrar.';
-            item.avisos = [...(item.avisos || []), `Leitura de ${source.name}: confiança de ${Math.round(source.confidence)}%. ${advice}`];
-          }
-          feedback(`Registrando ${source.name} · ${counts.saved + counts.pending + counts.duplicate + counts.error + 1} registro(s) processado(s)...`);
-          const outcome = await processItem(item, existing);
-          counts[outcome.state]++;
-          const undo = outcome.state === 'saved' && ['pedidos','diaristas'].includes(outcome.entity) && (outcome.entity === 'pedidos' || !window.directRemote || window.directRemote.role === 'admin') ? async () => {
-            await request(`/api/${outcome.entity}/${outcome.id}`, { method: 'DELETE' });
-            await Promise.all([load(), loadOrders(), loadPending()]);
-          } : null;
-          list.append(resultCard(item, outcome.state, outcome.description, undo, outcome));
+      const refreshed=await Promise.allSettled([load(),loadOrders(),loadPending(),...(!window.directRemote||['admin','financeiro'].includes(window.directRemote.role)?[loadFinance()]:[])]);
+      const refreshError=refreshed.some(r=>r.status==='rejected');
+      chat('Direct',`${saved} ação(ões) concluída(s).${failed?' '+failed+' ação(ões) não concluída(s); confira os erros. As ações concluídas não serão repetidas.':''}${refreshError?' Alguns painéis não atualizaram. Recarregue para conferir.':''}`);
+      feedback(failed?'Confira as ações que falharam. Corrija a mensagem antes de tentar novamente.':'Confirmado. Cadastros, pedidos, escalas e financeiro atualizados.',!!failed);
+      if(current.items.every(i=>i.applied||i.guarded)){review=null;pick('#reading-review-actions').hidden=true;}
+    }catch(error){feedback(`Não foi possível aplicar: ${error.message}`,true);}
+    finally{applying=false;pick('#reading-submit').disabled=false;pick('#reading-cancel').disabled=false;pick('#reading-text').disabled=false;if(review)updateReview();else updateResultSummary();}
+  }
+  async function answerQuery(item,data){
+    const kind=item.dados.consulta;let message='',target='#inicio';
+    if(kind==='pedidos'){message=`${data.orders.filter(o=>o.situacao!=='cancelado').length} pedido(s) ativo(s). ${data.scales.filter(s=>s.status==='presente').length} presença(s) e ${data.scales.filter(s=>s.status==='falta').length} falta(s) registradas.`;target='#pedidos';}
+    if(kind==='diaristas'){message=`${data.workers.length} pessoa(s) cadastrada(s), ${data.workers.filter(w=>w.bloqueada).length} bloqueada(s).`;target='#diaristas';}
+    if(kind==='lojas'){const matching=data.stores.filter(s=>assistant.norm(item.texto).includes(assistant.norm(s.nome))||assistant.norm(item.texto).includes(assistant.norm(s.rede)));message=(matching.length?matching.slice(0,8).map(s=>`${s.rede} · ${s.nome}: ${s.endereco||[s.logradouro,s.numero,s.bairro,s.cidade].filter(Boolean).join(', ')}`).join('\n'):`${data.stores.length} loja(s) em ${new Set(data.stores.map(s=>s.rede)).size} rede(s).`);target='#redes';}
+    if(kind==='pendencias'){message=`${data.drafts.filter(r=>r.status==='pendente').length} leitura(s) para completar. ${data.scales.filter(s=>s.status==='escalada'&&s.confirmacao!=='confirmou').length} escala(s) aguardando confirmação da pessoa. Veja todas as pendências na aba própria.`;target='#crm';}
+    if(kind==='financeiro'){
+      if(window.directRemote&&!['admin','financeiro'].includes(window.directRemote.role)){message='Seu perfil não tem acesso ao financeiro.';target=null;}
+      else{const [extras,contracts]=await Promise.all([request('/api/custos-extras'),request('/api/contratos')]);const grouped=data.scales.reduce((g,s)=>((g[s.pedido_id]||=[]).push(s),g),{});const period=assistant.norm(item.texto).includes('hoje')?window.DirectForecast.periodRange('day',data.today):assistant.norm(item.texto).includes('semana')?window.DirectForecast.periodRange('week',data.today):'';const totals=window.DirectForecast.calculate(data.orders,grouped,{...data.tariffs,extras,contratos:contracts},period);const money=n=>new Intl.NumberFormat('pt-BR',{style:'currency',currency:'BRL'}).format(n/100);message=`${period?'Período solicitado':'Todos os períodos'}: faturamento previsto ${money(totals.expected.revenue)}, custo de diárias previsto ${money(totals.expected.cost)}, lucro bruto previsto ${money(totals.expected.margin)}. Presenças confirmadas: ${totals.present}; faturamento ${money(totals.confirmed.revenue)}, custo ${money(totals.confirmed.cost)}, lucro bruto ${money(totals.confirmed.margin)}.${totals.missingCost||totals.missingRevenue?' Atenção: há tarifas não configuradas; os valores estão incompletos.':''}`;target='#financeiro';}
+    }
+    chat('Direct',message);const card=document.createElement('article');card.className='reading-item';const p=document.createElement('p');p.textContent=message;card.append(p);if(target){const a=document.createElement('a');a.href=target;a.className='button button-outline';a.textContent='Abrir aba';card.append(a);}pick('#reading-result-items').append(card);
+  }
+  async function submit(event){
+    event.preventDefault();if(applying)return;
+    let typed=pick('#reading-text').value.trim();const files=[...pick('#reading-file').files];
+    if(!typed&&!files.length)return feedback('Escreva uma mensagem ou anexe fotos e PDFs.',true);
+    if(!files.length&&/^(ok|sim|esta certo|tudo certo|confirmar|pode salvar|pode aplicar)$/.test(assistant.norm(typed))){chat('Você',typed);if(review)return confirmReview();return feedback('Não há uma revisão pronta para confirmar. Envie as informações primeiro.',true);}
+    const correcting=review&&review.items.length===1?assistant.correction(typed,review.items[0].texto)||(review.editIndex==null&&review.items[0].faltando.length?assistant.completion(typed,review.items[0].texto):null):null;
+    if(correcting)typed=correcting;
+    const button=pick('#reading-submit');button.disabled=true;button.textContent='Interpretando...';chat('Você',typed||`Anexos: ${files.map(f=>f.name).join(', ')}`);
+    feedback('Conferindo cadastros, pedidos, lojas e escalas...');const area=pick('#reading-result');area.hidden=false;pick('#reading-result-filter').value='todos';
+    const previous=review;review=null;pick('#reading-review-actions').hidden=true;
+    try{
+      const data=await getData(),sources=[],items=[];if(typed)sources.push({name:'Sua mensagem',text:typed});
+      for(const file of files){try{lastOcrConfidence=100;sources.push({name:file.name,text:await fileText(file),confidence:lastOcrConfidence});}catch(error){items.push({tipo:'indefinido',dados:{},texto:'',fonte:file.name,faltando:[error.message],avisos:[]});}}
+      for(const source of sources){
+        const parts=assistant.plan(source.text,data);if(!parts.length)parts.push({tipo:'indefinido',dados:{},texto:source.text,faltando:['Nenhum texto reconhecido. Envie uma foto mais nítida.'],avisos:[]});
+        for(const item of parts){item.fonte=source.name;item.confianca=source.confidence??null;
+          if(source.confidence<75){item.avisos=[...(item.avisos||[]),`Leitura de ${source.name}: confiança ${Math.round(source.confidence)}%. ${source.confidence<45?'Fotografe novamente com boa luz e sem reflexos.':'Confira nomes, CPF, datas e horários.'}`];item.faltando.push('Confira a leitura pouco legível e corrija o texto antes de confirmar.');}
+          if(!['pedido','diarista','indefinido'].includes(item.tipo))item.commandOnly=true;
+          if(item.tipo==='pedido'){item.dados.leitura_chave_operacao=crypto.randomUUID();item.dados.chave_operacao=crypto.randomUUID();}
+          items.push(item);
         }
-        sourceReport.push(`${source.name}: ${counts.saved - before.saved} salvo(s), ${counts.pending - before.pending} em revisão, ${counts.duplicate - before.duplicate} duplicado(s), ${counts.error - before.error} erro(s)`);
       }
-      pick('#reading-result-summary').textContent = `${counts.saved} registrado(s) · ${counts.pending} pendente(s) · ${counts.duplicate} já existente(s) · ${counts.error} erro(s).`;
-      pick('#reading-result-sources').textContent = sourceReport.join(' | ');
-      pick('#reading-result-filter').value = 'todos';
-      feedback(counts.error ? 'Processamento concluído com erros. Confira o resultado abaixo.' : 'Processamento concluído. Confira o resultado abaixo.', !!counts.error);
-      await Promise.all([load(), loadOrders(), loadPending()]);
-      reviewPendingId = null;
-      resultArea.scrollIntoView({ behavior: 'smooth', block: 'start' });
-    } catch (error) { feedback(`Não foi possível concluir a importação: ${error.message}`, true); }
-    finally { button.disabled = false; button.textContent = '✦ Ler e registrar tudo'; }
+      if(previous?.editIndex!=null&&items.length===1){const index=previous.editIndex;previous.items[index]=items[0];delete previous.editIndex;review={...previous,data};}
+      else review={items,data,pendingId:reviewPendingId};
+      pick('#reading-result-items').replaceChildren();
+      for(let index=0;index<review.items.length;index++){const item=review.items[index];if(item.tipo==='consulta'){await answerQuery(item,data);item.applied=true;}else if(!item.applied)pick('#reading-result-items').append(reviewCard(item,index));}
+      pick('#reading-result-sources').textContent=sources.map(s=>s.name).join(' · ');
+      if(review.items.every(i=>i.applied)){review=null;pick('#reading-result-summary').textContent='Consulta concluída. Nenhuma informação foi alterada.';feedback('Consulta concluída.');}
+      else{updateReview();const missing=review.items.filter(i=>i.faltando.length);chat('Direct',missing.length?`Preciso completar ${missing.length} item(ns). ${missing.map(i=>i.faltando.join(' ')).join('\n')} Use Corrigir para ajustar. As outras ações completas podem ser confirmadas separadamente.`:'Confira os dados abaixo. Se estiverem corretos, clique em Confirmar e aplicar ou envie “está certo”.');feedback('Revise antes de confirmar. Nenhuma alteração foi feita.');}
+      reviewPendingId=null;pick('#reading-text').value='';pick('#reading-file').value='';showFiles();
+      area.scrollIntoView({behavior:'smooth',block:'start'});
+    }catch(error){review=null;pick('#reading-review-actions').hidden=true;feedback(`Não consegui interpretar: ${error.message}. Nenhuma ação foi aplicada.`,true);if(review)updateReview();}
+    finally{button.disabled=false;button.textContent='✦ Enviar mensagem';}
   }
   async function fillDiarista(d, pendingId) {
     try {
@@ -368,7 +437,7 @@
   function pendingCard(item) {
     const linked=!!item.dados?.diarista_escalado;
     const canConfirm=linked && (item.faltando || []).every(text=>/^(?:Confirmar cadastro|.*ainda não tem cadastro|Não foi possível salvar pedido)/.test(text));
-    const card = resultCard({ ...item, dados: item.dados }, 'pending', `Falta confirmar: ${(item.faltando || []).join(', ')}.`,null,linked?{canConfirm,needsRegistration:/ainda não tem cadastro/.test((item.faltando||[]).join(' ')),pendingId:item.id}:null);
+    const card = resultCard({ ...item, dados: item.dados }, 'pending', `Falta confirmar: ${(item.faltando || []).join(', ')}.`,null,null);
     const details = document.createElement('details');
     const summary = document.createElement('summary'); summary.textContent = 'Ver texto reconhecido';
     const original = document.createElement('pre'); original.textContent = item.texto;
@@ -376,7 +445,7 @@
     const actions = document.createElement('div'); actions.className = 'reading-item-actions';
     if (item.tipo !== 'indefinido') {
       const edit = document.createElement('button'); edit.className = 'button button-outline'; edit.type = 'button'; edit.textContent = 'Abrir e completar';
-      edit.addEventListener('click', () => linked ? reviewLinked(item) : item.tipo === 'diarista' ? fillDiarista(item.dados, item.id) : fillPedido(item.dados, item.id)); actions.append(edit);
+      edit.textContent='Revisar no assistente';edit.addEventListener('click', () => reviewLinked(item)); actions.append(edit);
     }
     const resolve = document.createElement('button'); resolve.className = 'button button-quiet'; resolve.type = 'button'; resolve.textContent = 'Marcar resolvido';
     resolve.addEventListener('click', async () => { try { await request(`/api/leituras-pendentes/${item.id}`, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: body({ status: 'resolvido' }) }); await loadPending(); } catch (error) { feedback(error.message, true); } });
@@ -396,7 +465,7 @@
   }
   function reviewLinked(item) {
     window.location.hash='#leitura'; pick('#reading-text').value=item.texto; reviewPendingId=item.id;
-    feedback('Revise a mensagem completa, incluindo pedido, nome e CPF, e clique em Ler e registrar tudo.');pick('#reading-text').focus();
+    feedback('Revise a mensagem completa, incluindo pedido, nome e CPF, e envie novamente para conferir antes de salvar.');pick('#reading-text').focus();
   }
   window.DirectReading={complete:item=>item.dados?.diarista_escalado?reviewLinked(item):item.tipo==='diarista'?fillDiarista(item.dados,item.id):fillPedido(item.dados,item.id)};
   window.directResolvePendingForm = async tipo => {
@@ -415,6 +484,11 @@
     pick(id).addEventListener('close', () => { window.directPendingForm = null; });
   }
   pick('#reading-form').addEventListener('submit', submit);
+  pick('#reading-confirm').addEventListener('click',confirmReview);
+  pick('#reading-cancel').addEventListener('click',()=>{if(applying)return;review=null;pick('#reading-review-actions').hidden=true;pick('#reading-result').hidden=true;feedback('Revisão cancelada. Nenhuma ação pendente foi aplicada.');chat('Direct','Revisão cancelada. Envie uma nova mensagem quando quiser.');});
+  const examples={pedido:'Rede: Hipermarket\nLoja: Vila União\nFunção: Repositor de mercearia\nHorário: 06:00 às 14:20\nData de início: 03/10/2026\nQuantidade de dias: 2\nNome: \nCPF: ',presenca:'Marcar presença\nNome: \nData: hoje\nPedido: ',falta:'Marcar falta\nNome: \nData: hoje\nPedido: \nMotivo: ',consulta:'Consultar pendências'};
+  document.querySelectorAll('[data-reading-example]').forEach(b=>b.addEventListener('click',()=>{pick('#reading-text').value=examples[b.dataset.readingExample];pick('#reading-text').focus();}));
+  window.addEventListener('direct:signed-out',()=>{review=null;reviewPendingId=null;pending=[];pick('#reading-chat').replaceChildren();pick('#reading-result').hidden=true;pick('#reading-text').value='';pick('#reading-file').value='';pick('#reading-pending-items').replaceChildren();showFiles();});
   pick('#reading-result-filter').addEventListener('change', () => {
     const filter = pick('#reading-result-filter').value;
     pick('#reading-result-items').querySelectorAll('[data-result-state]').forEach(card => {
@@ -423,6 +497,7 @@
   });
   pick('#reading-file').addEventListener('change', showFiles);
   pick('#reading-remove-file').addEventListener('click', () => { pick('#reading-file').value = ''; showFiles(); });
+  window.addEventListener('direct:authorized',()=>{if(location.hash==='#leitura')loadPending();});
   window.addEventListener('hashchange', () => { if (location.hash === '#leitura') loadPending(); });
   if (location.hash === '#leitura') loadPending();
 })();

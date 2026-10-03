@@ -38,6 +38,7 @@
   <script src="/settings.js" defer></script>
   <script src="/backup.js" defer></script>
   <script src="/reading-parser.js" defer></script>
+  <script src="/reading-assistant.js" defer></script>
   <script src="/reading.js" defer></script>
   <script src="/offline.js" defer></script>
   <script src="/operations-extended.js" defer></script>
@@ -146,20 +147,23 @@
     </main>
     <main class="main-content" id="leitura-page" hidden>
       <header class="page-header">
-        <div><div class="eyebrow">OPERAÇÃO <span>/</span> LEITURA IA</div><h1>Leitura inteligente</h1><p>Cole vários cadastros e pedidos ou envie fotos e PDFs. O sistema identifica e registra tudo em uma operação.</p></div>
+        <div><div class="eyebrow">OPERAÇÃO <span>/</span> LEITURA IA</div><h1>Assistente Direct</h1><p>Envie informações, revise o que foi entendido e confirme para atualizar o sistema.</p></div>
       </header>
       <section class="list-card reading-card" aria-labelledby="reading-title">
-        <div class="reading-heading"><div class="reading-icon" aria-hidden="true">✦</div><div><h2 id="reading-title">Importar informações</h2><p>Leitura no seu aparelho, sem créditos de API. Use Loja ou Região para indicar a unidade. Inclua o nome, mesmo sem o rótulo “Nome:”, logo antes do CPF para escalar a pessoa em todos os dias, contando a data de início. Se ela ainda não tiver cadastro, um botão salva nome e CPF, pedido e escala; os outros dados podem ser completados depois. Dados incompletos ficam em pendências.</p></div></div>
+        <div class="reading-heading"><div class="reading-icon" aria-hidden="true">✦</div><div><h2 id="reading-title">Como posso ajudar?</h2><p>Pedidos, cadastros e escalas em uma conversa. Texto, fotos e PDFs, sem créditos de API. As alterações só são aplicadas quando você confirmar.</p></div></div>
+        <div id="reading-chat" class="reading-chat" role="log" aria-label="Conversa com o assistente" aria-live="polite"></div>
+        <details class="reading-help"><summary>O que posso enviar?</summary><p>Pedido + nome/CPF: salva o cadastro básico, o pedido e a pessoa em todos os dias. Também reconheço presença, falta, confirmou que vai, desistência, substituição e complemento de endereço do cadastro. Para ações na escala, informe nome ou CPF e data; se necessário, o número do pedido. Falta, desistência e substituição precisam de motivo.</p><div class="reading-suggestions"><button type="button" data-reading-example="pedido">Pedido e diarista</button><button type="button" data-reading-example="presenca">Presença</button><button type="button" data-reading-example="falta">Falta</button><button type="button" data-reading-example="consulta">Consultar pendências</button></div><p>Você também pode escrever “Corrigir horário para 07:00 às 15:20” durante uma revisão. Pagamentos, contratos, exclusões e permissões continuam nos formulários específicos.</p></details>
         <form id="reading-form" class="reading-form">
-          <label for="reading-text">Mensagens recebidas<textarea id="reading-text" maxlength="60000" rows="10" placeholder="Cole aqui os cadastros e pedidos. Separe os registros por Nome Completo: ou Loja: ..."></textarea></label>
+          <label for="reading-text">Sua mensagem<textarea id="reading-text" maxlength="60000" rows="6" placeholder="Envie um pedido com o nome e CPF, ou diga o que deseja fazer. Ex.: Marcar presença de Maria da Silva hoje."></textarea></label>
           <div class="reading-upload-row"><label for="reading-file" class="reading-upload"><span aria-hidden="true">⌁</span> Anexar fotos ou PDFs<input id="reading-file" type="file" accept="image/*,application/pdf" multiple hidden></label><span id="reading-file-name">Nenhum arquivo selecionado · até 10 MB por arquivo e 20 páginas por PDF</span><button id="reading-remove-file" class="button button-quiet" type="button" hidden>Remover</button></div>
           <div id="reading-feedback" class="feedback" role="status" aria-live="polite" hidden></div>
-          <div class="reading-actions"><button id="reading-submit" class="button button-primary" type="submit">✦ Ler e registrar tudo</button></div>
+          <div class="reading-actions"><button id="reading-submit" class="button button-primary" type="submit">✦ Enviar mensagem</button></div>
         </form>
       </section>
       <section id="reading-result" class="list-card reading-result" aria-labelledby="reading-result-title" hidden>
-        <div class="reading-result-heading"><div><span class="eyebrow">RESULTADO DA IMPORTAÇÃO</span><h2 id="reading-result-title">Dados processados</h2><p id="reading-result-summary"></p><p id="reading-result-sources" class="section-help"></p></div><label class="reading-result-filter">Mostrar<select id="reading-result-filter"><option value="todos">Todos</option><option value="revisar">Pendências e erros</option><option value="saved">Registrados</option><option value="duplicate">Duplicados</option></select></label></div>
+        <div class="reading-result-heading"><div><span class="eyebrow">REVISÃO DO ASSISTENTE</span><h2 id="reading-result-title">Confira antes de aplicar</h2><p id="reading-result-summary"></p><p id="reading-result-sources" class="section-help"></p></div><label class="reading-result-filter">Mostrar<select id="reading-result-filter"><option value="todos">Todos</option><option value="revisar">Pendências e erros</option><option value="saved">Registrados</option><option value="duplicate">Duplicados</option></select></label></div>
         <div id="reading-result-items" class="reading-result-items"></div>
+        <div id="reading-review-actions" class="reading-result-actions" hidden><button id="reading-cancel" type="button" class="button button-quiet">Cancelar revisão</button><button id="reading-confirm" type="button" class="button button-primary">Confirmar e aplicar</button></div>
       </section>
       <section class="list-card reading-result" aria-labelledby="reading-pending-title">
         <div class="reading-result-heading"><div><span class="eyebrow">REVISÃO</span><h2 id="reading-pending-title">Informações pendentes</h2><p>Dados incompletos são preservados para completar depois.</p></div></div>

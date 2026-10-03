@@ -1,4 +1,6 @@
 import unittest
+from datetime import datetime, timedelta
+from zoneinfo import ZoneInfo
 from uuid import uuid4
 import test_server as fixtures
 import server
@@ -14,7 +16,9 @@ class LinkedReadingTests(unittest.TestCase):
         with server.connect() as db:
             return tuple(db.execute(f'SELECT count(*) FROM {table}').fetchone()[0] for table in ('diaristas','pedidos','pedido_escalas','diarias'))
     def test_confirmation_basic_registration_assignment_and_retry(self):
-        p=self.payload();status,response=self.save(p);self.assertEqual(status,200,response);self.assertTrue(response['requires_registration']);self.assertEqual(self.counts(),(0,0,0,0))
+        p=self.payload();future=datetime.now(ZoneInfo('America/Fortaleza')).date()+timedelta(days=14)
+        for index,shift in enumerate(p['pedido']['turnos']): shift['data']=(future+timedelta(days=index)).isoformat()
+        status,response=self.save(p);self.assertEqual(status,200,response);self.assertTrue(response['requires_registration']);self.assertEqual(self.counts(),(0,0,0,0))
         status,response=self.save({**p,'confirmar_cadastro':True});self.assertEqual(status,200,response);self.assertEqual(self.counts(),(1,1,2,0));self.assertTrue(response['cadastro_criado']);self.assertEqual(response['situacao'],'confirmado');self.assertEqual(self.call('GET','/api/pedidos')[1][0]['situacao'],'confirmado')
         worker=self.call('GET','/api/diaristas')[1][0];self.assertEqual(worker['disponibilidade'],[]);self.assertEqual(worker['setores'],[]);self.assertIsNone(worker['trabalhando']);self.assertIsNone(worker['pode_se_deslocar'])
         scales=self.call('GET',f"/api/pedidos/{response['pedido_id']}/escalas")[1];self.assertTrue(all(s['status']=='escalada' and s['disponibilidade_pedido_confirmada'] for s in scales))
