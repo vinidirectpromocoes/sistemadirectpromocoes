@@ -1,90 +1,84 @@
-/* Portal usa sessão separada da equipe. Nenhum acesso às tabelas internas. */
+/* Formulários privados por convite; não criam nem usam contas de diaristas. */
 (() => {
-  const invitation=new URLSearchParams(location.hash.slice(1)).get('convite');
-  const kind=document.body.dataset.page; let validInvitation=false,pendingJob=null;
-  const $ = id => document.getElementById(id);
-  const sb = supabase.createClient('https://jxthqgtzybcyediyciqc.supabase.co',
-    'sb_publishable_sulYm_YcfXUosfNvhQnDXg_I4lgxjth',
-    {auth:{storageKey:'direct-diarista-auth',persistSession:true,autoRefreshToken:true,detectSessionInUrl:true}});
-  let account = null, jobs = [], chosen = null, session = null, loading = false;
+  const invitation = new URLSearchParams(location.hash.slice(1)).get('convite');
+  const kind = document.body.dataset.page, $ = id => document.getElementById(id);
+  const sb = supabase.createClient('https://jxthqgtzybcyediyciqc.supabase.co', 'sb_publishable_sulYm_YcfXUosfNvhQnDXg_I4lgxjth',
+    {auth:{storageKey:'direct-formulario-privado',persistSession:false,autoRefreshToken:false,detectSessionInUrl:false}});
+  let context = null, jobs = [], chosen = null, loading = false;
   const date = value => value.split('-').reverse().join('/');
   const money = value => new Intl.NumberFormat('pt-BR',{style:'currency',currency:'BRL'}).format(value/100);
-
-  const node = (tag, text, cls='') => {const e=document.createElement(tag);e.textContent=text;e.className=cls;return e;};
+  const node = (tag,text,cls='') => {const e=document.createElement(tag);e.textContent=text;e.className=cls;return e;};
   function feedback(text,error=false){$('feedback').textContent=text;$('feedback').classList.toggle('error',error);$('feedback').hidden=false;}
-  async function rpc(name,args={}){const result=await sb.rpc(name,args);if(result.error)throw new Error(result.error.message);return result.data;}
-  function friendly(error){if(/Invalid login credentials/.test(error.message))return 'E-mail ou senha incorretos.';if(/Email not confirmed/.test(error.message))return 'Confirme seu e-mail antes de entrar.';if(/rate limit|too many/i.test(error.message))return 'Muitas tentativas. Aguarde alguns minutos e tente novamente.';if(/fetch|network/i.test(error.message))return 'Não foi possível conectar. Confira sua internet e tente novamente.';return error.message;}
-  function access(){ $('access-error').hidden=true;$('access-dialog').showModal();$('access-email').focus();}
-  $('login-button')?.addEventListener('click',access);
-  $('access-close').addEventListener('click',()=>$('access-dialog').close());
-  $('access-dialog').addEventListener('click',e=>{if(e.target===$('access-dialog')){const r=e.target.getBoundingClientRect();if(e.clientX<r.left||e.clientX>r.right||e.clientY<r.top||e.clientY>r.bottom)e.target.close();}});
-  $('logout-button')?.addEventListener('click',async()=>{await sb.auth.signOut();session=null;account=null;await refreshAccount();feedback('Você saiu do seu acesso.');});
-  function registrationData(form){const f=new FormData(form);return {nome:String(f.get('nome')||'').trim(),cpf:String(f.get('cpf')||'').replace(/\D/g,''),setores:String(f.get('setores')||'').split(',').map(s=>s.trim()).filter(Boolean),bairro:String(f.get('bairro')||'').trim(),logradouro:String(f.get('logradouro')||'').trim(),numero:String(f.get('numero')||'').trim(),cep:String(f.get('cep')||'').replace(/\D/g,''),complemento:String(f.get('complemento')||'').trim(),transporte:String(f.get('transporte')||'').trim()};}
+  const friendly = e => /fetch|network/i.test(e.message)?'Não foi possível conectar. Confira sua internet e tente novamente.':e.message;
+  async function rpc(name,args){const r=await sb.rpc(name,args);if(r.error)throw new Error(r.error.message);return r.data;}
   function validCpf(cpf){if(!/^\d{11}$/.test(cpf)||/^(\d)\1{10}$/.test(cpf))return false;for(let n=9;n<11;n++){let sum=0;for(let i=0;i<n;i++)sum+=Number(cpf[i])*(n+1-i);const digit=(sum*10)%11;if(Number(cpf[n])!==(digit===10?0:digit))return false;}return true;}
-  async function refreshAccount(){
-    const {data,error}=await sb.auth.getSession();if(error)throw error;session=data.session;
-    account=session?await rpc('direct_portal_me'):null;
-    // Dados editáveis da conta servem apenas como formulário, nunca como permissão.
-    if(kind==='cadastro'&&validInvitation&&account?.status==='sem_cadastro'&&session.user.user_metadata?.direct_cadastro){
-      await rpc('direct_portal_register',{p_dados:session.user.user_metadata.direct_cadastro,p_convite:invitation});
-      account=await rpc('direct_portal_me');
+  function choices(id,name,values){const box=$(id);for(const [value,text] of values){const label=node('label','','check'),input=document.createElement('input');input.type='checkbox';input.name=name;input.value=value;label.append(input,node('span',text));box.append(label);}}
+  function completed(data){
+    $('registration-form').hidden=true;$('registration-heading').hidden=true;
+    const box=$('registered');box.hidden=false;box.replaceChildren(node('div','✓','success-icon'),node('h1','Cadastro concluído!'),node('p','Obrigado! Seus dados estão na base da Direct Promoções. A equipe poderá complementar ou atualizar seu cadastro.'));
+    const links=node('div','','success-links');
+    for(const [label,value,hint] of [['Falar com a Direct no WhatsApp',data.whatsapp?'https://wa.me/'+data.whatsapp:null,'Contato será informado pela Direct.'],['Entrar no grupo de diárias',data.grupo_url||null,'Link do grupo será informado pela Direct.'],['Ver diárias disponíveis',data.vagas_token?'/vagas.html#convite='+data.vagas_token:null,'Peça seu link privado de vagas à Direct.']]){
+      const a=node('a',label,value&&label==='Ver diárias disponíveis'?'primary':'');
+      if(value){a.href=value;if(value.startsWith('https://')){a.target='_blank';a.rel='noopener noreferrer';}}else{a.setAttribute('aria-disabled','true');a.append(node('small',hint));}links.append(a);
     }
-    if($('logout-button'))$('logout-button').hidden=!session;if($('login-button'))$('login-button').hidden=Boolean(session);
-    const texts={ativo:'Seu cadastro está ativo. Você pode assumir escalas completas.',pendente:'A Direct vai conferir seu acesso porque este CPF já tinha cadastro. Aguarde a liberação.',recusado:'Seu acesso não foi liberado. Fale com a Direct.',bloqueado:'Seu cadastro está bloqueado. Fale com a Direct.',sem_cadastro:'Complete seu cadastro para assumir uma diária.'};
-    if($('account-status'))$('account-status').textContent=account?`${account.nome||''} · ${texts[account.status]||''}`:'Você pode ver as vagas. Entre no seu cadastro para assumir uma diária.';
-    if($('registration-form'))for(const name of ['email','senha','confirmar']){const input=$('registration-form').elements[name];input.disabled=Boolean(session);input.closest('label').hidden=Boolean(session);}
-    if($('registered')){
-      $('registered').replaceChildren();$('registered').hidden=!account||account.status==='sem_cadastro';
-      $('registration-form').hidden=Boolean(account&&account.status!=='sem_cadastro');
-      if(!$('registered').hidden){$('registered').append(node('p',texts[account.status]));}
-    }
-
+    box.append(links);$('feedback').hidden=true;box.scrollIntoView({block:'start',behavior:'smooth'});
   }
-  $('access-form').addEventListener('submit',async e=>{
-    e.preventDefault();const b=e.submitter;b.disabled=true;$('access-error').hidden=true;
-    try{const result=await sb.auth.signInWithPassword({email:$('access-email').value.trim(),password:$('access-password').value});if(result.error)throw result.error;await refreshAccount();$('access-password').value='';$('access-dialog').close();if($('jobs-list')){await loadJobs();if(pendingJob){const job=jobs.find(o=>o.id===pendingJob);pendingJob=null;if(job)reviewJob(job);else feedback('Esta escala não está mais disponível.',true);}}}
-    catch(error){$('access-error').textContent=friendly(error);$('access-error').hidden=false;}finally{b.disabled=false;}
-  });
-  $('registration-form')?.addEventListener('submit',async e=>{
-    e.preventDefault();const form=e.target,data=registrationData(form),f=new FormData(form),b=e.submitter;
-    if(!validInvitation)return feedback('Peça seu link privado à Direct.',true);
-    if(!validCpf(data.cpf))return feedback('Confira o CPF: ele precisa ser válido e ter 11 números.',true);
-    if(!session&&f.get('senha')!==f.get('confirmar'))return feedback('As senhas precisam ser iguais.',true);
-    if(data.setores.some(s=>s.length>80))return feedback('Cada setor deve ter até 80 caracteres.',true);
-    b.disabled=true;
-    try{
-      if(!session){
-        const result=await sb.functions.invoke('portal-cadastro',{body:{convite:invitation,email:String(f.get('email')).trim(),senha:String(f.get('senha')),dados:data}});
-        if(result.error){let detail;try{detail=await result.error.context?.json();}catch{}throw new Error(detail?.error||'Não foi possível criar o acesso. Tente novamente.');}
-        if(result.data?.error)throw new Error(result.data.error);
-        const login=await sb.auth.signInWithPassword({email:String(f.get('email')).trim(),password:String(f.get('senha'))});if(login.error)throw login.error;
-        form.elements.senha.value='';form.elements.confirmar.value='';
-      }
-      await rpc('direct_portal_register',{p_dados:data,p_convite:invitation});await refreshAccount();feedback(account.status==='ativo'?'Cadastro salvo! Use o link de vagas enviado pela Direct.':'Pedido de acesso enviado para conferência da Direct.');
-    }catch(error){feedback(friendly(error),true);}finally{b.disabled=false;}
-  });
+  function setupRegistration(){
+    const form=$('registration-form');choices('sector-options','setores',context.setores.map(s=>[s,s]));
+    choices('day-options','dias',[['segunda','Segunda'],['terca','Terça'],['quarta','Quarta'],['quinta','Quinta'],['sexta','Sexta'],['sabado','Sábado'],['domingo','Domingo']]);
+    choices('transport-options','transportes',['Ônibus','Bike','Moto','Carro','Metrô','Uber'].map(s=>[s,s]));
+    for(const name of context.redes){const opt=node('option',name);opt.value=name;form.elements.rede_trabalho.append(opt);}
+    form.elements.data_nascimento.max=new Date().toLocaleDateString('en-CA');
+    form.elements.horario_tipo.addEventListener('change',()=>{const mode=form.elements.horario_tipo.value;$('shift-options').hidden=mode!=='turno';$('specific-hours').hidden=mode!=='especifico';});
+    form.elements.trabalhando.addEventListener('change',()=>{const yes=form.elements.trabalhando.value==='true';$('work-options').hidden=!yes;form.elements.local_trabalho.required=yes;form.elements.rede_trabalho.required=yes;});
+    form.elements.pode_se_deslocar.addEventListener('change',()=>{const limited=form.elements.pode_se_deslocar.value==='false';$('region-options').hidden=!limited;form.elements.observacoes_locomocao.required=limited;});
+    let timer,controller,lastCep='',lookupSequence=0;const cepCache=new Map();
+    async function lookup(){
+      const cep=form.elements.cep.value.replace(/\D/g,''),sequence=++lookupSequence;controller?.abort();
+      if(cep.length!==8)return;if(lastCep===cep&&form.elements.cidade.value)return;lastCep=cep;
+      $('cep-status').textContent='Buscando endereço…';form.elements.cidade.readOnly=true;form.elements.uf.readOnly=true;
+      controller=new AbortController();const timeout=setTimeout(()=>controller.abort(),8000);
+      try{
+        let data=cepCache.get(cep);if(!data){const r=await fetch('https://viacep.com.br/ws/'+cep+'/json/',{signal:controller.signal,referrerPolicy:'no-referrer'});if(!r.ok)throw Error('Consulta indisponível');data=await r.json();if(data.erro||!data.localidade||!data.uf)throw Error('CEP não encontrado');cepCache.set(cep,data);}
+        if(sequence!==lookupSequence||cep!==form.elements.cep.value.replace(/\D/g,''))return;
+        for(const [name,value] of Object.entries({logradouro:data.logradouro||'',bairro:data.bairro||'',cidade:data.localidade,uf:data.uf}))form.elements[name].value=value;
+        $('cep-status').textContent='Endereço encontrado. Confira a rua, bairro e o número da casa.';
+      }catch(e){if(sequence!==lookupSequence)return;lastCep='';form.elements.cidade.readOnly=false;form.elements.uf.readOnly=false;$('cep-status').textContent='Não foi possível consultar este CEP. Confira os números e preencha o endereço para continuar.';}
+      finally{clearTimeout(timeout);}
+    }
+    form.elements.cep.addEventListener('input',()=>{clearTimeout(timer);++lookupSequence;controller?.abort();for(const name of ['cidade','uf','logradouro','bairro'])form.elements[name].value='';$('cep-status').textContent='Digite os 8 números do CEP.';timer=setTimeout(lookup,400);});
+    form.elements.cep.addEventListener('blur',()=>{clearTimeout(timer);lookup();});
+    form.hidden=false;
+    form.addEventListener('submit',async e=>{
+      e.preventDefault();const f=new FormData(form),b=e.submitter,data={};
+      for(const key of ['nome','data_nascimento','cep','numero','logradouro','bairro','cidade','uf','complemento','observacoes_locomocao'])data[key]=String(f.get(key)||'').trim();
+      data.uf=data.uf.toUpperCase();data.cpf=String(f.get('cpf')||'').replace(/\D/g,'');data.cep=data.cep.replace(/\D/g,'');data.setores=f.getAll('setores');data.transporte=f.getAll('transportes').join(', ');
+      data.trabalhando=f.get('trabalhando')==='true';data.pode_se_deslocar=f.get('pode_se_deslocar')==='true';data.local_trabalho=data.trabalhando?String(f.get('local_trabalho')).trim():'';data.rede_trabalho=data.trabalhando?String(f.get('rede_trabalho')):'';data.consentimento=f.get('consentimento')==='on';
+      let hours=['00:00','23:59'];if(f.get('horario_tipo')==='turno')hours=String(f.get('turno')).split('/');if(f.get('horario_tipo')==='especifico')hours=[String(f.get('inicio')),String(f.get('fim'))];
+      data.disponibilidade=f.getAll('dias').map(dia=>({dia,inicio:hours[0],fim:hours[1]}));
+      if(!validCpf(data.cpf))return feedback('Confira o CPF: ele precisa ser válido e ter 11 números.',true);
+      if(!data.setores.length||!data.disponibilidade.length||!data.transporte)return feedback('Marque os setores, dias disponíveis e meios de locomoção.',true);
+      if(!hours.every(h=>/^\d{2}:\d{2}$/.test(h))||hours[0]>=hours[1])return feedback('O horário final deve ser depois do inicial.',true);
+      b.disabled=true;b.textContent='Cadastrando…';try{context=await rpc('direct_portal_submit',{p_dados:data,p_convite:invitation});completed(context);}catch(error){feedback(friendly(error),true);$('feedback').scrollIntoView({block:'start'});}finally{b.disabled=false;b.textContent='CADASTRAR';}
+    });
+  }
   function reviewJob(o){
-    if(!session){pendingJob=o.id;access();return;}
-    if(account?.status!=='ativo'){feedback('Para pegar esta vaga você precisa ter um cadastro ativo. Peça à Direct seu link privado de cadastro ou a liberação do acesso.',true);return;}
-    chosen={id:o.id};$('confirm-summary').textContent=`${o.rede} · ${o.loja} · ${o.setor}\n${o.turnos.length} dia(s) — escala completa\n${o.turnos.map(t=>`${date(t.data)} (${t.inicio}–${t.fim})`).join('\n')}`;$('confirm-error').hidden=true;$('confirm-dialog').showModal();
+    if(!context?.cadastrado||context.bloqueado)return feedback('Para pegar uma vaga, você precisa estar cadastrado e liberado. Peça à Direct seu link privado de cadastro.',true);
+    chosen=o;$('confirm-cpf').value='';$('confirm-summary').textContent=`${o.rede} · ${o.loja} · ${o.setor}\n${o.turnos.length} dia(s) — escala completa\n${o.turnos.map(t=>`${date(t.data)} (${t.inicio}–${t.fim})`).join('\n')}`;$('confirm-error').hidden=true;$('confirm-dialog').showModal();
   }
-  function renderJobs(){
-    if(!$('jobs-list'))return;const list=$('jobs-list');list.replaceChildren();
-    if(!jobs.length){list.append(node('p','Nenhuma escala completa disponível no momento.'));return;}
-    for(const o of jobs){
-      const values=new Set(o.turnos.map(t=>t.valor_centavos===undefined?o.valor_centavos:t.valor_centavos));const varies=values.size>1;
+  function renderJobs(){const list=$('jobs-list');list.replaceChildren();if(!jobs.length){list.append(node('p','Nenhuma escala completa disponível no momento.'));return;}
+    for(const o of jobs){const values=new Set(o.turnos.map(t=>t.valor_centavos===undefined?o.valor_centavos:t.valor_centavos)),varies=values.size>1;
       const card=node('article','','card');card.append(node('h3',`${o.rede} · ${o.loja}`),node('p',o.setor),node('p',o.endereco||'Confira o endereço com a Direct.'),node('p',varies?'Confira o valor de cada dia abaixo.':o.valor_centavos==null?'Valor da diária: confirmar com a Direct.':`${money(o.valor_centavos)} por diária`,'price'),node('p',`${o.turnos.length} dia(s) · compromisso com a escala inteira`));
-      const dates=node('div','');
-      for(const t of o.turnos)dates.append(node('p',`${date(t.data)} · ${t.inicio} às ${t.fim}${varies?` · ${t.valor_centavos==null?'valor a confirmar':money(t.valor_centavos)}`:''}`,'shift-choice'));
-      const button=node('button','Quero pegar essa vaga','primary');button.type='button';button.addEventListener('click',()=>reviewJob(o));card.append(dates,button);list.append(card);
+      for(const t of o.turnos)card.append(node('p',`${date(t.data)} · ${t.inicio} às ${t.fim}${varies?` · ${t.valor_centavos==null?'valor a confirmar':money(t.valor_centavos)}`:''}`,'shift-choice'));
+      const button=node('button','Quero pegar essa vaga','primary');button.type='button';button.addEventListener('click',()=>reviewJob(o));card.append(button);list.append(card);
     }
   }
-  async function loadJobs(){if(!validInvitation||loading||!$('jobs-list'))return;loading=true;try{jobs=await rpc('direct_portal_orders',{p_convite:invitation});renderJobs();}catch(error){feedback(friendly(error),true);$('jobs-list').replaceChildren(node('p','Não foi possível carregar as vagas. Reabra este link para tentar novamente.'));}finally{loading=false;}}
-
-
+  async function loadJobs(){if(!context||loading||!$('jobs-list'))return;loading=true;try{jobs=await rpc('direct_portal_orders',{p_convite:invitation});renderJobs();}catch(e){feedback(friendly(e),true);$('jobs-list').replaceChildren(node('p','Não foi possível carregar as vagas. Reabra este link para tentar novamente.'));}finally{loading=false;}}
   for(const id of ['confirm-close','confirm-cancel'])$(id)?.addEventListener('click',()=>$('confirm-dialog').close());
-  $('confirm-accept')?.addEventListener('click',async e=>{const b=e.target;b.disabled=true;try{const result=await rpc('direct_portal_accept',{p_pedido_id:chosen.id,p_convite:invitation});$('confirm-dialog').close();feedback(`${result.mensagem} ${result.dias} dia(s) adicionado(s).`);await refreshAccount();await loadJobs();}catch(error){$('confirm-error').textContent=friendly(error);$('confirm-error').hidden=false;await loadJobs();}finally{b.disabled=false;}});
-  async function boot(){try{if(!invitation)throw new Error('Acesso somente pelo link privado enviado pela Direct.');await rpc('direct_portal_invite_status',{p_token:invitation,p_tipo:kind});validInvitation=true;await refreshAccount();await loadJobs();}catch(error){feedback(friendly(error),true);$('registration-form')?.setAttribute('hidden','');document.querySelector('.intro .actions')?.setAttribute('hidden','');if($('jobs-list'))$('jobs-list').replaceChildren();if($('login-button'))$('login-button').hidden=true;}}
-  boot();
-  if($('jobs-list'))setInterval(()=>{if(!document.hidden)loadJobs();},45000);
+  $('confirm-accept')?.addEventListener('click',async e=>{const b=e.target,cpf=$('confirm-cpf').value.replace(/\D/g,'');$('confirm-error').hidden=true;if(!validCpf(cpf)){$('confirm-error').textContent='Confira seu CPF.';$('confirm-error').hidden=false;return;}b.disabled=true;
+    try{const result=await rpc('direct_portal_take_order',{p_pedido_id:chosen.id,p_convite:invitation,p_cpf:cpf});$('confirm-dialog').close();feedback(result.mensagem);await loadJobs();}catch(error){$('confirm-error').textContent=friendly(error);$('confirm-error').hidden=false;await loadJobs();}finally{b.disabled=false;}
+  });
+  async function boot(){try{if(!invitation)throw Error('Acesso somente pelo link privado enviado pela Direct.');context=await rpc('direct_portal_context',{p_convite:invitation,p_tipo:kind});if(kind==='cadastro'){if(context.bloqueado)throw Error('Cadastro bloqueado. Fale com a Direct.');if(context.cadastrado)completed(context);else setupRegistration();}else await loadJobs();}catch(error){feedback(friendly(error),true);$('registration-form')?.setAttribute('hidden','');$('jobs-list')?.replaceChildren();}}
+  window.addEventListener('hashchange',()=>location.reload());
+  boot();if($('jobs-list'))setInterval(()=>{if(!document.hidden)loadJobs();},45000);
 })();

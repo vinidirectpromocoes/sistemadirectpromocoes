@@ -1,27 +1,31 @@
-# Convites privados dos diaristas e Financeiro simplificado
+# Cadastro e vagas por convite privado — 03/10/2026
 
-## Funcionamento
+## Fluxo atual
 
-- Configurações → Links dos diaristas → Gerar links privados cria **dois links diferentes por pessoa**, com validade de 7/30/90 dias. CPF opcional vincula o convite àquela pessoa. Os tokens são distintos, armazenados no banco como hashes e transportados no fragmento da URL. Envie cada link no privado; gere outro par para o próximo diarista.
-- `/cadastro.html#convite=…`: nome e CPF, e-mail e senha próprios; endereço e experiência opcionais. O convite da Direct autoriza criar a conta no servidor, sem envio de e-mail de confirmação. A sessão é separada da equipe administrativa. Não há acesso às vagas nessa página.
-- `/vagas.html#convite=…`: somente escalas com disponibilidade em **todos os dias** e que ainda não começaram. Rede, loja, endereço, setor, datas, horários e valor pago por diária, com apenas o botão **Quero pegar essa vaga**. Sem busca, filtros, atualização manual, seleção de datas ou navegação para cadastro. Atualiza em segundo plano a cada 45 segundos.
-- Ao clicar, a pessoa entra na própria conta cadastrada, revisa todos os dias e confirma que vai. O banco escala a pessoa em **todos os dias do pedido, numa única transação**. Conflito ou lotação em qualquer dia cancela a operação inteira. A Direct continua registrando presença/falta; o compromisso de comparecer não gera presença ou pagamento antecipado.
-- Sem convite válido/ativo ou cadastro ativo não se assume a escala. Convite vencido, de outro acesso, CPF incompatível, diarista bloqueado e sobreposição de horários são rejeitados no banco. As antigas APIs sem convite foram fechadas.
-- CPF preexistente em convite genérico exige vínculo aprovado pela Direct. Convite emitido especificamente para aquele CPF pode vincular o cadastro existente, se não houver outro proprietário e o diarista estiver liberado. Não duplica nem substitui os dados internos.
-- O link de vagas não expõe nomes da equipe, CPF, contatos, observações internas, faturamento ou lucro. Os valores exibidos acompanham contrato, setor e tarifa da rede.
-- Financeiro: removidos Cobranças das redes e Conferir pedidos incluídos. Gráficos, previsões e lançamentos preservados. Cobranças existentes continuam no banco e pendências podem abrir sua ficha.
+- A equipe gera dois links separados em **Configurações → Links dos diaristas**. Cada par é destinado a uma pessoa, vence na data informada e usa segredos aleatórios de 256 bits no fragmento da URL.
+- O cadastro coleta nome, CPF válido, nascimento, CEP, endereço, cidade/UF, setores, dias/horários, locomoção e trabalho atual. Não pede e-mail, senha ou conta.
+- ViaCEP preenche rua, bairro, cidade e UF. Se a consulta falhar, o formulário permite preencher o endereço manualmente. Número da casa é informado pelo diarista.
+- Após salvar, aparece “Cadastro concluído”, agradecimento, contato WhatsApp, grupo e link privado de vagas. Contatos vazios exibem a estrutura desativada; o administrador pode preenchê-los depois.
+- O link de vagas mostra apenas escalas inteiras com vagas em todos os dias e ainda não iniciadas. Não oferece filtros nem seleção de dias.
+- “Quero pegar essa vaga” exige cadastro vinculado ao convite. A pessoa confirma o CPF e o compromisso com todos os dias. Não marca presença: isso continua sendo feito pela equipe no dia da diária.
+- Funcionário de supermercado não pode assumir diária na rede em que trabalha. O aviso aparece no formulário; a API verifica rede/local de trabalho declarados ao aceitar a escala.
 
-## Testes
+## Duplicidade e segurança
 
-- `tests/portal_database.sql`: executado no Supabase em transação revertida. Cadastro e idempotência, escala/confirmou que vai, lotação, conflito, bloqueio, conta sem cadastro, vínculo autorizado, CPF, permissões e fechamento das APIs antigas. Testa dois dias completos, nenhuma gravação parcial em conflito, tokens separados, convite usado por outra conta e vencimento. Nenhum dado sintético permanece.
-- `tests/portal_e2e.mjs`: Chromium e WebKit, 1280/390/320 px, APIs sintéticas isoladas. Páginas sem convite bloqueadas, CPF/senha, cadastro por convite sem SMTP, conta sem cadastro rejeitada, separação dos links, ausência de filtros e seleção de dias, revisão, escala completa, campos de 16 px, ausência de transbordamento e erros JavaScript. Integrado ao fluxo de publicação.
-- `node tests/e2e.mjs`: navegação, perfis, escalas, substituição, pendências, leitura e financeiro em base temporária.
-- `DIRECT_FINANCE_ONLY=1 node tests/e2e.mjs`: cards, períodos, temas, layout móvel, ausência dos blocos removidos, cobrança/recebimento parcial e pagamento agrupado em SQLite temporário.
+- CPF já cadastrado não é atualizado ou vinculado pelo simples conhecimento do documento. A equipe deve gerar o convite especificando esse CPF; o vínculo é criado por essa emissão autorizada.
+- Repetir um envio com o mesmo convite não duplica a pessoa. Repetir a confirmação não duplica escalas. Qualquer conflito reverte todos os dias.
+- A API confere convite válido, vínculo, CPF, bloqueio, empresa, capacidade, datas futuras e conflitos de horário. Não disponibiliza nomes/CPF de outros diaristas nem valores faturados pela Direct.
+- Convites e contatos ficam em esquema privado com RLS e sem acesso direto pelos clientes. Funções públicas acessíveis sem Auth existem intencionalmente para o formulário: todas validam o convite antes de acessar dados.
+- APIs antigas de criação de conta foram revogadas. A Edge Function antiga retorna 410 sem criar usuário. Registros Auth anteriores são preservados; não dão acesso ao painel interno, que continua exigindo perfil de funcionário.
+- A posse do link privado identifica seu destinatário. Envie os links individualmente; gerar convite para um CPF conhecido é o caminho de recuperação e vínculo. Não são páginas abertas de inscrição.
 
-## Limites dos testes
+## Verificação
 
-O cadastro usa Edge Function e Auth dentro dos limites gratuitos existentes. O convite é validado e reservado no banco antes de criar a conta; as tentativas são limitadas por convite. A chave administrativa permanece no servidor. Os testes não enviam e-mails. Os testes móveis simulam dimensões e motores de navegador; não equivalem a testar fisicamente um iPhone ou Android. O portal conecta ao Supabase publicado; SQLite local permanece isolado.
+- Testes de formulário em Chromium e WebKit: larguras 1280, 390 e 320; sem campos de conta, CPF, endereço por CEP e falha do serviço, vários setores/dias/transportes, turnos, horários inválidos, mensagem final, identidade e escala completa. Serviços externos simulados nesses testes.
+- SQL real no Supabase com dados sintéticos e rollback: cadastro completo sem criar Auth, duplicidade, nascimento futuro, vínculo privado, token original e token após conclusão, confirmação/estado do pedido, repetição, conflito atômico, mesma empresa, bloqueio, convite vencido e permissões.
+- Testes Python de integração/backup e JavaScript de regras de negócio. Conferência visual e disponibilidade após publicação registradas no relatório final da tarefa.
+- Safari/iPhone e Chrome/Android físicos não foram controlados nesta alteração. Não há bloqueio do zoom de acessibilidade; fontes dos campos têm 16px para evitar zoom automático ao digitar.
 
-O Supabase Advisor indica avisos para RPCs SECURITY DEFINER: execução privilegiada é intencional e protegida por convite/conta/perfil, com search_path fixo. A tabela privada de convites tem RLS sem política, intencionalmente sem acesso direto. A proteção contra senhas vazadas permanece sujeita à disponibilidade do plano: [documentação](https://supabase.com/docs/guides/auth/password-security#password-strength-and-leaked-password-protection).
+## Contatos pendentes
 
-Teste real adicional: Edge Function publicada → criação de conta sintética → login por senha → gravação de nome/CPF no Supabase, sem SMTP. Cadastro e contas sintéticas removidos após a conferência. `tests/test_portal_signup.mjs` cobre origem, convite, senha, reserva, falha do Auth e compensação de conta nova.
+A pedido do proprietário, o WhatsApp e o link do grupo ficam em branco até ele fornecê-los. A estrutura e a configuração estão prontas. Nenhuma assinatura ou serviço pago foi adicionado.

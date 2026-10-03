@@ -135,10 +135,8 @@ function toggleConditional() {
   $('#workplace-wrap').hidden = !working;
   $('#local_trabalho').required = false;
   if ($('input[name="trabalhando"]:checked')?.value === 'false') $('#local_trabalho').value = '';
-  const mobile = $('input[name="pode_se_deslocar"]:checked')?.value === 'true';
-  $('#transport-wrap').hidden = !mobile;
+  $('#transport-wrap').hidden = false;
   $('#transporte').required = false;
-  if ($('input[name="pode_se_deslocar"]:checked')?.value === 'false') $('#transporte').value = '';
 }
 
 function setRadio(name, value) {
@@ -163,8 +161,9 @@ function openForm(record = null) {
     row.querySelector('.day-end').value = '18:00';
   });
   if (record) {
-    for (const key of ['nome', 'cpf', 'cep', 'logradouro', 'numero', 'complemento', 'bairro', 'local_trabalho', 'transporte', 'observacoes_locomocao']) {
-      $(`#${key}`).value = key === 'cpf' ? formatCpf(record[key]) : key === 'cep' ? formatCep(record[key]) : record[key];
+    for (const key of ['nome', 'cpf', 'data_nascimento', 'cep', 'logradouro', 'numero', 'complemento', 'bairro', 'cidade', 'uf', 'local_trabalho', 'rede_trabalho', 'transporte', 'observacoes_locomocao']) {
+      if (key === 'transporte' && record[key] && ![...$('#transporte').options].some(o => o.value === record[key])) $('#transporte').add(new Option(record[key], record[key]));
+      $(`#${key}`).value = key === 'cpf' ? formatCpf(record[key]) : key === 'cep' ? formatCep(record[key]) : (record[key] ?? '');
     }
     $('#setores').value = record.setores.join(', ');
     setRadio('trabalhando', record.trabalhando == null ? 'unknown' : String(record.trabalhando));
@@ -195,7 +194,7 @@ function formData() {
     fim: anyHours ? '23:59' : row.querySelector('.day-end').value,
   }));
   return {
-    nome: $('#nome').value, cpf: $('#cpf').value,
+    nome: $('#nome').value, cpf: $('#cpf').value, data_nascimento: $('#data_nascimento').value || null, cidade: $('#cidade').value || 'Fortaleza', uf: $('#uf').value.toUpperCase() || 'CE', rede_trabalho: $('#rede_trabalho').value,
     setores: $('#setores').value.split(',').map(value => value.trim()).filter(Boolean),
     cep: $('#cep').value, logradouro: $('#logradouro').value, numero: $('#numero').value,
     complemento: $('#complemento').value, bairro: $('#bairro').value,
@@ -339,12 +338,12 @@ function renderDetail(record) {
     const label = days.find(([key]) => key === slot.dia)?.[1] || slot.dia;
     return `${label}: ${slot.inicio === '00:00' && slot.fim === '23:59' ? 'qualquer horário' : `${slot.inicio} às ${slot.fim}`}`;
   }).join('\n');
-  const address = [[record.logradouro, record.numero].filter(Boolean).join(', '), record.complemento, record.bairro, record.cep ? `CEP ${formatCep(record.cep)}` : ''].filter(Boolean).join(' · ');
+  const address = [[record.logradouro, record.numero].filter(Boolean).join(', '), record.complemento, record.bairro, [record.cidade, record.uf].filter(Boolean).join('/'), record.cep ? `CEP ${formatCep(record.cep)}` : ''].filter(Boolean).join(' · ');
   $('#detail-fields').replaceChildren(
-    detailSection('Dados pessoais', [['Nome completo', record.nome], ['CPF', formatCpf(record.cpf)], ['Setores de experiência', record.setores.join(', ')]]),
+    detailSection('Dados pessoais', [['Nome completo', record.nome], ['CPF', formatCpf(record.cpf)], ['Nascimento', record.data_nascimento ? record.data_nascimento.split('-').reverse().join('/') : 'Não informado'], ['Setores de experiência', record.setores.join(', ')]]),
     detailSection('Endereço', [['Endereço completo', address]]),
     detailSection('Trabalho e disponibilidade', [['Trabalha atualmente', record.trabalhando == null ? 'Não informado' : record.trabalhando ? 'Sim' : 'Não'], ['Local de trabalho', record.local_trabalho || (record.trabalhando === false ? '—' : 'Não informado')], ['Dias e horários', schedule]]),
-    detailSection('Locomoção', [['Pode se deslocar', record.pode_se_deslocar == null ? 'Não informado' : record.pode_se_deslocar ? 'Sim' : 'Não'], ['Meio de transporte', record.transporte || (record.pode_se_deslocar === false ? '—' : 'Não informado')], ['Observações', record.observacoes_locomocao || '—']]),
+    detailSection('Locomoção', [['Pode atender qualquer região', record.pode_se_deslocar == null ? 'Não informado' : record.pode_se_deslocar ? 'Sim' : 'Regiões limitadas'], ['Meio de transporte', record.transporte || (record.pode_se_deslocar === false ? '—' : 'Não informado')], ['Observações', record.observacoes_locomocao || '—']]),
   );
 }
 
