@@ -134,7 +134,7 @@
     return {
       nome: p.nome, cpf: String(p.cpf).replace(/\D/g, ''), setores: p.setores || [],
       cep: String(p.cep || '').replace(/\D/g, ''), logradouro: p.logradouro || '', numero: p.numero || '',
-      complemento: p.complemento || '', bairro: p.bairro || '', cidade: 'Fortaleza', uf: 'CE',
+      complemento: p.complemento || '', bairro: p.bairro || '', cidade: p.cidade || 'Fortaleza', uf: p.uf || 'CE', data_nascimento: p.data_nascimento || null, rede_trabalho: p.rede_trabalho || '',
       trabalhando: p.trabalhando ?? null, local_trabalho: p.local_trabalho || '',
       disponibilidade: p.disponibilidade || [], pode_se_deslocar: p.pode_se_deslocar ?? null,
       transporte: p.transporte || '', observacoes_locomocao: p.observacoes_locomocao || ''

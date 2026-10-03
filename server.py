@@ -114,6 +114,10 @@ def init_db():
         columns = {row["name"] for row in db.execute("PRAGMA table_info(diaristas)")}
         if "bloqueada" not in columns:
             db.execute("ALTER TABLE diaristas ADD COLUMN bloqueada INTEGER NOT NULL DEFAULT 0")
+        if "data_nascimento" not in columns:
+            db.execute("ALTER TABLE diaristas ADD COLUMN data_nascimento TEXT")
+        if "rede_trabalho" not in columns:
+            db.execute("ALTER TABLE diaristas ADD COLUMN rede_trabalho TEXT NOT NULL DEFAULT ''")
         db.execute("CREATE INDEX IF NOT EXISTS idx_diaristas_nome ON diaristas(nome)")
         db.execute("""CREATE TABLE IF NOT EXISTS diarias (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -382,11 +386,22 @@ def validate(payload):
         raise ValueError("Informe a disponibilidade de locomoção.")
     transporte = clean_text(payload.get("transporte", ""), "o meio de transporte", 80, False)
     observacoes = clean_text(payload.get("observacoes_locomocao", ""), "as observações de locomoção", 300, False)
-    if pode_se_deslocar is False:
-        transporte = ""
+    nascimento = payload.get("data_nascimento") or None
+    if nascimento:
+        try:
+            birth = date.fromisoformat(nascimento)
+            if birth < date(1900, 1, 1) or birth > date.today():
+                raise ValueError()
+        except (ValueError, TypeError):
+            raise ValueError("Confira a data de nascimento.")
+    cidade = clean_text(payload.get("cidade") or "Fortaleza", "a cidade", 80)
+    uf = clean_text(payload.get("uf") or "CE", "a UF", 2).upper()
+    if not re.fullmatch(r"[A-Z]{2}", uf):
+        raise ValueError("Confira a UF.")
     return {
+        "data_nascimento": nascimento, "rede_trabalho": clean_text(payload.get("rede_trabalho", ""), "a empresa", 100, False),
         "nome": nome, "cpf": cpf, "setores": json.dumps(setores, ensure_ascii=False),
-        "cep": cep, **address, "cidade": "Fortaleza", "uf": "CE",
+        "cep": cep, **address, "cidade": cidade, "uf": uf,
         "trabalhando": None if trabalhando is None else int(trabalhando),
         "local_trabalho": local_trabalho,
         "disponibilidade": json.dumps(slots, ensure_ascii=False),

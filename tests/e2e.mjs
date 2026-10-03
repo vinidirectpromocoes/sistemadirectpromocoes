@@ -219,10 +219,10 @@ async function runFinancialWorkflow() {
     return data;
   };
   const worker = await api('POST', '/api/diaristas', {
-    nome: 'Pessoa Financeira de Teste', cpf: '529.982.247-25', setores: ['Operador de caixa'],
+    nome: 'Pessoa Financeira de Teste', cpf: '529.982.247-25', data_nascimento:'1990-04-10', cidade:'Caucaia', uf:'CE', setores: ['Operador de caixa'],
     cep: '60000-000', logradouro: 'Rua de Teste', numero: '10', complemento: '', bairro: 'Meireles',
     trabalhando: false, local_trabalho: '', disponibilidade: [{ dia: 'segunda', inicio: '07:00', fim: '16:00' }],
-    pode_se_deslocar: true, transporte: 'Ônibus', observacoes_locomocao: '',
+    pode_se_deslocar: false, transporte: 'Ônibus, Uber', observacoes_locomocao: 'Centro',
   });
   await api('PUT', '/api/custos-extras', { rede: 'Super do Povo', transporte: '5.00', taxas: '0', outros: '0' });
   for (const day of ['2026-09-21', '2026-09-28']) {
@@ -241,10 +241,20 @@ async function runFinancialWorkflow() {
     const errors = []; page.on('pageerror', error => errors.push(error.message));
     const scaleRequests = [];
     page.on('request', request => { if (/\/api\/(?:pedidos\/\d+\/)?escalas/.test(request.url())) scaleRequests.push(request.url()); });
+    await page.goto(`${url}#diaristas`, {waitUntil:'domcontentloaded'});
+    await page.waitForFunction(()=>typeof openForm==='function');
+    await page.evaluate(record=>openForm(record),worker);
+    assert.equal(await page.locator('#cidade').inputValue(),'Caucaia');
+    assert.equal(await page.locator('#data_nascimento').inputValue(),'1990-04-10');
+    assert.equal(await page.locator('#transporte').inputValue(),'Ônibus, Uber');
+    await page.locator('#save-button').click();await page.locator('#form-dialog').waitFor({state:'hidden'});
+    const edited=(await api('GET','/api/diaristas')).find(w=>w.id===worker.id);assert.equal(edited.cidade,'Caucaia');assert.equal(edited.data_nascimento,'1990-04-10');assert.equal(edited.transporte,'Ônibus, Uber');
     await page.goto(`${url}#financeiro`, { waitUntil: 'domcontentloaded' });
     await page.locator('#financeiro-page').getByText('Lucro previsto · após extras', {exact:true}).waitFor();
     assert.ok(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth + 2),
       'Financeiro com dados não deve criar rolagem horizontal no celular');
+    await page.locator('#confirmed-count').getByText('2 diárias com presença', {exact:true}).waitFor();
+    await page.locator('#finance-month').fill('2026-09');
     assert.match(await page.locator('#forecast-net').innerText(), /78,00/);
     assert.match(await page.locator('#confirmed-revenue').innerText(), /268,00/);
     assert.match(await page.locator('#confirmed-cost').innerText(), /180,00/);
