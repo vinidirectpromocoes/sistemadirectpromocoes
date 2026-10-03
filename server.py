@@ -807,11 +807,14 @@ class Handler(BaseHTTPRequestHandler):
             path = "/index.html"
         assets = {"/index.html": "text/html; charset=utf-8", "/style.css": "text/css; charset=utf-8", "/brand.css": "text/css; charset=utf-8", "/theme.css": "text/css; charset=utf-8", "/mobile.css": "text/css; charset=utf-8", "/reading.css": "text/css; charset=utf-8", "/motion.css": "text/css; charset=utf-8", "/operations.css": "text/css; charset=utf-8", "/workflow.css": "text/css; charset=utf-8", "/app.js": "text/javascript; charset=utf-8", "/theme.js": "text/javascript; charset=utf-8", "/finance.js": "text/javascript; charset=utf-8", "/forecast.js": "text/javascript; charset=utf-8", "/operations.js": "text/javascript; charset=utf-8", "/workflow.js": "text/javascript; charset=utf-8", "/matching.js": "text/javascript; charset=utf-8", "/backup.js": "text/javascript; charset=utf-8", "/orders.js": "text/javascript; charset=utf-8", "/stores.js": "text/javascript; charset=utf-8", "/settings.js": "text/javascript; charset=utf-8", "/reading.js": "text/javascript; charset=utf-8", "/reading-parser.js": "text/javascript; charset=utf-8", "/remote.js": "text/javascript; charset=utf-8", "/payment-calendar.js": "text/javascript; charset=utf-8", "/vendor/supabase-2.117.2.js": "text/javascript; charset=utf-8", "/stores.css": "text/css; charset=utf-8", "/settings.css": "text/css; charset=utf-8", "/login.css": "text/css; charset=utf-8", "/favicon.svg": "image/svg+xml", "/logo-direct-promocoes.jpg": "image/jpeg", "/logo-direct-promocoes-transparente.png": "image/png"}
         assets["/reconciliation.js"] = "text/javascript; charset=utf-8"
-        for asset in ['reading-assistant.js','insights.js','offline.js','operations-extended.js','crm-model.js','hub.js','sw.js']:
+        for asset in ['reading-assistant.js','insights.js','offline.js','operations-extended.js','crm-model.js','hub.js','portal-admin.js','portal.js','sw.js']:
             assets['/'+asset]='text/javascript; charset=utf-8'
         assets['/manifest.webmanifest']='application/manifest+json'
         assets['/extended.css']='text/css; charset=utf-8'
         assets['/hub.css']='text/css; charset=utf-8'
+        assets['/portal.css']='text/css; charset=utf-8'
+        for page in ('cadastro.html','vagas.html'):
+            assets['/'+page]='text/html; charset=utf-8'
         if path in assets:
             return self.respond(HTTPStatus.OK, (STATIC / path[1:]).read_bytes(), assets[path])
         return self.respond(HTTPStatus.NOT_FOUND, {"erro": "Página não encontrada."})
