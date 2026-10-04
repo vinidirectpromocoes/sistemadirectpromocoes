@@ -60,7 +60,30 @@ function showFormError(message) {
 
 let activeRequests = 0;
 let loadingTimer;
+const requestCache = new Map();
+let requestEpoch = 0;
+function clearRequestCache() { requestEpoch++; requestCache.clear(); }
+window.addEventListener('direct:data-changed', clearRequestCache);
+window.addEventListener('direct:signed-out', clearRequestCache);
 async function request(url, options = {}) {
+  const method = (options.method || 'GET').toUpperCase();
+  if (method !== 'GET') clearRequestCache();
+  if (method === 'GET' && !options.signal) {
+    const cached = requestCache.get(url);
+    if (cached && (cached.pending || cached.expires > Date.now())) return structuredClone(await cached.promise);
+    const epoch = requestEpoch;
+    const entry = { pending: true, expires: 0 };
+    entry.promise = performRequest(url, options).then(data => {
+      entry.pending = false; entry.expires = Date.now();
+      if (epoch !== requestEpoch && requestCache.get(url) === entry) requestCache.delete(url);
+      return data;
+    }, error => { if (requestCache.get(url) === entry) requestCache.delete(url); throw error; });
+    requestCache.set(url, entry);
+    return structuredClone(await entry.promise);
+  }
+  return performRequest(url, options);
+}
+async function performRequest(url, options = {}) {
   activeRequests += 1;
   if (activeRequests === 1) {
     loadingTimer = window.setTimeout(() => {
@@ -153,6 +176,7 @@ function openForm(record = null) {
   window.directPendingForm = null;
   if ($('#detail-dialog').open) $('#detail-dialog').close();
   editingId = record?.id ?? null;
+  $('#diarista-form').dataset.version = record?.atualizado_em || '';
   $('#diarista-form').reset();
   $('#form-error').hidden = true;
   $('#schedule-error').hidden = true;
@@ -239,7 +263,7 @@ async function save(event) {
   button.disabled = true;
   try {
     await request(editingId ? `/api/diaristas/${editingId}` : '/api/diaristas', {
-      method: editingId ? 'PUT' : 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(data),
+      method: editingId ? 'PUT' : 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ ...data, expected_updated_at: $('#diarista-form').dataset.version || null }),
     });
     const wasEditing = Boolean(editingId);
     const pendingError = await window.directResolvePendingForm?.('diarista');
@@ -286,7 +310,7 @@ function render() {
   $('#table-wrap').hidden = filtered.length === 0;
   const body = $('#rows');
   body.replaceChildren();
-  filtered.forEach(item => {
+  DirectPager.slice('workers',filtered,$('#table-wrap'),render).forEach(item => {
     const tr = document.createElement('tr');
     const identity = document.createElement('td');
     const name = document.createElement('strong'); name.textContent = item.nome;
@@ -581,4 +605,5 @@ $('#daily-form').addEventListener('submit', saveDaily);
 $('#payment-close-button').addEventListener('click', cancelPayment);
 $('#payment-cancel-button').addEventListener('click', cancelPayment);
 $('#payment-form').addEventListener('submit', savePayment);
-load();
+if (location.hash === '#diaristas') load();
+window.addEventListener('direct:signed-out', () => { records = []; render(); });

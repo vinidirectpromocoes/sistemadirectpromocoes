@@ -98,3 +98,11 @@ As 44 lojas, seis redes e dez setores estão preservados. Relatórios anteriores
 - **Redes e lojas → Relatório:** atendimento mensal, presenças, faltas, desistências, substituições e ocorrências. Cópia e impressão/PDF pelo navegador. Datas futuras ainda não contam como presenças; uma substituição pode recompor a diária apesar do evento de falta.
 - Backup consistente v7: 28 tabelas, incluindo solicitações, conferências e links privados das lojas. Backups v1–v6 continuam aceitos; RPC v6 permanece compatível durante atualização. O ensaio SQLite preserva links privados como registros de recuperação, sem reabrir acessos externos nem restaurar Supabase Auth automaticamente.
 - CI inclui `tests/management_e2e.mjs`. Ensaios SQL `tests/store_management_database.sql` e `tests/backup_v7_database.sql` são revertidos. Não há serviço pago, envio automático de WhatsApp ou créditos de IA adicionados por esses lotes.
+
+## Lote de fluidez e proteção — 04/10/2026
+
+Financeiro utiliza o mesmo período para previsão, diárias realizadas e caixa registrado, com datas de competência e de pagamento identificadas. Leituras simultâneas compartilham a consulta em andamento; módulos de Leitura, convites, vagas e backup carregam quando usados. Listas de diaristas/pedidos/financeiro exibem 25 itens por página, mantendo os totais completos.
+
+Formulários de diarista, pedido, loja e lançamento enviam a versão aberta: uma gravação concorrente retorna conflito e mantém o texto digitado. Entre abas abertas há aviso de alteração por BroadcastChannel; entre funcionários a revisão do banco é consultada a cada 20 segundos enquanto a página está visível.
+
+Backup diário criptografado e histórico central: [guia de recuperação](docs/RECUPERACAO.md). A rotina instalada no Mac usa cópia de código fora de Documents para evitar depender da permissão de acesso em segundo plano. Atualize-a após cada publicação com `python scripts/install_backup_agent.py --source /caminho/do/repositorio`. O serviço do Mac precisa estar ativo; o painel avisa depois de 36 horas sem cópia verificada.

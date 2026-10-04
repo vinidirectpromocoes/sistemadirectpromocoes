@@ -25,6 +25,7 @@
   <script src="/vendor/supabase-2.117.2.js" defer></script>
   <script src="/payment-calendar.js" defer></script>
   <script src="/remote.js" defer></script>
+  <script src="/route-loader.js" defer></script>
   <script src="/app.js" defer></script>
   <script src="/stores.js" defer></script>
   <script src="/insights.js" defer></script>
@@ -38,17 +39,11 @@
   <script src="/orders.js" defer></script>
   <script src="/messages.js" defer></script>
   <script src="/settings.js" defer></script>
-  <script src="/backup-model.js" defer></script>
-  <script src="/backup.js" defer></script>
-  <script src="/reading-parser.js" defer></script>
-  <script src="/reading-assistant.js" defer></script>
-  <script src="/reading.js" defer></script>
   <script src="/offline.js" defer></script>
+  <script src="/session-sync.js" defer></script>
   <script src="/operations-extended.js" defer></script>
   <script src="/crm-model.js" defer></script>
   <script src="/hub.js" defer></script>
-  <script src="/portal-admin.js" defer></script>
-  <script src="/vacancies-admin.js" defer></script>
   <link rel="stylesheet" href="/messages.css">
 <link rel="stylesheet" href="automation.css"><script src="automation.js" defer></script>
 <link rel="stylesheet" href="/management.css"><script src="/management.js" defer></script>
@@ -213,21 +208,22 @@
         <div><div class="eyebrow">GESTÃO <span>/</span> FINANCEIRO</div><h1>Financeiro</h1><p>Acompanhe entradas, pagamentos e pendências da empresa.</p></div>
         <div class="finance-header-actions"><button class="button button-outline" id="finance-audit-button" type="button" aria-label="Histórico de alterações" title="Histórico de alterações"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 12a9 9 0 1 0 2.6-6.4M3 4v4h4M12 7v5l3 2"/></svg><span class="button-label">Histórico de alterações</span></button><button class="button button-primary" id="new-finance-button" type="button" aria-label="Novo lançamento" title="Novo lançamento"><span aria-hidden="true">＋</span><span class="button-label">Novo lançamento</span></button></div>
       </header>
-      <div class="finance-period-bar"><label for="finance-month">Caixa e lançamentos · mês</label><input id="finance-month" type="month"><label class="finance-all-months"><input id="finance-all-months" type="checkbox"> Ver todos os meses</label></div>
+      <div class="finance-period-bar"><label for="finance-month">Período · mês</label><input id="finance-month" type="month"><label class="finance-all-months"><input id="finance-all-months" type="checkbox"> Ver todos os meses</label></div>
+      <h2 class="forecast-subtitle">Caixa registrado</h2><p class="section-help">Entradas e saídas pela data em que o dinheiro foi recebido ou pago. Presença não significa pagamento.</p>
       <section class="finance-stats" aria-label="Resumo financeiro">
         <div class="finance-stat"><span>Entradas no mês</span><strong id="finance-in">R$ 0,00</strong></div>
         <div class="finance-stat"><span>Saídas no mês</span><strong id="finance-out">R$ 0,00</strong></div>
         <div class="finance-stat emphasis"><span>Saldo realizado</span><strong id="finance-balance">R$ 0,00</strong></div>
-        <div class="finance-stat"><span>A receber · total</span><strong id="finance-receivable">R$ 0,00</strong></div>
-        <div class="finance-stat"><span>A pagar · total</span><strong id="finance-payable">R$ 0,00</strong></div>
+        <div class="finance-stat"><span>A receber · no período</span><strong id="finance-receivable">R$ 0,00</strong></div>
+        <div class="finance-stat"><span>A pagar · no período</span><strong id="finance-payable">R$ 0,00</strong></div>
       </section>
       <section class="forecast-section" aria-labelledby="forecast-title">
-        <div class="finance-dashboard-heading"><div><span class="eyebrow">PEDIDOS E PRESENÇAS</span><h2 id="forecast-title">Faturamento e lucro</h2><p>Presenças confirmadas e previsão de atendimento. Faltas sem substituição reduzem a previsão; pedidos excluídos saem do cálculo.</p></div><div class="forecast-controls"><label class="forecast-period-label">Período operacional<select id="forecast-period"><option value="all">Todos os pedidos</option><option value="day">Dia selecionado</option><option value="week">Semana selecionada</option><option value="month">Mês do caixa</option></select></label><label id="forecast-date-wrap" class="forecast-period-label" hidden>Data de referência<input id="forecast-date" type="date"></label><div class="forecast-shortcuts"><button id="forecast-today" class="button button-outline" type="button">Hoje</button><button id="forecast-week" class="button button-outline" type="button">Esta semana</button></div></div></div>
+        <div class="finance-dashboard-heading"><div><span class="eyebrow">PEDIDOS E PRESENÇAS</span><h2 id="forecast-title">Diárias realizadas e previsão</h2><p>Presenças confirmadas e previsão de atendimento. Faltas sem substituição reduzem a previsão; pedidos excluídos saem do cálculo.</p></div><div class="forecast-controls"><label class="forecast-period-label">Período operacional<select id="forecast-period"><option value="all">Todos os pedidos</option><option value="day">Dia selecionado</option><option value="week">Semana selecionada</option><option value="month" selected>Mês selecionado</option></select></label><label id="forecast-date-wrap" class="forecast-period-label" hidden>Data de referência<input id="forecast-date" type="date"></label><div class="forecast-shortcuts"><button id="forecast-today" class="button button-outline" type="button">Hoje</button><button id="forecast-week" class="button button-outline" type="button">Esta semana</button></div></div></div>
         <p id="forecast-period-note" class="forecast-period-note" aria-live="polite">Todos os pedidos registrados</p>
         <div class="forecast-cards confirmed-cards" aria-label="Valores das presenças confirmadas">
-          <article class="finance-stat forecast-card"><span>Faturamento confirmado</span><strong id="confirmed-revenue">R$ 0,00</strong><small>Serviços com presença registrada</small></article>
+          <article class="finance-stat forecast-card"><span>Faturamento das diárias realizadas</span><strong id="confirmed-revenue">R$ 0,00</strong><small>Serviços com presença registrada</small></article>
           <article class="finance-stat forecast-card"><span>Custo das diárias confirmadas</span><strong id="confirmed-cost">R$ 0,00</strong><small id="confirmed-count">0 diárias com presença</small></article>
-          <article class="finance-stat forecast-card emphasis"><span>Lucro confirmado · estimado</span><strong id="confirmed-profit">R$ 0,00</strong><small id="confirmed-extra-note">Após extras estimados</small></article>
+          <article class="finance-stat forecast-card emphasis"><span>Resultado das diárias realizadas</span><strong id="confirmed-profit">R$ 0,00</strong><small id="confirmed-extra-note">Após extras estimados</small></article>
         </div>
         <p class="section-help confirmed-help">Confirmado significa presença registrada, mesmo antes do recebimento ou pagamento. O lucro desconta diárias e extras estimados, antes de outras despesas da empresa. O caixa realizado aparece no resumo acima.</p>
         <div id="confirmed-warning" class="finance-warning" role="status" hidden></div>

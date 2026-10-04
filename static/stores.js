@@ -101,6 +101,7 @@ async function loadStores() {
 
 function openStoreForm(item = null) {
   editingStoreId = item?.id || null;
+  document.getElementById('store-form').dataset.version = item?.atualizado_em || '';
   document.querySelector('#store-form').reset();
   document.querySelector('#store-form-error').hidden = true;
   document.querySelector('#store-dialog-title').textContent = item ? 'Editar loja' : 'Nova loja';
@@ -133,7 +134,7 @@ async function saveStore(event) {
   for(const k of ['responsavel','telefone_contato','entrada','apresentacao','uniforme','orientacoes'])payload[k]=document.getElementById('store-'+k).value.trim();
   const button = document.querySelector('#store-save-button'); button.disabled = true;
   try {
-    await request(editingStoreId ? `/api/lojas/${editingStoreId}` : '/api/lojas', {method: editingStoreId ? 'PUT' : 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify(payload)});
+    await request(editingStoreId ? `/api/lojas/${editingStoreId}` : '/api/lojas', {method: editingStoreId ? 'PUT' : 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({ ...payload, expected_updated_at: document.getElementById('store-form').dataset.version || null })});
     document.querySelector('#store-dialog').close();
     await loadStores();
     storeFeedback(editingStoreId ? 'Loja atualizada.' : 'Loja cadastrada.');

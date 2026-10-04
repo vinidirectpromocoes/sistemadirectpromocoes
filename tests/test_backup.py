@@ -60,6 +60,18 @@ class BackupRestoreTests(unittest.TestCase):
                 restore(archive, "incorrecta", output)
             self.assertFalse(output.exists())
 
+    def test_operational_restore_accepts_audit_without_author(self):
+        import server
+        previous_path=server.DB_PATH
+        data={table:[] for table in ALL_TABLES}
+        data['direct_auditoria']=[{'id':1,'tabela':'pedidos','registro_id':1,'operacao':'INSERT','email_autor':None,'alterado_em':'2026-10-04T12:00:00Z'}]
+        try:
+            with tempfile.TemporaryDirectory() as directory:
+                archive,output=Path(directory)/'backup.json',Path(directory)/'restored.db'
+                self.archive(archive,data,'direct-data-v7');restore_operational(archive,self.password,output)
+                with sqlite3.connect(output) as db:self.assertEqual(db.execute('select email_autor from direct_auditoria').fetchone()[0],'')
+        finally:server.DB_PATH=previous_path
+
     def test_v6_restores_models_and_store_instructions(self):
         import server
         previous_path = server.DB_PATH

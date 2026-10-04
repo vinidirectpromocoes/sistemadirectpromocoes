@@ -913,7 +913,8 @@ class Handler(BaseHTTPRequestHandler):
             return self.respond(HTTPStatus.OK, [dict(row) for row in rows])
         if path == "/":
             path = "/index.html"
-        assets = {"/management-model.js":"text/javascript; charset=utf-8", "/management.js":"text/javascript; charset=utf-8", "/management.css":"text/css; charset=utf-8", "/loja.html":"text/html; charset=utf-8", "/store-portal.js":"text/javascript; charset=utf-8", "/automation-model.js":"text/javascript; charset=utf-8", "/automation.js":"text/javascript; charset=utf-8", "/automation.css":"text/css; charset=utf-8", "/index.html": "text/html; charset=utf-8", "/style.css": "text/css; charset=utf-8", "/brand.css": "text/css; charset=utf-8", "/theme.css": "text/css; charset=utf-8", "/mobile.css": "text/css; charset=utf-8", "/reading.css": "text/css; charset=utf-8", "/motion.css": "text/css; charset=utf-8", "/operations.css": "text/css; charset=utf-8", "/workflow.css": "text/css; charset=utf-8", "/app.js": "text/javascript; charset=utf-8", "/theme.js": "text/javascript; charset=utf-8", "/finance.js": "text/javascript; charset=utf-8", "/forecast.js": "text/javascript; charset=utf-8", "/operations.js": "text/javascript; charset=utf-8", "/workflow.js": "text/javascript; charset=utf-8", "/matching.js": "text/javascript; charset=utf-8", "/backup.js": "text/javascript; charset=utf-8", "/orders.js": "text/javascript; charset=utf-8", "/stores.js": "text/javascript; charset=utf-8", "/settings.js": "text/javascript; charset=utf-8", "/reading.js": "text/javascript; charset=utf-8", "/reading-parser.js": "text/javascript; charset=utf-8", "/remote.js": "text/javascript; charset=utf-8", "/payment-calendar.js": "text/javascript; charset=utf-8", "/vendor/supabase-2.117.2.js": "text/javascript; charset=utf-8", "/stores.css": "text/css; charset=utf-8", "/settings.css": "text/css; charset=utf-8", "/login.css": "text/css; charset=utf-8", "/favicon.svg": "image/svg+xml", "/logo-direct-promocoes.jpg": "image/jpeg", "/logo-direct-promocoes-transparente.png": "image/png"}
+        assets = {"/management-model.js":"text/javascript; charset=utf-8", "/management.js":"text/javascript; charset=utf-8", "/management.css":"text/css; charset=utf-8", "/loja.html":"text/html; charset=utf-8", "/store-portal.js":"text/javascript; charset=utf-8", "/automation-model.js":"text/javascript; charset=utf-8", "/automation.js":"text/javascript; charset=utf-8", "/automation.css":"text/css; charset=utf-8", "/index.html": "text/html; charset=utf-8", "/style.css": "text/css; charset=utf-8", "/brand.css": "text/css; charset=utf-8", "/theme.css": "text/css; charset=utf-8", "/mobile.css": "text/css; charset=utf-8", "/reading.css": "text/css; charset=utf-8", "/motion.css": "text/css; charset=utf-8", "/operations.css": "text/css; charset=utf-8", "/workflow.css": "text/css; charset=utf-8", "/route-loader.js": "text/javascript; charset=utf-8", "/session-sync.js": "text/javascript; charset=utf-8",
+            "/app.js": "text/javascript; charset=utf-8", "/theme.js": "text/javascript; charset=utf-8", "/finance.js": "text/javascript; charset=utf-8", "/forecast.js": "text/javascript; charset=utf-8", "/operations.js": "text/javascript; charset=utf-8", "/workflow.js": "text/javascript; charset=utf-8", "/matching.js": "text/javascript; charset=utf-8", "/backup.js": "text/javascript; charset=utf-8", "/orders.js": "text/javascript; charset=utf-8", "/stores.js": "text/javascript; charset=utf-8", "/settings.js": "text/javascript; charset=utf-8", "/reading.js": "text/javascript; charset=utf-8", "/reading-parser.js": "text/javascript; charset=utf-8", "/remote.js": "text/javascript; charset=utf-8", "/payment-calendar.js": "text/javascript; charset=utf-8", "/vendor/supabase-2.117.2.js": "text/javascript; charset=utf-8", "/stores.css": "text/css; charset=utf-8", "/settings.css": "text/css; charset=utf-8", "/login.css": "text/css; charset=utf-8", "/favicon.svg": "image/svg+xml", "/logo-direct-promocoes.jpg": "image/jpeg", "/logo-direct-promocoes-transparente.png": "image/png"}
         for asset in ['messages-model.js','messages.js','backup-model.js']:
             assets['/'+asset]='text/javascript; charset=utf-8'
         assets['/messages.css']='text/css; charset=utf-8'
@@ -1233,12 +1234,15 @@ class Handler(BaseHTTPRequestHandler):
         store_match = re.fullmatch(r"/api/lojas/(\d+)", urlparse(self.path).path)
         if store_match:
             try:
-                data = validate_store(self.read_json())
+                payload = self.read_json()
+                data = validate_store(payload)
                 store_id = int(store_match.group(1))
                 with connect() as db:
                     fields = ", ".join(f"{key} = ?" for key in data)
-                    cur = db.execute(f"UPDATE lojas SET {fields}, atualizado_em = ? WHERE id = ?", (*data.values(), datetime.now(timezone.utc).isoformat(), store_id))
+                    cur = db.execute(f"UPDATE lojas SET {fields}, atualizado_em = ? WHERE id = ? AND (? IS NULL OR atualizado_em = ?)", (*data.values(), datetime.now(timezone.utc).isoformat(), store_id, payload.get("expected_updated_at"), payload.get("expected_updated_at")))
                     if not cur.rowcount:
+                        if db.execute("SELECT 1 FROM lojas WHERE id = ?", (store_id,)).fetchone():
+                            return self.respond(HTTPStatus.CONFLICT, {"erro": "Este registro foi alterado por outra pessoa. Feche, atualize a lista e abra novamente; seus dados não foram sobrescritos."})
                         return self.respond(HTTPStatus.NOT_FOUND, {"erro": "Loja não encontrada."})
                     row = db.execute("SELECT * FROM lojas WHERE id = ?", (store_id,)).fetchone()
                 return self.respond(HTTPStatus.OK, dict(row))
@@ -1249,7 +1253,8 @@ class Handler(BaseHTTPRequestHandler):
         order_match = re.fullmatch(r"/api/pedidos/(\d+)", urlparse(self.path).path)
         if order_match:
             try:
-                data = validate_order(self.read_json())
+                payload = self.read_json()
+                data = validate_order(payload)
                 order_id = int(order_match.group(1))
                 with connect() as db:
                     old = db.execute("SELECT * FROM pedidos WHERE id = ?", (order_id,)).fetchone()
@@ -1258,8 +1263,10 @@ class Handler(BaseHTTPRequestHandler):
                         if any(old[key] != data[key] for key in fixed):
                             raise ValueError("Este pedido já possui escalas. Preserve a equipe e as datas registradas.")
                     fields = ", ".join(f"{key} = ?" for key in data)
-                    cur = db.execute(f"UPDATE pedidos SET {fields}, atualizado_em = ? WHERE id = ?", (*data.values(), datetime.now(timezone.utc).isoformat(), order_id))
+                    cur = db.execute(f"UPDATE pedidos SET {fields}, atualizado_em = ? WHERE id = ? AND (? IS NULL OR atualizado_em = ?)", (*data.values(), datetime.now(timezone.utc).isoformat(), order_id, payload.get("expected_updated_at"), payload.get("expected_updated_at")))
                     if not cur.rowcount:
+                        if db.execute("SELECT 1 FROM pedidos WHERE id = ?", (order_id,)).fetchone():
+                            return self.respond(HTTPStatus.CONFLICT, {"erro": "Este registro foi alterado por outra pessoa. Feche, atualize a lista e abra novamente; seus dados não foram sobrescritos."})
                         return self.respond(HTTPStatus.NOT_FOUND, {"erro": "Pedido não encontrado."})
                     row = db.execute("SELECT * FROM pedidos WHERE id = ?", (order_id,)).fetchone()
                 return self.respond(HTTPStatus.OK, public_order(row))
@@ -1268,7 +1275,8 @@ class Handler(BaseHTTPRequestHandler):
         finance_match = re.fullmatch(r"/api/financeiro/(\d+)", urlparse(self.path).path)
         if finance_match:
             try:
-                data = validate_finance_entry(self.read_json())
+                payload = self.read_json()
+                data = validate_finance_entry(payload)
                 entry_id = int(finance_match.group(1))
                 with connect() as db:
                     old = db.execute("SELECT * FROM financeiro_lancamentos WHERE id = ?", (entry_id,)).fetchone()
@@ -1276,8 +1284,10 @@ class Handler(BaseHTTPRequestHandler):
                         if len(data["motivo_ajuste"].strip()) < 8 or data["motivo_ajuste"] == old["motivo_ajuste"]:
                             raise ValueError("Explique a correção do lançamento já liquidado (mínimo de 8 caracteres).")
                     fields = ", ".join(f"{key} = ?" for key in data)
-                    cur = db.execute(f"UPDATE financeiro_lancamentos SET {fields}, atualizado_em = ? WHERE id = ?", (*data.values(), datetime.now(timezone.utc).isoformat(), entry_id))
+                    cur = db.execute(f"UPDATE financeiro_lancamentos SET {fields}, atualizado_em = ? WHERE id = ? AND (? IS NULL OR atualizado_em = ?)", (*data.values(), datetime.now(timezone.utc).isoformat(), entry_id, payload.get("expected_updated_at"), payload.get("expected_updated_at")))
                     if not cur.rowcount:
+                        if db.execute("SELECT 1 FROM financeiro_lancamentos WHERE id = ?", (entry_id,)).fetchone():
+                            return self.respond(HTTPStatus.CONFLICT, {"erro": "Este registro foi alterado por outra pessoa. Feche, atualize a lista e abra novamente; seus dados não foram sobrescritos."})
                         return self.respond(HTTPStatus.NOT_FOUND, {"erro": "Lançamento não encontrado."})
                     row = db.execute("SELECT * FROM financeiro_lancamentos WHERE id = ?", (entry_id,)).fetchone()
                 return self.respond(HTTPStatus.OK, dict(row))
@@ -1287,11 +1297,14 @@ class Handler(BaseHTTPRequestHandler):
         if record_id is None:
             return self.respond(HTTPStatus.NOT_FOUND, {"erro": "Rota não encontrada."})
         try:
-            data = validate(self.read_json())
+            payload = self.read_json()
+            data = validate(payload)
             with connect() as db:
                 fields = ", ".join(f"{key} = ?" for key in data)
-                cur = db.execute(f"UPDATE diaristas SET {fields}, atualizado_em = ? WHERE id = ?", (*data.values(), datetime.now(timezone.utc).isoformat(), record_id))
+                cur = db.execute(f"UPDATE diaristas SET {fields}, atualizado_em = ? WHERE id = ? AND (? IS NULL OR atualizado_em = ?)", (*data.values(), datetime.now(timezone.utc).isoformat(), record_id, payload.get("expected_updated_at"), payload.get("expected_updated_at")))
                 if not cur.rowcount:
+                    if db.execute("SELECT 1 FROM diaristas WHERE id = ?", (record_id,)).fetchone():
+                        return self.respond(HTTPStatus.CONFLICT, {"erro": "Este registro foi alterado por outra pessoa. Feche, atualize a lista e abra novamente; seus dados não foram sobrescritos."})
                     return self.respond(HTTPStatus.NOT_FOUND, {"erro": "Cadastro não encontrado."})
                 row = db.execute("SELECT * FROM diaristas WHERE id = ?", (record_id,)).fetchone()
             return self.respond(HTTPStatus.OK, public_row(row))

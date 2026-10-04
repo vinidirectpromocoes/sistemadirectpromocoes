@@ -79,12 +79,11 @@
     sessionStorage.setItem('direct-offline-grant',JSON.stringify({email:session.user.email,role,expires:session.expires_at}));
     showApp(role);
     if (reload) {
-      if (typeof load === 'function') await load();
-      if (typeof loadStores === 'function') await loadStores();
-      if (['admin', 'financeiro'].includes(role) && typeof loadFinance === 'function') await loadFinance();
-      if (typeof loadOrders === 'function') await loadOrders();
-      if (['admin', 'financeiro'].includes(role) && typeof loadSettings === 'function') await loadSettings().catch(() => {});
-      if (typeof loadHome === 'function') await loadHome().catch(() => {});
+      clearRequestCache();
+      showPage();
+      /* Load only the current page; its queries are shared by dependent panels. */
+      return true;
+
     }
     return true;
   }
@@ -120,7 +119,7 @@
     if (result.error) throw new Error(result.error.message);
     return result.data;
   }
-  async function rows(table, select = '*') {
+  async function fetchRows(table, select = '*') {
     const all = [];
     const sortKey = table === 'direct_staff' ? 'email' : table === 'custos_extras' ? 'rede' : 'id';
     for (let start = 0; ; start += 1000) {
@@ -128,6 +127,22 @@
       all.push(...page);
       if (page.length < 1000) return all;
     }
+  }
+  async function updateVersioned(table, id, values, payload) {
+    let query = sb.from(table).update({ ...values, atualizado_em: new Date().toISOString() }).eq('id', id);
+    if (payload.expected_updated_at) query = query.eq('atualizado_em', payload.expected_updated_at);
+    const result = await query.select().maybeSingle();
+    if (result.error) throw new Error(result.error.message);
+    if (!result.data) throw new Error('Este registro foi alterado ou excluído por outra pessoa. Suas alterações não foram sobrescritas. Feche, atualize a lista e abra novamente para comparar.');
+    return result.data;
+  }
+  const rowCache=new Map();
+  const invalidateRows=()=>rowCache.clear();
+  window.addEventListener('direct:data-changed',invalidateRows);window.addEventListener('direct:remote-changed',invalidateRows);window.addEventListener('direct:signed-out',invalidateRows);
+  async function rows(table,select='*'){
+    const key=table+':'+select,existing=rowCache.get(key);
+    if(existing&&(existing.pending||existing.expires>Date.now()))return structuredClone(await existing.promise);
+    const entry={pending:true,expires:0};entry.promise=fetchRows(table,select).then(data=>{entry.pending=false;entry.expires=Date.now();return data;},error=>{if(rowCache.get(key)===entry)rowCache.delete(key);throw error;});rowCache.set(key,entry);return structuredClone(await entry.promise);
   }
   const money = value => value == null || value === '' ? null : Math.round(Number(value) * 100);
   function diaristaPayload(p) {
@@ -244,7 +259,7 @@
       if (child === 'bloqueio' && method === 'PATCH') return unwrap(await sb.from('diaristas').update({ bloqueada: p.bloqueada, atualizado_em: new Date().toISOString() }).eq('id', id).select().single());
       if (method === 'GET') return (await rows('diaristas')).sort((a,b) => a.nome.localeCompare(b.nome, 'pt-BR'));
       if (method === 'POST') return unwrap(await sb.from('diaristas').insert(diaristaPayload(p)).select().single());
-      if (method === 'PUT') return unwrap(await sb.from('diaristas').update({ ...diaristaPayload(p), atualizado_em: new Date().toISOString() }).eq('id', id).select().single());
+      if (method === 'PUT') return await updateVersioned('diaristas', id, diaristaPayload(p), p);
       if (method === 'DELETE') {
         const history = await sb.from('diarias').select('id', { count: 'exact', head: true }).eq('diarista_id', id);
         if (history.error) throw new Error(history.error.message);
@@ -255,7 +270,7 @@
     if (entity === 'financeiro') {
       if (method === 'GET') return financeRows();
       if (method === 'POST') return unwrap(await sb.from('financeiro_lancamentos').insert(financePayload(p)).select().single());
-      if (method === 'PUT') return unwrap(await sb.from('financeiro_lancamentos').update({ ...financePayload(p), atualizado_em: new Date().toISOString() }).eq('id', id).select().single());
+      if (method === 'PUT') return await updateVersioned('financeiro_lancamentos', id, financePayload(p), p);
       if (method === 'DELETE') {
         const current = unwrap(await sb.from('financeiro_lancamentos').select('data_pagamento').eq('id', id).single());
         if (current.data_pagamento) throw new Error('Este lançamento já foi liquidado. Registre uma correção com motivo.');
@@ -395,7 +410,7 @@
         }
         return orderView(unwrap(response));
       }
-      if (method === 'PUT') return orderView(unwrap(await sb.from('pedidos').update({ ...orderPayload(p), atualizado_em: new Date().toISOString() }).eq('id', id).select().single()));
+      if (method === 'PUT') return orderView(await updateVersioned('pedidos', id, orderPayload(p), p));
       if (method === 'DELETE') { unwrap(await sb.from('pedidos').delete().eq('id', id)); return { ok: true }; }
     }
     if (entity === 'solicitacoes-lojas' || entity === 'conferencias-lojas') {
@@ -415,7 +430,7 @@
       if(child==='link'&&method==='POST')return unwrap(await sb.rpc('direct_store_link',{p_loja_id:id,p_acao:p.acao||'consultar'}));
       if (method === 'GET') return (await rows('lojas')).sort((a,b) => a.rede.localeCompare(b.rede, 'pt-BR') || a.cidade.localeCompare(b.cidade, 'pt-BR') || a.nome.localeCompare(b.nome, 'pt-BR'));
       if (method === 'POST') return unwrap(await sb.from('lojas').insert(storePayload(p)).select().single());
-      if (method === 'PUT') return unwrap(await sb.from('lojas').update({ ...storePayload(p), atualizado_em: new Date().toISOString() }).eq('id', id).select().single());
+      if (method === 'PUT') return await updateVersioned('lojas', id, storePayload(p), p);
     }
     if (entity === 'tarifas') {
       if (!parts[2] && method === 'GET') {
@@ -445,5 +460,5 @@
     }
     throw new Error('Operação não disponível.');
   }
-  window.directRemote = { request: run, client: sb, get role() { return currentRole; } };
+  window.directRemote = { request: run, revision: async () => unwrap(await sb.rpc('direct_data_revision')), client: sb, get role() { return currentRole; } };
 })();
