@@ -385,6 +385,7 @@
       }
       if (method === 'GET') return (await rows('pedidos')).sort((a,b) => b.id - a.id).map(orderView);
       if (method === 'POST') {
+        if(p.solicitacao_loja_id)return orderView(unwrap(await sb.rpc('direct_store_review_request',{p_id:p.solicitacao_loja_id,p_dados:orderPayload(p),p_aceitar:true,p_motivo:''})));
         const response=await sb.from('pedidos').insert(orderPayload(p)).select().single();
         if (response.error?.code==='23505' && p.chave_operacao) {
           const existing=unwrap(await sb.from('pedidos').select('*').eq('chave_operacao',p.chave_operacao).single());const sent=orderPayload(p);
@@ -397,12 +398,21 @@
       if (method === 'PUT') return orderView(unwrap(await sb.from('pedidos').update({ ...orderPayload(p), atualizado_em: new Date().toISOString() }).eq('id', id).select().single()));
       if (method === 'DELETE') { unwrap(await sb.from('pedidos').delete().eq('id', id)); return { ok: true }; }
     }
+    if (entity === 'solicitacoes-lojas' || entity === 'conferencias-lojas') {
+      if (!['admin','operacao'].includes(currentRole)) throw Error('Sem permissão para solicitações de lojas.');
+      if (method === 'GET') {
+        if(entity==='solicitacoes-lojas')return rows('loja_solicitacoes');
+        return (await rows('loja_validacoes','*,pedido_escalas(pedido_id,data,diaristas(nome))')).map(v=>({...v,escala:{pedido_id:v.pedido_escalas?.pedido_id,data:v.pedido_escalas?.data,diarista_nome:v.pedido_escalas?.diaristas?.nome||''}}));
+      }
+      if (method === 'PATCH') return unwrap(await sb.rpc(entity==='solicitacoes-lojas'?'direct_store_review_request':'direct_store_review_check',{p_id:id,p_aceitar:entity==='solicitacoes-lojas'?false:p.aceitar,...(entity==='solicitacoes-lojas'?{p_dados:null}:{}),p_motivo:p.motivo||''}));
+    }
     if (entity === 'modelos-pedidos') {
       if (method === 'GET') return await rows('pedido_modelos');
       if (method === 'POST') return unwrap(await sb.from('pedido_modelos').insert({nome:p.nome,dados:p.dados}).select().single());
       if (method === 'DELETE') { unwrap(await sb.from('pedido_modelos').delete().eq('id',id)); return {ok:true}; }
     }
     if (entity === 'lojas') {
+      if(child==='link'&&method==='POST')return unwrap(await sb.rpc('direct_store_link',{p_loja_id:id,p_acao:p.acao||'consultar'}));
       if (method === 'GET') return (await rows('lojas')).sort((a,b) => a.rede.localeCompare(b.rede, 'pt-BR') || a.cidade.localeCompare(b.cidade, 'pt-BR') || a.nome.localeCompare(b.nome, 'pt-BR'));
       if (method === 'POST') return unwrap(await sb.from('lojas').insert(storePayload(p)).select().single());
       if (method === 'PUT') return unwrap(await sb.from('lojas').update({ ...storePayload(p), atualizado_em: new Date().toISOString() }).eq('id', id).select().single());

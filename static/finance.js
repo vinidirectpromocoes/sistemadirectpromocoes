@@ -433,6 +433,7 @@ async function loadFinance() {
     financeRecords = records;
     financeForecastInput = { orders, tariffs: { ...tariffs, extras, contratos:contracts }, scales };
     renderFinance();
+    window.DirectManagementUI?.cash(financeForecastInput,financeRecords);
     window.DirectOperations?.renderStoreResults(financeForecastInput);
     if (typeof window.renderWorkflow === 'function') await window.renderWorkflow(financeRecords, orders, scales, tariffs.redes);
   }

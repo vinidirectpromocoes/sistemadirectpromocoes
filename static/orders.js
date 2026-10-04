@@ -244,6 +244,7 @@ function openOrderForm(item = null) {
   window.directPendingForm = null;
   if ($('#order-detail-dialog').open) $('#order-detail-dialog').close();
   orderEditingId = item?.id ?? null;
+  window.directStoreRequestId = null;
   window.directDraftId = null;
   $('#order-form').reset();
   $('#order-form-error').hidden = true;
@@ -271,6 +272,7 @@ function orderFormData() {
     contato: $('#order-contact').value.trim(), setor: $('#order-sector').value.trim(),
     quantidade_diaristas: Number($('#order-quantity').value), situacao: $('#order-status').value,
     observacoes: $('#order-notes').value.trim(),
+    ...(window.directStoreRequestId?{solicitacao_loja_id:window.directStoreRequestId}:{}),
     ...(window.directDraftId ? { chave_operacao: window.directDraftId } : {}),
     turnos: [...$('#order-shifts').children].map(row => ({
       data: row.querySelector('.order-shift-date').value,
@@ -305,6 +307,7 @@ async function saveOrder(event) {
     const pendingError = await window.directResolvePendingForm?.('pedido');
     $('#order-dialog').close();
     await loadOrders();
+    window.DirectManagementUI?.refresh();
     if (typeof loadHome === 'function') loadHome().catch(() => {});
     showOrderFeedback(pendingError || (edited ? 'Pedido atualizado.' : 'Pedido registrado.'));
   } catch (err) { showOrderFormError(err.message); }
@@ -604,7 +607,7 @@ async function openOrderDetail(id) {
     if (!store) return;
     const section = detailSection('Loja cadastrada', [['Endereço', [store.endereco, store.bairro, `${store.cidade}/${store.uf}`].filter(Boolean).join(' · ')]]);
     section.id = 'order-detail-store';
-    const guidance=DirectMessagesModel.guidance(store);if(guidance){const d=document.createElement('details'),s=document.createElement('summary'),t=document.createElement('p');d.className='profile-more';s.textContent='Orientações da loja';t.className='automation-guidance';t.textContent=guidance;d.append(s,t);section.append(d);}
+    const guidance=DirectMessagesModel.guidance(store);if(guidance){const d=document.createElement('details'),s=document.createElement('summary'),t=document.createElement('p');d.className='profile-more';s.textContent='Orientações da loja';t.className='automation-guidance';t.textContent=guidance.replace(/\*/g,'');d.append(s,t);section.append(d);}
     const link = document.createElement('button'); link.type = 'button'; link.className = 'text-button'; link.textContent = 'Ver em Redes e lojas';
     link.addEventListener('click', () => {
       $('#order-detail-dialog').close();

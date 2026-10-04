@@ -67,7 +67,7 @@ function renderStores() {
       title.append(storeElement('strong', '', item.nome));
       title.append(storeElement('span', item.situacao === 'confirmado' ? 'store-state ready' : 'store-state review', item.situacao === 'confirmado' ? 'Endereço confirmado' : 'Conferir endereço'));
       info.append(title, storeElement('p', 'store-address', storeAddress(item)));
-      const guidance=DirectMessagesModel.guidance(item);if(guidance){const d=storeElement('details','profile-more'),s=storeElement('summary','','Orientações para a diária'),t=storeElement('p','automation-guidance',guidance);d.append(s,t);info.append(d);}
+      const guidance=DirectMessagesModel.guidance(item);if(guidance){const d=storeElement('details','profile-more'),s=storeElement('summary','','Orientações para a diária'),t=storeElement('p','automation-guidance',guidance.replace(/\*/g,''));d.append(s,t);info.append(d);}
       if (item.observacao) info.append(storeElement('p', 'store-note', item.observacao));
       const source = storeElement('a', 'store-source', 'Ver fonte ↗');
       if (item.fonte_url) { source.href = item.fonte_url; source.target = '_blank'; source.rel = 'noopener noreferrer'; info.append(source); }
@@ -87,6 +87,7 @@ function renderStores() {
       const edit = storeElement('button', 'text-button', 'Editar');
       edit.type = 'button'; edit.setAttribute('aria-label', `Editar loja ${item.nome}, ${item.rede}`);
       edit.addEventListener('click', () => openStoreForm(item));
+      if(window.DirectManagementUI){const report=storeElement('button','button button-outline','▧ Relatório');report.type='button';report.title='Relatório mensal desta loja';report.setAttribute('aria-label','Relatório mensal de '+item.nome);report.hidden=window.directRemote?.role==='consulta';report.onclick=()=>DirectManagementUI.storeReport(item);actions.append(report);if(!window.directRemote||['admin','operacao'].includes(window.directRemote.role)){const link=storeElement('button','button button-outline','↗ Link da loja');link.type='button';link.onclick=()=>DirectManagementUI.storeLink(item);actions.append(link);}}
       actions.append(copy, edit); card.append(info, actions); list.append(card);
     });
     section.append(list); groups.append(section);

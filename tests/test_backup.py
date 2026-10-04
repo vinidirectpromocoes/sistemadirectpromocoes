@@ -18,7 +18,7 @@ class BackupRestoreTests(unittest.TestCase):
 
     def archive(self, path, data, version="direct-data-v1"):
         payload = {"format": version, "exportedAt": "2026-09-29T12:00:00Z", "tables": data}
-        if version in ("direct-data-v5", "direct-data-v6"):
+        if version in ("direct-data-v5", "direct-data-v6", "direct-data-v7"):
             payload["snapshot"] = {"consistent": True, "counts": {table: len(rows) for table, rows in data.items()}}
         salt, iv = os.urandom(16), os.urandom(12)
         key = __import__("hashlib").pbkdf2_hmac("sha256", self.password.encode(), salt, 200000, 32)
@@ -71,11 +71,43 @@ class BackupRestoreTests(unittest.TestCase):
                 root = Path(directory); archive = root / "backup.json"; output = root / "restored.db"
                 self.archive(archive, data, "direct-data-v6")
                 counts = restore_operational(archive, self.password, output)
-                self.assertEqual(len(counts), 25)
+                self.assertEqual(len(counts), 28)
                 self.assertEqual(counts["pedido_modelos"], 1)
                 with sqlite3.connect(output) as db:
                     self.assertEqual(json.loads(db.execute("select dados from pedido_modelos").fetchone()[0])["turnos"][0]["inicio"], "07:00")
                     self.assertEqual(db.execute("select entrada from lojas").fetchone()[0], "Porta lateral")
+        finally:
+            server.DB_PATH = previous_path
+
+    def test_v7_restores_store_review_relations_and_preserves_private_link(self):
+        import server
+        previous_path = server.DB_PATH
+        data = {table: [] for table in ALL_TABLES}
+        data['lojas'] = [{'id': 1, 'rede': 'Super do Povo', 'nome': 'Meireles', 'endereco': 'Rua Teste, 1', 'cidade': 'Fortaleza', 'situacao': 'confirmado', 'criado_em': '2026-10-04', 'atualizado_em': '2026-10-04'}]
+        data['pedidos'] = [{'id': 1, 'supermercado': 'Super do Povo', 'unidade': 'Meireles', 'setor': 'FLV', 'quantidade_diaristas': 1, 'situacao': 'novo', 'turnos': [{'data': '2026-10-04', 'inicio': '07:00', 'fim': '15:20'}], 'criado_em': '2026-10-04', 'atualizado_em': '2026-10-04'}]
+        data['diaristas'] = [{'id': 1, 'nome': 'Pessoa de teste', 'cpf': '11144477735', 'setores': [], 'disponibilidade': [], 'cep': '', 'logradouro': '', 'numero': '', 'bairro': '', 'cidade': 'Fortaleza', 'uf': 'CE', 'criado_em': '2026-10-04', 'atualizado_em': '2026-10-04'}]
+        data['pedido_escalas'] = [{'id': 1, 'pedido_id': 1, 'diarista_id': 1, 'data': '2026-10-04', 'criado_em': '2026-10-04', 'atualizado_em': '2026-10-04'}]
+        data['loja_solicitacoes'] = [{'id': 1, 'loja_id': 1, 'chave': '00000000-0000-0000-0000-000000000001', 'dados': {'setor': 'FLV'}, 'estado': 'aprovada', 'pedido_id': 1, 'criado_em': '2026-10-04', 'atualizado_em': '2026-10-04'}]
+        data['loja_validacoes'] = [{'id': 1, 'loja_id': 1, 'escala_id': 1, 'presenca': 'presente', 'estado': 'pendente', 'criado_em': '2026-10-04', 'atualizado_em': '2026-10-04'}]
+        data['loja_links'] = [{'id': 1, 'loja_id': 1, 'token': 'e' * 64, 'ativo': True, 'expira_em': '2027-01-02T00:00:00Z'}]
+        try:
+            with tempfile.TemporaryDirectory() as directory:
+                root = Path(directory); archive = root / 'backup.json'; output = root / 'restored.db'
+                self.archive(archive, data, 'direct-data-v7')
+                counts = restore_operational(archive, self.password, output)
+                self.assertEqual(len(counts), 28)
+                with sqlite3.connect(output) as db:
+                    self.assertEqual(db.execute('select pedido_id from loja_solicitacoes').fetchone()[0], 1)
+                    self.assertEqual(db.execute('select escala_id,estado from loja_validacoes').fetchone(), (1, 'pendente'))
+                    private = json.loads(db.execute("select record_json from backup_private_rows where source_table='loja_links'").fetchone()[0])
+                    self.assertEqual(private['token'], 'e' * 64)
+                    self.assertEqual(private['expira_em'], '2027-01-02T00:00:00Z')
+                    self.assertEqual(db.execute('pragma foreign_key_check').fetchall(), [])
+                broken = root / 'broken.json'; data['loja_validacoes'][0]['escala_id'] = 999
+                self.archive(broken, data, 'direct-data-v7')
+                with self.assertRaisesRegex(ValueError, 'referências quebradas'):
+                    restore_operational(broken, self.password, root / 'broken.db')
+                self.assertFalse((root / 'broken.db').exists())
         finally:
             server.DB_PATH = previous_path
 

@@ -33,7 +33,7 @@
     try {
       const pass = password();
       output.textContent = 'Preparando cópia consistente no banco...';
-      const { data: payload, error } = await window.directRemote.client.rpc('direct_backup_snapshot');
+      const { data: payload, error } = await window.directRemote.client.rpc('direct_backup_snapshot_v7');
       if (error) throw new Error(error.message);
       const verified = window.DirectBackup.validate(payload);
       const salt = crypto.getRandomValues(new Uint8Array(16));
@@ -61,7 +61,7 @@
         await key(password(), fromBase64(archive.salt)), fromBase64(archive.data));
       const payload = JSON.parse(decoder.decode(plain));
       const checked = window.DirectBackup.validate(payload);
-      const missing = ['direct-data-v5','direct-data-v6'].includes(payload.format) ? '' : ' Esta cópia antiga não inclui configurações e vínculos privados do portal.';
+      const missing = ['direct-data-v5','direct-data-v6','direct-data-v7'].includes(payload.format) ? '' : ' Esta cópia antiga não inclui configurações e vínculos privados do portal.';
       output.textContent = `Cópia legível e íntegra: ${checked.count} registro(s) em ${checked.tables} tabelas, criada em ${new Date(payload.exportedAt).toLocaleString('pt-BR')}.${missing}`;
       localStorage.setItem('direct-backup-verified-at', new Date().toISOString());
       showLastCheck();

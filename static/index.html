@@ -33,7 +33,7 @@
   <script src="/operations.js" defer></script>
   <script src="/workflow.js" defer></script>
   <script src="/finance.js" defer></script>
-  <script src="/automation-model.js" defer></script><script src="/matching.js" defer></script>
+  <script src="/management-model.js" defer></script><script src="/automation-model.js" defer></script><script src="/matching.js" defer></script>
   <script src="/messages-model.js" defer></script>
   <script src="/orders.js" defer></script>
   <script src="/messages.js" defer></script>
@@ -51,6 +51,7 @@
   <script src="/vacancies-admin.js" defer></script>
   <link rel="stylesheet" href="/messages.css">
 <link rel="stylesheet" href="automation.css"><script src="automation.js" defer></script>
+<link rel="stylesheet" href="/management.css"><script src="/management.js" defer></script>
 </head>
 <body>
   <div id="global-loading" class="global-loading" role="progressbar" aria-label="Carregando dados" hidden><span></span></div>
@@ -129,7 +130,7 @@
     </main>
     <main class="main-content" id="crm-page" hidden>
       <header class="page-header"><div><div class="eyebrow">GESTÃO <span>/</span> ROTINA</div><h1>Pendências</h1><p>O que precisa ser resolvido agora?</p></div><button id="crm-refresh" class="button button-outline" type="button" aria-label="Atualizar pendências"><span aria-hidden="true">↻</span><span class="button-label">Atualizar</span></button></header>
-      <details id="deadline-alerts" class="card profile-more" hidden><summary id="deadline-alerts-title">Alertas por prazo</summary><div id="deadline-alerts-list" class="automation-list"></div></details><p id="crm-feedback" class="feedback" role="status" hidden></p>
+      <button id="daily-summary-button" class="button button-outline" type="button" hidden>▧ Resumo do dia</button><details id="store-pending-panel" class="card profile-more" hidden><summary id="store-pending-title">Lojas: pedidos e conferências</summary><div id="store-pending-list" class="automation-list"></div></details><details id="deadline-alerts" class="card profile-more" hidden><summary id="deadline-alerts-title">Alertas por prazo</summary><div id="deadline-alerts-list" class="automation-list"></div></details><p id="crm-feedback" class="feedback" role="status" hidden></p>
       <section class="crm-summary" aria-label="O que fazer agora">
         <button data-crm-scope="vacancy" class="finance-stat" type="button" aria-pressed="false"><span>Precisa de diarista</span><strong id="crm-count-vacancy">0</strong><small>Escalar ou substituir</small></button>
         <button data-crm-scope="response" class="finance-stat" type="button" aria-pressed="false"><span>Aguardando confirmação</span><strong id="crm-count-response">0</strong><small>Conferir se a pessoa vai</small></button>
@@ -252,7 +253,7 @@
         </div>
       </section>
       <div id="finance-warning" class="finance-warning" hidden></div>
-      <section class="list-card finance-list" aria-labelledby="finance-list-title">
+      <details id="cash-agenda" class="card profile-more"><summary>Agenda financeira por vencimento</summary><div class="management-toolbar"><label>Mês<input id="cash-agenda-month" type="month"></label><button id="cash-agenda-today" class="button button-outline" type="button">Este mês</button></div><p class="section-help">Previsões das diárias e lançamentos pendentes. Realizado pela data do pagamento/recebimento. Receitas avulsas não abatem previsões de diárias sem vínculo.</p><div id="cash-agenda-summary" class="management-stats"></div><div id="cash-agenda-days" class="automation-list"></div><p id="cash-agenda-warning" class="section-help" hidden></p></details><section class="list-card finance-list" aria-labelledby="finance-list-title">
         <div class="list-top finance-list-top"><div><h2 id="finance-list-title">Lançamentos</h2><p>Diárias da mesma pessoa aparecem somadas no período selecionado. Abra o grupo para conferir cada pagamento.</p></div></div>
         <div class="finance-filters"><div class="search-wrap"><span aria-hidden="true">⌕</span><input id="finance-search" type="search" placeholder="Buscar descrição ou pessoa" aria-label="Buscar lançamentos"></div><select id="finance-type-filter" aria-label="Filtrar por tipo"><option value="todos">Entradas e saídas</option><option value="receita">Somente entradas</option><option value="despesa">Somente saídas</option></select><select id="finance-status-filter" aria-label="Filtrar por situação"><option value="todos">Todas as situações</option><option value="pendente">Pendentes</option><option value="pago">Pagos ou recebidos</option><option value="sem-valor">Sem valor informado</option><option value="sem-vencimento">Sem vencimento</option></select><button class="button button-outline" id="finance-export-button" type="button" aria-label="Exportar CSV" title="Exportar CSV"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3v12m0 0 4-4m-4 4-4-4M4 17v3h16v-3"/></svg><span class="button-label">Exportar CSV</span></button></div>
         <div id="finance-feedback" class="feedback" role="status" aria-live="polite" hidden></div>
@@ -263,7 +264,7 @@
     <main class="main-content" id="pedidos-page" hidden>
       <header class="page-header">
         <div><div class="eyebrow">OPERAÇÃO <span>/</span> PEDIDOS</div><h1>Pedidos dos supermercados</h1><p>Registre a demanda de diaristas por setor, data e horário.</p></div>
-        <button class="button button-outline" id="order-models-button" type="button">▧ Modelos</button><button class="button button-primary" id="new-order-button" type="button" aria-label="Novo pedido" title="Novo pedido"><span aria-hidden="true">＋</span><span class="button-label">Novo pedido</span></button>
+        <div class="order-header-actions"><button class="button button-outline" id="store-requests-button" type="button" aria-label="Solicitações das lojas" title="Solicitações das lojas" hidden><span aria-hidden="true">▤</span><span class="button-label">Solicitações das lojas</span><span id="store-requests-count">0</span></button><button class="button button-outline" id="order-models-button" type="button" aria-label="Modelos de pedidos" title="Modelos de pedidos"><span aria-hidden="true">▧</span><span class="button-label">Modelos</span></button><button class="button button-primary" id="new-order-button" type="button" aria-label="Novo pedido" title="Novo pedido"><span aria-hidden="true">＋</span><span class="button-label">Novo pedido</span></button></div>
       </header>
       <section class="list-card orders-filter-panel" aria-label="Filtros dos pedidos">
         <div class="orders-filter-toolbar"><div class="search-wrap"><span aria-hidden="true">⌕</span><input id="orders-search" type="search" placeholder="Rede, loja, setor ou número" aria-label="Buscar pedidos"></div><button id="orders-filter-toggle" class="button button-outline" type="button" aria-expanded="false" aria-controls="orders-filter-fields">Filtros</button><button id="orders-filter-clear" class="button button-quiet" type="button" title="Limpar todos os filtros" disabled>Limpar</button></div>
@@ -478,5 +479,6 @@
     <div class="dialog-footer detail-footer"><button class="button button-danger" id="order-delete-button" type="button">Excluir pedido</button><div><button class="button button-quiet" id="order-detail-close-bottom" type="button">Fechar</button><button class="button button-primary" id="order-edit-button" type="button">Editar pedido</button></div></div>
   </dialog>
 <dialog id="order-model-dialog" aria-labelledby="order-model-title"><div class="dialog-header"><h2 id="order-model-title">Modelos de pedidos</h2><button id="order-model-close" class="icon-button" type="button" aria-label="Fechar modelos">×</button></div><div class="dialog-body"><p class="section-help">Gera um rascunho para conferir. A vaga só será publicada ao salvar o pedido.</p><label>Início da nova escala<input id="order-model-start" type="date" required></label><div id="order-model-list" class="automation-list"></div><p id="order-model-error" class="form-error" role="alert" hidden></p></div></dialog>
+<dialog id="management-dialog" aria-labelledby="management-title"><div class="dialog-header"><h2 id="management-title"></h2><button id="management-close" class="icon-button" type="button" aria-label="Fechar">×</button></div><div class="dialog-body"><div id="management-body"></div><p id="management-feedback" class="feedback" role="status" hidden></p></div><div class="dialog-footer"><button id="management-print" class="button button-outline" type="button" hidden>Imprimir / PDF</button><button id="management-copy" class="button button-primary" type="button" hidden>Copiar</button></div></dialog>
 </body>
 </html>
