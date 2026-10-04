@@ -98,6 +98,7 @@ class BackupRestoreTests(unittest.TestCase):
                     db.execute("UPDATE diarias SET vencimento_pagamento='2026-10-15', vencimento_recebimento='2026-10-15', vencimento_origem='calendario' WHERE id=?", (daily_id,))
                     db.execute("UPDATE pedido_escalas SET disponibilidade_pedido_confirmada=1 WHERE id=?", (scale_id,))
                     db.execute("UPDATE tarifas_redes SET pagamento_segunda_quinzena=18 WHERE rede='Super do Povo'")
+                    db.execute("UPDATE tarifas_redes SET pagamento_semanal_dia=5 WHERE rede='Pinheiro'")
                     contract_id=db.execute("INSERT INTO contratos(rede,loja,setor,inicio,valor_recebido_centavos,valor_pago_centavos,criado_em) VALUES('Super do Povo','Meireles','Operador de caixa','2026-09-01',13400,9000,'2026-09-29')").lastrowid
                     db.execute("UPDATE diarias SET contrato_id=? WHERE id=?",(contract_id,daily_id))
                     db.execute("INSERT INTO ocorrencias(pedido_id,escala_id,tipo,descricao,autor,criado_em) VALUES(?,?,'elogio','Atendimento bem avaliado','Teste','2026-09-29')",(order_id,scale_id))
@@ -116,6 +117,7 @@ class BackupRestoreTests(unittest.TestCase):
                     self.assertEqual(db.execute("SELECT count(*) FROM diarias WHERE pedido_escala_id = ?", (scale_id,)).fetchone()[0], 1)
                     self.assertEqual(db.execute("SELECT vencimento_pagamento,vencimento_recebimento,vencimento_origem FROM diarias").fetchone(), ('2026-10-15','2026-10-15','calendario'))
                     self.assertEqual(db.execute("SELECT pagamento_segunda_quinzena FROM tarifas_redes WHERE rede='Super do Povo'").fetchone()[0],18)
+                    self.assertEqual(db.execute("SELECT pagamento_semanal_dia FROM tarifas_redes WHERE rede='Pinheiro'").fetchone()[0],5)
                 self.assertEqual(server.finance_rows()[0]["valor_centavos"], 9000)
         finally:
             server.DB_PATH = previous_path
