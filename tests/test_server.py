@@ -55,6 +55,18 @@ class CadastroTest(unittest.TestCase):
         except HTTPError as error:
             return error.code, json.load(error)
 
+    def test_phone_create_edit_and_validation(self):
+        status, record = self.call("POST", "/api/diaristas", {**SAMPLE, "telefone": "(85) 99999-1234"})
+        self.assertEqual(status, 201)
+        self.assertEqual(record["telefone"], "85999991234")
+        status, changed = self.call("PUT", f"/api/diaristas/{record['id']}", {**SAMPLE, "telefone": "+55 85 99999-1234"})
+        self.assertEqual(status, 200)
+        self.assertEqual(changed["telefone"], "5585999991234")
+        status, _ = self.call("PUT", f"/api/diaristas/{record['id']}", {**SAMPLE, "telefone": "123"})
+        self.assertEqual(status, 400)
+        status, rows = self.call("GET", "/api/diaristas")
+        self.assertEqual(rows[0]["telefone"], "5585999991234")
+
     def test_create_edit_list_delete_and_persistence(self):
         status, created = self.call("POST", "/api/diaristas", SAMPLE)
         self.assertEqual(status, 201)

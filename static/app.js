@@ -166,7 +166,7 @@ function openForm(record = null) {
     row.querySelector('.day-end').value = '18:00';
   });
   if (record) {
-    for (const key of ['nome', 'cpf', 'data_nascimento', 'cep', 'logradouro', 'numero', 'complemento', 'bairro', 'cidade', 'uf', 'local_trabalho', 'rede_trabalho', 'transporte', 'observacoes_locomocao']) {
+    for (const key of ['nome', 'cpf', 'telefone', 'data_nascimento', 'cep', 'logradouro', 'numero', 'complemento', 'bairro', 'cidade', 'uf', 'local_trabalho', 'rede_trabalho', 'transporte', 'observacoes_locomocao']) {
       if (key === 'transporte' && record[key] && ![...$('#transporte').options].some(o => o.value === record[key])) $('#transporte').add(new Option(record[key], record[key]));
       $(`#${key}`).value = key === 'cpf' ? formatCpf(record[key]) : key === 'cep' ? formatCep(record[key]) : (record[key] ?? '');
     }
@@ -199,7 +199,7 @@ function formData() {
     fim: anyHours ? '23:59' : row.querySelector('.day-end').value,
   }));
   return {
-    nome: $('#nome').value, cpf: $('#cpf').value, data_nascimento: $('#data_nascimento').value || null, cidade: $('#cidade').value || 'Fortaleza', uf: $('#uf').value.toUpperCase() || 'CE', rede_trabalho: $('#rede_trabalho').value,
+    nome: $('#nome').value, cpf: $('#cpf').value, telefone: $('#telefone').value.replace(/\D/g, ''), data_nascimento: $('#data_nascimento').value || null, cidade: $('#cidade').value || 'Fortaleza', uf: $('#uf').value.toUpperCase() || 'CE', rede_trabalho: $('#rede_trabalho').value,
     setores: $('#setores').value.split(',').map(value => value.trim()).filter(Boolean),
     cep: $('#cep').value, logradouro: $('#logradouro').value, numero: $('#numero').value,
     complemento: $('#complemento').value, bairro: $('#bairro').value,
@@ -214,6 +214,7 @@ function validateForm(data) {
   const required = [['nome', 'nome'], ['cpf', 'CPF']];
   for (const [key, label] of required) if (!(Array.isArray(data[key]) ? data[key].length : data[key].trim())) return `Preencha ${label}.`;
   if (!validCpf(data.cpf)) return 'Informe um CPF válido.';
+  if (data.telefone && !/^\d{10,13}$/.test(data.telefone)) return 'Confira o telefone com DDD (10 a 13 números).';
   if (data.cep.trim() && data.cep.replace(/\D/g, '').length !== 8) return 'Informe um CEP válido.';
   const invalidSlot = data.disponibilidade.find(slot => !slot.inicio || !slot.fim || slot.inicio >= slot.fim);
   if (invalidSlot) return `Confira o horário de ${days.find(([key]) => key === invalidSlot.dia)?.[1] || invalidSlot.dia}: o início deve ser antes do fim.`;
@@ -345,7 +346,7 @@ function renderDetail(record) {
   }).join('\n');
   const address = [[record.logradouro, record.numero].filter(Boolean).join(', '), record.complemento, record.bairro, [record.cidade, record.uf].filter(Boolean).join('/'), record.cep ? `CEP ${formatCep(record.cep)}` : ''].filter(Boolean).join(' · ');
   $('#detail-fields').replaceChildren(
-    detailSection('Dados pessoais', [['Nome completo', record.nome], ['CPF', formatCpf(record.cpf)], ['Nascimento', record.data_nascimento ? record.data_nascimento.split('-').reverse().join('/') : 'Não informado'], ['Setores de experiência', record.setores.join(', ')]]),
+    detailSection('Dados pessoais', [['Nome completo', record.nome], ['CPF', formatCpf(record.cpf)], ['Telefone / WhatsApp', record.telefone || 'Não informado'], ['Nascimento', record.data_nascimento ? record.data_nascimento.split('-').reverse().join('/') : 'Não informado'], ['Setores de experiência', record.setores.join(', ')]]),
     detailSection('Endereço', [['Endereço completo', address]]),
     detailSection('Trabalho e disponibilidade', [['Trabalha atualmente', record.trabalhando == null ? 'Não informado' : record.trabalhando ? 'Sim' : 'Não'], ['Local de trabalho', record.local_trabalho || (record.trabalhando === false ? '—' : 'Não informado')], ['Dias e horários', schedule]]),
     detailSection('Locomoção', [['Pode atender qualquer região', record.pode_se_deslocar == null ? 'Não informado' : record.pode_se_deslocar ? 'Sim' : 'Regiões limitadas'], ['Meio de transporte', record.transporte || (record.pode_se_deslocar === false ? '—' : 'Não informado')], ['Observações', record.observacoes_locomocao || '—']]),

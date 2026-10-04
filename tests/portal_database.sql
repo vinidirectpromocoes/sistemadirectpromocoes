@@ -2,7 +2,7 @@
 begin;
 do $$
 declare uid uuid:=gen_random_uuid();i1 jsonb;i2 jsonb;i3 jsonb;result jsonb;w1 bigint;oid bigint;other_oid bigint;
- d date:=(now() at time zone 'America/Fortaleza')::date+2;users_before int;tracking_before int;payload jsonb:='{"nome":"Portal sintético completo","cpf":"52998224725","data_nascimento":"1990-04-10","cep":"61600000","logradouro":"Rua sintética","numero":"12","bairro":"Centro","cidade":"Caucaia","uf":"CE","setores":["FLV"],"disponibilidade":[{"dia":"segunda","inicio":"00:00","fim":"23:59"}],"trabalhando":false,"rede_trabalho":"","local_trabalho":"","pode_se_deslocar":false,"observacoes_locomocao":"Centro","transporte":"Ônibus, Bike","consentimento":true}';
+ d date:=(now() at time zone 'America/Fortaleza')::date+2;users_before int;tracking_before int;payload jsonb:='{"nome":"Portal sintético completo","telefone":"(85) 99999-1234","cpf":"52998224725","data_nascimento":"1990-04-10","cep":"61600000","logradouro":"Rua sintética","numero":"12","bairro":"Centro","cidade":"Caucaia","uf":"CE","setores":["FLV"],"disponibilidade":[{"dia":"segunda","inicio":"00:00","fim":"23:59"}],"trabalhando":false,"rede_trabalho":"","local_trabalho":"","pode_se_deslocar":false,"observacoes_locomocao":"Centro","transporte":"Ônibus, Bike","consentimento":true}';
 begin
  insert into auth.users(id,email,email_confirmed_at) values(uid,'portal-operador-sintetico@example.invalid',now());
  insert into public.direct_staff(email,role,active) values('portal-operador-sintetico@example.invalid','operacao',true);
@@ -19,7 +19,7 @@ begin
  if not exists(select 1 from direct_private.portal_registros where diarista_id=w1) then raise exception 'Origem do cadastro não registrada';end if;
  begin perform public.direct_portal_registrations();raise exception 'FALHOU: anônimo leu cadastros';exception when others then if sqlerrm like 'FALHOU:%' then raise;end if;end;
 
- if not exists(select 1 from public.diaristas where id=w1 and data_nascimento='1990-04-10' and cidade='Caucaia' and transporte='Ônibus, Bike' and not pode_se_deslocar) then raise exception 'Campos não persistiram';end if;
+ if not exists(select 1 from public.diaristas where id=w1 and telefone='85999991234' and data_nascimento='1990-04-10' and cidade='Caucaia' and transporte='Ônibus, Bike' and not pode_se_deslocar) then raise exception 'Campos não persistiram';end if;
  if (public.direct_portal_submit(payload,i1->>'cadastro_token')->>'vagas_token') is distinct from result->>'vagas_token' then raise exception 'Repetição não é idempotente';end if;
  if (select count(*) from direct_private.portal_registros)<>tracking_before+1 then raise exception 'Repetição duplicou origem';end if;
  perform public.direct_portal_orders(result->>'vagas_token');perform public.direct_portal_orders(i1->>'vagas_token');
