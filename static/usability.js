@@ -3,16 +3,18 @@
  const get=id=>document.getElementById(id),node=(tag,text='',cls='')=>{const e=document.createElement(tag);e.textContent=text;e.className=cls;return e;};
  const notify=(message,error=false)=>{const out=get('direct-notice');out.textContent=message;out.classList.toggle('error',error);out.hidden=false;clearTimeout(notify.timer);notify.timer=setTimeout(()=>out.hidden=true,7000);};
  const busy=(button,value)=>{button.disabled=value;button.setAttribute('aria-busy',String(value));};
+ const queueDrafts=new Map();
  function organize(record,onSaved){
   const box=node('details','','queue-organize');box.append(node('summary','✎ Organizar'));
-  const fields=node('div','','queue-fields');let control=record.control||{};
+  const fields=node('div','','queue-fields'),draft=queueDrafts.get(record.key);let control=draft?.control||record.control||{};
   const field=(label,max,value='')=>{const wrap=node('label',label),input=node('input');input.maxLength=max;input.value=value;wrap.append(input);fields.append(wrap);return input;};
   const owner=field('Responsável',100,control.responsavel),next=field('Próxima ação',300,control.proxima_acao),due=field('Adiar até (opcional)',32);due.type='datetime-local';
   const localDate=value=>{const d=new Date(value);return Number.isNaN(d.valueOf())?'':new Date(d-d.getTimezoneOffset()*60000).toISOString().slice(0,16);};
-  due.value=control.adiada_ate?localDate(control.adiada_ate):'';due.min=localDate(Date.now()+60000);due.max=localDate(Date.now()+30*86400000);
-  const error=node('p','','feedback error');error.hidden=true;error.setAttribute('role','alert');const actions=node('div','','queue-actions'),save=node('button','✓ Salvar','button button-outline'),resume=node('button','↻ Retomar agora','button button-quiet');save.type=resume.type='button';resume.hidden=!record.snoozed;
-  async function persist(clear=false){busy(save,true);busy(resume,true);error.hidden=true;try{const data=await request('/api/pendencias-acoes',{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify({chave:record.key,responsavel:owner.value.trim(),proxima_acao:next.value.trim(),adiada_ate:clear||!due.value?null:new Date(due.value).toISOString(),expected_updated_at:control.atualizado_em||null})});control=data;notify(clear?'Pendência retomada.':'Organização salva.');await onSaved(data);}catch(e){error.textContent=e.message;error.hidden=false;}finally{busy(save,false);busy(resume,false);}}
-  save.onclick=()=>persist();resume.onclick=()=>persist(true);actions.append(save,resume);fields.append(actions,error);box.append(fields);return box;
+  due.value=control.adiada_ate?localDate(control.adiada_ate):'';if(draft){owner.value=draft.owner;next.value=draft.next;due.value=draft.due;box.open=draft.open;}due.min=localDate(Date.now()+60000);due.max=localDate(Date.now()+30*86400000);
+  const remember=()=>queueDrafts.set(record.key,{control,owner:owner.value,next:next.value,due:due.value,open:box.open});for(const field of [owner,next,due])field.addEventListener('input',remember);box.addEventListener('toggle',()=>{if(box.isConnected)remember();});
+  const error=node('p','','feedback error');error.hidden=true;error.setAttribute('role','alert');const actions=node('div','','queue-actions'),save=node('button','✓ Salvar','button button-outline'),resume=node('button','↻ Retomar agora','button button-quiet'),cancel=node('button','Cancelar edição','button button-quiet');cancel.type='button';cancel.onclick=async()=>{busy(cancel,true);try{queueDrafts.delete(record.key);await onSaved();}catch(e){notify(e.message,true);}finally{busy(cancel,false);}};save.type=resume.type='button';resume.hidden=!record.snoozed;
+  async function persist(clear=false){busy(save,true);busy(resume,true);error.hidden=true;try{const data=await request('/api/pendencias-acoes',{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify({chave:record.key,responsavel:owner.value.trim(),proxima_acao:next.value.trim(),adiada_ate:clear||!due.value?null:new Date(due.value).toISOString(),expected_updated_at:control.atualizado_em||null})});control=data;queueDrafts.delete(record.key);notify(clear?'Pendência retomada.':'Organização salva.');await onSaved(data);}catch(e){error.textContent=e.message;error.hidden=false;}finally{busy(save,false);busy(resume,false);}}
+  save.onclick=()=>persist();resume.onclick=()=>persist(true);actions.append(save,resume,cancel);fields.append(actions,error);box.append(fields);return box;
  }
  const dialog=get('global-search-dialog'),input=get('global-search-input'),list=get('global-search-results'),status=get('global-search-status');let timer,sequence=0;
  function close(){++sequence;clearTimeout(timer);input.value='';list.replaceChildren();dialog.close();}
@@ -21,7 +23,8 @@
  dialog.addEventListener('cancel',e=>{e.preventDefault();close();});dialog.addEventListener('click',e=>{if(e.target===dialog){const r=dialog.getBoundingClientRect();if(e.clientX<r.left||e.clientX>r.right||e.clientY<r.top||e.clientY>r.bottom)close();}});
  dialog.addEventListener('keydown',e=>{const results=[...list.querySelectorAll('button')];if(['ArrowDown','ArrowUp'].includes(e.key)&&results.length){e.preventDefault();const current=results.indexOf(document.activeElement),next=e.key==='ArrowDown'?(current+1)%results.length:current<=0?results.length-1:current-1;results[next].focus();}if(e.key==='Enter'&&e.target===input){e.preventDefault();results[0]?.click();}});
  document.addEventListener('keydown',e=>{if((e.ctrlKey||e.metaKey)&&e.key.toLowerCase()==='k'){e.preventDefault();get('global-search-button').click();}});
- window.addEventListener('direct:signed-out',()=>{close();get('direct-notice').hidden=true;});
+ window.addEventListener('direct:authorized',()=>queueDrafts.clear());
+ window.addEventListener('direct:signed-out',()=>{queueDrafts.clear();close();get('direct-notice').hidden=true;});
  async function replacement(panel,{scale,order,workers,stores,orders,scales,select,all}){
   const suggestions=node('div','','replacement-suggestions'),title=node('strong','Sugestões para substituir');suggestions.append(title);panel.prepend(suggestions);let contacts=[];let revision=0;
   try{contacts=await request('/api/substituicao-contatos');}catch(e){suggestions.append(node('p','Não foi possível carregar as respostas: '+e.message,'section-help'));}

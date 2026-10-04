@@ -456,7 +456,7 @@ function showOrderSubstitute(scale,row) {
       $('#order-detail-success').textContent='Substituição registrada. Histórico preservado; confirme se a nova pessoa vai e depois registre presença ou falta.';$('#order-detail-success').hidden=false;
     }catch(error){orderDetailError(error.message);}finally{orderDetailBusy=false;save.disabled=false;}
   });
-  const cancel=document.createElement('button');cancel.type='button';cancel.className='button button-quiet';cancel.textContent='Cancelar';cancel.addEventListener('click',()=>panel.remove());actions.append(save,cancel);panel.append(actions);row.append(panel);panel.scrollIntoView({block:'nearest'});
+  const cancel=document.createElement('button');cancel.type='button';cancel.className='button button-quiet';cancel.textContent='Cancelar';cancel.addEventListener('click',()=>{panel.remove();refreshOrderScales().catch(e=>orderDetailError(e.message));});actions.append(save,cancel);panel.append(actions);row.append(panel);panel.scrollIntoView({block:'nearest'});
   window.DirectUI.replacement(panel,{scale,order:orderRecords.find(o=>o.id===scale.pedido_id),workers:orderWorkers,stores:orderCatalogStores,orders:orderRecords,scales:orderScales,select,all});
 }
 
@@ -674,6 +674,6 @@ if (window.location.hash === '#pedidos') loadOrders();
 
 setInterval(()=>{if(location.hash==='#pedidos'&&!orderDetailBusy)renderOrders();},60000);
 
-window.addEventListener('direct:remote-changed',()=>{if($('#order-detail-dialog').open&&!orderDetailBusy)refreshOrderScales().catch(e=>orderDetailError(e.message));});
+window.addEventListener('direct:remote-changed',()=>{if($('#order-detail-dialog').open&&!orderDetailBusy){if(document.querySelector('.order-substitute-panel')){window.DirectUI?.notify('Dados atualizados. Sua edição de substituição foi preservada; a disponibilidade será conferida ao salvar.');return;}refreshOrderScales().catch(e=>orderDetailError(e.message));}});
 
 window.addEventListener('direct:signed-out',()=>{ orderRecords=[]; orderWorkers=[]; orderScales=[]; $('#orders-rows').replaceChildren(); if($('#order-detail-dialog').open)$('#order-detail-dialog').close(); });
