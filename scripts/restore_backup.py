@@ -173,6 +173,7 @@ def restore_operational(archive_path, password, output_path):
                 for row in data["direct_auditoria"]:
                     values = {key: json.dumps(value, ensure_ascii=False) if isinstance(value, (dict, list)) else value
                               for key, value in row.items() if key in columns}
+                    if values.get("email_autor") is None: values["email_autor"] = ""
                     names = ", ".join(values)
                     markers = ", ".join("?" for _ in values)
                     db.execute(f"INSERT INTO direct_auditoria ({names}) VALUES ({markers})", tuple(values.values()))

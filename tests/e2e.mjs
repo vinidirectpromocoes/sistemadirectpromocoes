@@ -269,8 +269,9 @@ async function runFinancialWorkflow() {
     await page.locator('#financeiro-page').getByText('Lucro previsto · após extras', {exact:true}).waitFor();
     assert.ok(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth + 2),
       'Financeiro com dados não deve criar rolagem horizontal no celular');
-    await page.locator('#confirmed-count').getByText('2 diárias com presença', {exact:true}).waitFor();
+    assert.equal(await page.locator('#forecast-period').inputValue(), 'month', 'O período começa no mês selecionado');
     await page.locator('#finance-month').fill('2026-09');
+    await page.locator('#confirmed-count').getByText('2 diárias com presença', {exact:true}).waitFor();
     assert.match(await page.locator('#forecast-net').innerText(), /78,00/);
     assert.match(await page.locator('#confirmed-revenue').innerText(), /268,00/);
     assert.match(await page.locator('#confirmed-cost').innerText(), /180,00/);

@@ -145,7 +145,7 @@ function renderOrders() {
   $('#orders-no-results').hidden = orderRecords.length === 0 || filtered.length !== 0;
   $('#orders-table-wrap').hidden = filtered.length === 0;
   const body = $('#orders-rows'); body.replaceChildren();
-  filtered.forEach(item => {
+  DirectPager.slice('orders',filtered,$('#orders-table-wrap'),renderOrders).forEach(item => {
     const shifts=orderFilteredShifts(item,filters),days=shifts.length,totalDemand=days*item.quantidade_diaristas;
     const row = document.createElement('tr');
     const market = document.createElement('td');
@@ -244,6 +244,7 @@ function openOrderForm(item = null) {
   window.directPendingForm = null;
   if ($('#order-detail-dialog').open) $('#order-detail-dialog').close();
   orderEditingId = item?.id ?? null;
+  document.getElementById('order-form').dataset.version = item?.atualizado_em || '';
   window.directStoreRequestId = null;
   window.directDraftId = null;
   $('#order-form').reset();
@@ -300,7 +301,7 @@ async function saveOrder(event) {
   const save = $('#order-save-button'); save.disabled = true;
   try {
     await request(orderEditingId ? `/api/pedidos/${orderEditingId}` : '/api/pedidos', {
-      method: orderEditingId ? 'PUT' : 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(data),
+      method: orderEditingId ? 'PUT' : 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ ...data, expected_updated_at: $('#order-form').dataset.version || null }),
     });
     const edited = Boolean(orderEditingId);
     await window.DirectOffline?.saved(window.directDraftId); window.directDraftId = null;
@@ -575,6 +576,7 @@ function renderOrderShifts() {
 }
 
 async function openOrderDetail(id) {
+  if (!orderRecords.some(row => row.id === id)) await loadOrders();
   const item = orderRecords.find(row => row.id === id);
   if (!item) return showOrderFeedback('Pedido não encontrado.', true);
   orderDetailId = id;
@@ -624,8 +626,9 @@ async function openOrderDetail(id) {
   loadOrderCatalog().then(showStore).catch(() => {});
   try {
     const canOperate = !window.directRemote || ['admin', 'operacao'].includes(window.directRemote.role);
-    [orderWorkers, orderScales] = await Promise.all([canOperate ? request('/api/diaristas') : Promise.resolve([]), request(`/api/pedidos/${id}/escalas`)]);
-    if (orderDetailId === id && $('#order-detail-dialog').open) renderOrderShifts();
+    const result = await Promise.all([canOperate ? request('/api/diaristas') : Promise.resolve([]), request(`/api/pedidos/${id}/escalas`)]);
+    if (orderDetailId !== id || !$('#order-detail-dialog').open) return;
+    [orderWorkers, orderScales] = result; renderOrderShifts();
   } catch (err) { orderDetailError(`Não foi possível carregar as escalas: ${err.message}`); }
 }
 
@@ -667,3 +670,7 @@ $('#order-detail-dialog').addEventListener('click', orderDialogBackdrop);
 if (window.location.hash === '#pedidos') loadOrders();
 
 setInterval(()=>{if(location.hash==='#pedidos'&&!orderDetailBusy)renderOrders();},60000);
+
+window.addEventListener('direct:remote-changed',()=>{if($('#order-detail-dialog').open&&!orderDetailBusy)refreshOrderScales().catch(e=>orderDetailError(e.message));});
+
+window.addEventListener('direct:signed-out',()=>{ orderRecords=[]; orderWorkers=[]; orderScales=[]; $('#orders-rows').replaceChildren(); if($('#order-detail-dialog').open)$('#order-detail-dialog').close(); });

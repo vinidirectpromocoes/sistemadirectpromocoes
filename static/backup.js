@@ -72,5 +72,23 @@
   document.querySelector('#backup-check').addEventListener('click', check);
   window.addEventListener('hashchange', () => { area.hidden = window.directRemote?.role !== 'admin'; });
   area.hidden = window.directRemote?.role !== 'admin';
+  const panel=document.createElement('details');panel.className='profile-more';
+  const heading=document.createElement('summary');heading.textContent='Cópias automáticas e recuperação';
+  const status=document.createElement('p');status.setAttribute('role','status');
+  const history=document.createElement('div');const button=document.createElement('button');button.type='button';button.className='button button-outline';button.textContent='Atualizar histórico';
+  panel.append(heading,status,button,history);area.append(panel);
+  async function refresh(){
+    area.hidden=window.directRemote?.role!=='admin';if(area.hidden)return;
+    button.disabled=true;
+    try{const result=await window.directRemote.client.rpc('direct_backup_status');if(result.error)throw Error(result.error.message);
+      const rows=result.data.runs||[],last=rows.find(r=>r.state==='ok'&&r.verified);const old=!last||Date.now()-Date.parse(last.finished_at)>36*3600000;
+      status.textContent=old?'Atenção: sem cópia automática verificada nas últimas 36 horas. Confira se o Mac está ligado e a rotina está ativa.':'Última cópia verificada: '+new Date(last.finished_at).toLocaleString('pt-BR')+'.';status.classList.toggle('finance-warning',old);history.replaceChildren();
+      for(const row of rows.slice(0,10)){const line=document.createElement('p');line.textContent=new Date(row.started_at).toLocaleString('pt-BR')+' · '+({ok:'Verificada',running:'Em execução',error:'Falhou'}[row.state])+' · '+(row.message||'');history.append(line);}
+      if(!rows.length)history.textContent='Nenhuma execução registrada.';
+    }catch(e){status.textContent='Não foi possível conferir as cópias: '+e.message;}finally{button.disabled=false;}
+  }
+  button.onclick=refresh;panel.addEventListener('toggle',()=>{if(panel.open)refresh();});
+  window.addEventListener('direct:authorized',refresh);window.addEventListener('hashchange',()=>{if(location.hash==='#configuracoes')refresh();});
+  refresh();
   showLastCheck();
 })();

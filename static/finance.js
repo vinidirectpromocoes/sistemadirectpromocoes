@@ -98,6 +98,13 @@ function financePeriodDate(item) {
   return item.data_pagamento || item.vencimento || item.referencia;
 }
 
+function financeInPeriod(date) {
+  if ($('#finance-all-months').checked) return true;
+  if (!date) return false;
+  const period = financeForecastPeriod();
+  return typeof period === 'string' ? !period || date.startsWith(period) : date >= period.start && date <= period.end;
+}
+
 function filteredFinanceRows({ ignoreType = false, ignoreStatus = false } = {}) {
   const month = $('#finance-month').value;
   const allMonths = $('#finance-all-months').checked;
@@ -105,7 +112,7 @@ function filteredFinanceRows({ ignoreType = false, ignoreStatus = false } = {}) 
   const status = $('#finance-status-filter').value;
   const query = $('#finance-search').value.trim().toLocaleLowerCase('pt-BR');
   return financeRecords.filter(item => {
-    if (!allMonths && month && !financePeriodDate(item)?.startsWith(month)) return false;
+    if (!financeInPeriod(financePeriodDate(item))) return false;
     if (!ignoreType && type !== 'todos' && item.tipo !== type) return false;
     const settled = financeStatus(item).style === 'settled';
     if (!ignoreStatus && status === 'pago' && !settled) return false;
@@ -311,19 +318,19 @@ function renderFinance() {
     if (item.tipo !== type || item.valor_centavos == null) return sum;
     if (item.origem === 'cobranca') {
       if (paid) return sum + item.recebimentos.reduce((value, receipt) =>
-        value + (!receipt.estornado && (allMonths || receipt.data_recebimento.startsWith(month)) ? receipt.valor_centavos : 0), 0);
-      return sum + Math.max(0, item.valor_centavos - item.valor_recebido_centavos);
+        value + (!receipt.estornado && financeInPeriod(receipt.data_recebimento) ? receipt.valor_centavos : 0), 0);
+      return sum + (financeInPeriod(item.vencimento) ? Math.max(0, item.valor_centavos - item.valor_recebido_centavos) : 0);
     }
-    if (paid && item.data_pagamento && (allMonths || item.data_pagamento.startsWith(month))) return sum + item.valor_centavos;
-    if (!paid && !item.data_pagamento) return sum + item.valor_centavos;
+    if (paid && item.data_pagamento && financeInPeriod(item.data_pagamento)) return sum + item.valor_centavos;
+    if (!paid && !item.data_pagamento && financeInPeriod(financePeriodDate(item))) return sum + item.valor_centavos;
     return sum;
   }, 0);
   const incoming = total('receita', true);
   const outgoing = total('despesa', true);
   $('#finance-in').textContent = moneyLabel(incoming);
   $('#finance-out').textContent = moneyLabel(outgoing);
-  $('#finance-in').previousElementSibling.textContent = allMonths ? 'Entradas realizadas' : 'Entradas no mês';
-  $('#finance-out').previousElementSibling.textContent = allMonths ? 'Saídas realizadas' : 'Saídas no mês';
+  $('#finance-in').previousElementSibling.textContent = 'Entradas recebidas · período';
+  $('#finance-out').previousElementSibling.textContent = 'Pagamentos feitos · período';
   $('#finance-balance').textContent = moneyLabel(incoming - outgoing);
   $('#finance-receivable').textContent = moneyLabel(total('receita', false));
   $('#finance-payable').textContent = moneyLabel(total('despesa', false));
@@ -350,7 +357,7 @@ function renderFinance() {
   $('#finance-empty').hidden = visibleFinanceRows.length !== 0;
   $('#finance-table-wrap').hidden = visibleFinanceRows.length === 0;
   const body = $('#finance-rows'); body.replaceChildren();
-  groupedFinanceRows(visibleFinanceRows).forEach(item => {
+  DirectPager.slice('finance',groupedFinanceRows(visibleFinanceRows),$('#finance-table-wrap'),renderFinance).forEach(item => {
     if (item.kind === 'daily-group') {
       const days = item.items;
       const totals = financeGroupTotals(days);
@@ -449,6 +456,7 @@ function updateFinanceType() {
 
 function openFinanceForm(item = null, markPaid = false) {
   financeEditingId = item?.id ?? null;
+  document.getElementById('finance-form').dataset.version = item?.atualizado_em || '';
   $('#finance-form').reset();
   $('#finance-form-error').hidden = true;
   $('#finance-form-title').textContent = item ? 'Editar lançamento' : 'Novo lançamento';
@@ -505,7 +513,7 @@ async function saveFinanceEntry(event) {
   const button = $('#finance-save-button'); button.disabled = true;
   try {
     await request(financeEditingId ? `/api/financeiro/${financeEditingId}` : '/api/financeiro', {
-      method: financeEditingId ? 'PUT' : 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(data),
+      method: financeEditingId ? 'PUT' : 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ ...data, expected_updated_at: $('#finance-form').dataset.version || null }),
     });
     const edited = Boolean(financeEditingId);
     $('#finance-dialog').close();
@@ -563,7 +571,8 @@ async function openFinanceAudit() {
   } catch (error) { list.textContent = `Não foi possível carregar o histórico: ${error.message}`; }
 }
 
-function showPage() {
+async function showPage() {
+  const routeHash = location.hash;
   let page = ['inicio', 'crm', 'diaristas', 'financeiro', 'pedidos', 'leitura', 'redes', 'configuracoes', 'convites', 'vagas'].includes(window.location.hash.slice(1)) ? window.location.hash.slice(1) : 'inicio';
   const role = window.directRemote?.role;
   if (role && ({ financeiro: ['admin', 'financeiro'], configuracoes: ['admin', 'financeiro'], vagas: ['admin', 'operacao'], convites: ['admin', 'operacao'], leitura: ['admin', 'operacao'], diaristas: ['admin', 'financeiro', 'operacao'] }[page] || ['admin', 'financeiro', 'operacao', 'consulta']).includes(role) === false) {
@@ -580,7 +589,10 @@ function showPage() {
   }
   document.title = `${{ vagas: 'Vagas disponíveis', convites: 'Cadastros por link', inicio: 'Início', crm: 'Pendências', diaristas: 'Diaristas', pedidos: 'Pedidos', leitura: 'Leitura IA', redes: 'Redes e lojas', financeiro: 'Financeiro', configuracoes: 'Configurações' }[page]} | Direct Promoções`;
   window.scrollTo(0, 0);
+  try { await window.DirectModules.ensure(page); } catch (error) { showFeedback(error.message, true); return; }
+  if (location.hash !== routeHash) return;
   if (page === 'inicio' || page === 'crm') loadHome();
+  if (page === 'diaristas') load();
   if (page === 'financeiro') loadFinance();
   if (page === 'pedidos' && typeof loadOrders === 'function') loadOrders();
   if (page === 'redes' && typeof loadStores === 'function') loadStores();
@@ -599,15 +611,16 @@ $('#finance-dialog').addEventListener('click', event => {
   if (event.target === dialog && (event.clientX < rect.left || event.clientX > rect.right || event.clientY < rect.top || event.clientY > rect.bottom)) dialog.close();
 });
 $('#finance-type').addEventListener('change', updateFinanceType);
-$('#finance-month').addEventListener('change', renderFinance);
-$('#finance-all-months').addEventListener('change', renderFinance);
-$('#forecast-period').addEventListener('change', renderFinanceForecast);
-$('#forecast-date').addEventListener('change', renderFinanceForecast);
+$('#finance-month').addEventListener('change', () => { $('#forecast-period').value = 'month'; $('#finance-all-months').checked = false; renderFinance(); });
+$('#finance-all-months').addEventListener('change', () => { $('#forecast-period').value = $('#finance-all-months').checked ? 'all' : 'month'; renderFinance(); });
+$('#forecast-period').addEventListener('change', () => { $('#finance-all-months').checked = $('#forecast-period').value === 'all'; renderFinance(); });
+$('#forecast-date').addEventListener('change', renderFinance);
 for (const [id, mode] of [['forecast-today', 'day'], ['forecast-week', 'week']]) {
   $(`#${id}`).addEventListener('click', () => {
     $('#forecast-date').value = financeToday();
     $('#forecast-period').value = mode;
-    renderFinanceForecast();
+    $('#finance-all-months').checked = false;
+    renderFinance();
   });
 }
 window.addEventListener('focus', () => { if (!$('#financeiro-page').hidden) loadFinance(); });
@@ -618,6 +631,7 @@ $('#finance-status-filter').addEventListener('change', renderFinance);
 $('#finance-clear-filters').addEventListener('click', () => {
   $('#finance-month').value = financeToday().slice(0, 7);
   $('#finance-all-months').checked = false;
+  $('#forecast-period').value = 'month';
   $('#finance-search').value = '';
   $('#finance-type-filter').value = 'todos';
   $('#finance-status-filter').value = 'todos';
@@ -636,3 +650,5 @@ $('#finance-group-dialog').addEventListener('click', event => {
 });
 window.addEventListener('hashchange', showPage);
 showPage();
+
+window.addEventListener('direct:signed-out',()=>{ financeRecords=[]; financeForecastInput=null; financeLoadSequence++; $('#finance-rows').replaceChildren(); });
