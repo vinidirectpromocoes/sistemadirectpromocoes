@@ -40,7 +40,7 @@
     document.querySelector('#storage-status').textContent = 'Dados sincronizados';
     for (const [name, allowed] of Object.entries({
       financeiro: ['admin', 'financeiro'], configuracoes: ['admin', 'financeiro'],
-      leitura: ['admin', 'operacao'], diaristas: ['admin', 'operacao', 'financeiro'],
+      convites: ['admin', 'operacao'], leitura: ['admin', 'operacao'], diaristas: ['admin', 'operacao', 'financeiro'],
     })) document.querySelector(`#nav-${name}`).hidden = !allowed.includes(role);
     document.querySelector('#new-button').hidden = !['admin', 'operacao'].includes(role);
     document.querySelector('#new-order-button').hidden = !['admin', 'operacao'].includes(role);
@@ -52,7 +52,7 @@
       'edit-button': ['admin', 'operacao'], 'block-button': ['admin', 'operacao'],
       'order-edit-button': ['admin', 'operacao'], 'order-delete-button': ['admin', 'operacao'],
     })) document.getElementById(id).hidden = !roles.includes(role);
-    if (['financeiro', 'configuracoes', 'leitura'].includes(location.hash.slice(1)) &&
+    if (['financeiro', 'configuracoes', 'leitura', 'convites'].includes(location.hash.slice(1)) &&
         document.querySelector(`#nav-${location.hash.slice(1)}`)?.hidden) location.hash = '#inicio';
   }
   async function authorize(reload = false) {
