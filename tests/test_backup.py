@@ -18,7 +18,7 @@ class BackupRestoreTests(unittest.TestCase):
 
     def archive(self, path, data, version="direct-data-v1"):
         payload = {"format": version, "exportedAt": "2026-09-29T12:00:00Z", "tables": data}
-        if version == "direct-data-v5":
+        if version in ("direct-data-v5", "direct-data-v6"):
             payload["snapshot"] = {"consistent": True, "counts": {table: len(rows) for table, rows in data.items()}}
         salt, iv = os.urandom(16), os.urandom(12)
         key = __import__("hashlib").pbkdf2_hmac("sha256", self.password.encode(), salt, 200000, 32)
@@ -59,6 +59,25 @@ class BackupRestoreTests(unittest.TestCase):
             with self.assertRaises(Exception):
                 restore(archive, "incorrecta", output)
             self.assertFalse(output.exists())
+
+    def test_v6_restores_models_and_store_instructions(self):
+        import server
+        previous_path = server.DB_PATH
+        data = {table: [] for table in ALL_TABLES}
+        data["pedido_modelos"] = [{"id": 1, "nome": "Modelo de teste", "dados": {"supermercado": "Super do Povo", "turnos": [{"data": "2030-12-31", "inicio": "07:00", "fim": "15:20"}]}, "criado_em": "2026-10-04", "atualizado_em": "2026-10-04"}]
+        data["lojas"] = [{"id": 1, "rede": "Super do Povo", "nome": "Meireles", "endereco": "Rua Teste, 1", "cidade": "Fortaleza", "situacao": "confirmado", "entrada": "Porta lateral", "orientacoes": "FLV: encarregado", "criado_em": "2026-10-04", "atualizado_em": "2026-10-04"}]
+        try:
+            with tempfile.TemporaryDirectory() as directory:
+                root = Path(directory); archive = root / "backup.json"; output = root / "restored.db"
+                self.archive(archive, data, "direct-data-v6")
+                counts = restore_operational(archive, self.password, output)
+                self.assertEqual(len(counts), 25)
+                self.assertEqual(counts["pedido_modelos"], 1)
+                with sqlite3.connect(output) as db:
+                    self.assertEqual(json.loads(db.execute("select dados from pedido_modelos").fetchone()[0])["turnos"][0]["inicio"], "07:00")
+                    self.assertEqual(db.execute("select entrada from lojas").fetchone()[0], "Porta lateral")
+        finally:
+            server.DB_PATH = previous_path
 
     def test_v5_restores_private_portal_settings_and_links(self):
         import server

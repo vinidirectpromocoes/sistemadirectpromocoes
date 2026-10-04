@@ -2,7 +2,7 @@
 (()=>{
  const get=id=>document.getElementById(id),create=(tag,text='',cls='')=>{const e=document.createElement(tag);e.textContent=text;e.className=cls;return e;};
  const operate=()=>!window.directRemote||['admin','operacao'].includes(window.directRemote.role);
- const button=(text,fn)=>{const b=create('button',text,'button button-outline');b.type='button';b.onclick=async()=>{b.disabled=true;try{await fn();}catch(e){showOrderFeedback(e.message,true);}finally{b.disabled=false;}};return b;};
+ const button=(text,fn)=>{const b=create('button',text,'button button-outline');b.type='button';b.onclick=async()=>{b.disabled=true;try{await fn();}catch(e){if(get('order-model-dialog').open){get('order-model-error').textContent=e.message;get('order-model-error').hidden=false;}else if(get('order-detail-dialog').open)orderDetailError(e.message);else if(location.hash==='#crm'){get('crm-feedback').textContent=e.message;get('crm-feedback').hidden=false;}else showOrderFeedback(e.message,true);}finally{b.disabled=false;}};return b;};
  function suggest(order,workers,stores,orders,scales,current){
   const box=get('order-suggestions'),list=get('order-suggestions-list');box.hidden=!operate()||['cancelado','concluido'].includes(order.situacao);list.replaceChildren();if(box.hidden)return;
   const remaining={...order,turnos:order.turnos.filter(t=>t.data>=orderToday())};
