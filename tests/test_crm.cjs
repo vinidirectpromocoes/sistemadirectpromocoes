@@ -51,3 +51,10 @@ test('cobrança conferida ainda a receber aparece em retorno, sem omitir atrasad
   let e=simplify({invoices:[invoice]},'2026-10-01')[0];assert.equal(e.waiting,true);assert.equal(e.overdue,true);assert.equal(e.amount,16800);assert.equal(e.label,'Conferir recebimento');
   e=simplify({invoices:[{...invoice,conferencia:'contestada'}]},'2026-10-01')[0];assert.equal(e.waiting,false);assert.equal(e.label,'Revisar contestação');
 });
+test('quatro tarefas filtram motivos dentro do pedido e pagamento sem misturar categorias',()=>{
+ const future='2026-10-05',input={orders:[{...order,quantidade_diaristas:2,turnos:[...order.turnos,{data:future,inicio:'07:00',fim:'15:20'}]}],scales:[scale,{...scale,id:3,data:future,confirmacao:'aguardando'}],finance:[{id:7,origem:'diaria',diarista_id:3,pedido_escala_id:2,contraparte:'Pessoa Teste',valor_centavos:9000,descricao:'Diária',vencimento:'2026-10-10'}]};
+ const entries=simplify(input,'2026-09-30');
+ for(const task of ['vacancy','response','attendance']){const rows=pendingFilter(entries,{scope:task},'2026-09-30');assert.equal(rows.length,1);assert.ok(rows[0].issues.every(i=>i.task===task));}
+ const pay=pendingFilter(entries,{area:'financeiro',scope:'payment'},'2026-09-30');assert.equal(pay.length,1);assert.equal(pay[0].amount,9000);assert.equal(pay[0].overdue,false);
+ input.finance[0].data_pagamento='2026-09-30';assert.equal(pendingFilter(simplify(input,'2026-09-30'),{area:'financeiro',scope:'payment'},'2026-09-30').length,0);
+});

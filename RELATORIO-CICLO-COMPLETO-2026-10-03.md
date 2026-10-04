@@ -45,4 +45,4 @@ Migração `20261004023428_portal_convites_foreign_key_indexes.sql` adicionou í
 
 ## Continuidade operacional
 
-O fluxo testado está apto ao uso: enviar convite individual, receber cadastro, registrar pedido, divulgar vagas, confirmar escala, registrar presença/falta e fechar o pagamento. Para completar os prazos financeiros, informar as datas de Pinheiro e Variedades.
+O fluxo testado está apto ao uso: enviar convite individual, receber cadastro, registrar pedido, divulgar vagas, confirmar escala, registrar presença/falta e fechar o pagamento. Atualização em 04/10/2026: Pinheiro e Variedades foram configurados para pagamento na sexta/sábado da semana seguinte, com sábado como prazo final padrão (PR #28).

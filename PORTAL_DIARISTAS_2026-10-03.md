@@ -2,12 +2,12 @@
 
 ## Fluxo atual
 
-- A equipe gera dois links separados em **Configurações → Links dos diaristas**. Cada par é destinado a uma pessoa, vence na data informada e usa segredos aleatórios de 256 bits no fragmento da URL.
-- O cadastro coleta nome, CPF válido, nascimento, CEP, endereço, cidade/UF, setores, dias/horários, locomoção e trabalho atual. Não pede e-mail, senha ou conta.
+- O link de cadastro é acompanhado na aba **Cadastros por link**; o link compartilhado de oportunidades fica em **Vagas disponíveis**. São páginas separadas. Convites individuais de aceite vinculam a pessoa/CPF, vencem na data informada e usam segredos aleatórios de 256 bits no fragmento da URL.
+- O cadastro coleta nome, CPF válido, telefone, nascimento, CEP, endereço, cidade/UF, setores, dias/horários, locomoção e trabalho atual. Não pede e-mail, senha ou conta.
 - ViaCEP preenche rua, bairro, cidade e UF. Se a consulta falhar, o formulário permite preencher o endereço manualmente. Número da casa é informado pelo diarista.
-- Após salvar, aparece “Cadastro concluído”, agradecimento, contato WhatsApp, grupo e link privado de vagas. Contatos vazios exibem a estrutura desativada; o administrador pode preenchê-los depois.
-- O link de vagas mostra apenas escalas inteiras com vagas em todos os dias e ainda não iniciadas. Não oferece filtros nem seleção de dias.
-- “Quero pegar essa vaga” exige cadastro vinculado ao convite. A pessoa confirma o CPF e o compromisso com todos os dias. Não marca presença: isso continua sendo feito pela equipe no dia da diária.
+- Após salvar, aparece “Cadastro concluído”, agradecimento, contato WhatsApp, grupo e link privado de vagas. WhatsApp da Direct e grupo estão configurados e podem ser atualizados nas Configurações.
+- O link compartilhado de vagas mostra escalas com vagas em todos os dias restantes e ainda não iniciados. Não oferece filtros nem seleção de dias.
+- No catálogo compartilhado, “Quero pegar essa vaga” abre contato com a Direct para receber convite individual. O aceite efetivo exige cadastro vinculado ao convite individual. A pessoa confirma o CPF e o compromisso com todos os dias. Não marca presença: isso continua sendo feito pela equipe no dia da diária.
 - Funcionário de supermercado não pode assumir diária na rede em que trabalha. O aviso aparece no formulário; a API verifica rede/local de trabalho declarados ao aceitar a escala.
 
 ## Duplicidade e segurança
@@ -26,6 +26,6 @@
 - Testes Python de integração/backup e JavaScript de regras de negócio. Conferência visual e disponibilidade após publicação registradas no relatório final da tarefa.
 - Safari/iPhone e Chrome/Android físicos não foram controlados nesta alteração. Não há bloqueio do zoom de acessibilidade; fontes dos campos têm 16px para evitar zoom automático ao digitar.
 
-## Contatos pendentes
+## Contatos e backup atualizados
 
-A pedido do proprietário, o WhatsApp e o link do grupo ficam em branco até ele fornecê-los. A estrutura e a configuração estão prontas. Nenhuma assinatura ou serviço pago foi adicionado.
+WhatsApp: `5585988349664`. Grupo configurado pela Direct nas Configurações. Nenhuma assinatura ou serviço pago foi adicionado. Backup v5 inclui contatos, convites, origem dos cadastros e link compartilhado em snapshot consistente, criptografado pelo navegador. Não inclui contas/senhas do Supabase Auth.

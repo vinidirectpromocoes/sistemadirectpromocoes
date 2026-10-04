@@ -148,7 +148,7 @@
  window.DirectOperations={refresh,printInvoice,renderStoreResults,openOccurrence,
   appendScale(row,s){if(!canOperate())return;const wrap=node('div','','extended-scale-controls');
    if(s.status==='escalada'){wrap.append(node('small',`Resposta: ${{aguardando:'aguardando',confirmou:'confirmada',recusou:'recusou'}[s.confirmacao||'aguardando']}`));for(const [value,label]of [['confirmou','✓ Confirmou que vai'],['aguardando','↺ Aguardando']]){const b=button(label,async()=>{await confirmation(s,value);await refreshOrderScales();await refresh(true);});b.disabled=s.confirmacao===value;wrap.append(b);}
-    wrap.append(button('♧ Copiar convite',async()=>{const o=orderRecords.find(o=>o.id===s.pedido_id);const t=o.turnos.find(t=>t.data===s.data);const store=matchingOrderStore(o.supermercado,o.unidade);await navigator.clipboard.writeText(`Olá, ${s.diarista_nome}!\n*Rede:* ${o.supermercado}\n*Loja:* ${o.unidade}\n*Endereço:* ${store?[store.endereco,store.bairro,store.cidade+'/CE'].filter(Boolean).join(', '):'Confirmar com a operação'}\n*Setor:* ${o.setor}\n*Data:* ${dateLabel(s.data)}\n*Horário:* ${t.inicio} às ${t.fim}\nVocê confirma sua disponibilidade?`);notice('Convite copiado. Registre a resposta após recebê-la.');}));
+    wrap.append(button('♧ Copiar convite',()=>window.DirectMessages.order(s.pedido_id,'reminder',s.diarista_id)));
    }else if(s.status==='presente'){wrap.append(node('small',`Loja: ${s.loja_validacao||'pendente'}${s.loja_responsavel?' · '+s.loja_responsavel:''}`),button('✓ Validar atendimento',()=>openValidation(s)));}
    wrap.append(button('⚑ Ocorrência',()=>openOccurrence(s.pedido_id,s.id)));row.append(wrap);
   }};

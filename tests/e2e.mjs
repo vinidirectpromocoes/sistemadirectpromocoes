@@ -95,7 +95,7 @@ async function runRoleNavigation() {
       });
       await context.route('**/vendor/supabase-2.117.2.js', route => route.fulfill({
         contentType: 'text/javascript', body: `window.supabase={createClient:()=>({
-          rpc:async(name)=>({data:name==='direct_portal_vacancies'?[]:name==='direct_portal_registrations'?{total:0,items:[]}:{whatsapp:'',grupo_url:''},error:null}),
+          rpc:async(name)=>({data:name==='direct_backup_snapshot'?{format:'direct-data-v5',exportedAt:new Date().toISOString(),tables:Object.fromEntries(window.DirectBackup.versions['direct-data-v5'].map(t=>[t,[]])),snapshot:{consistent:true,counts:Object.fromEntries(window.DirectBackup.versions['direct-data-v5'].map(t=>[t,0]))}}:name==='direct_portal_vacancies'?[]:name==='direct_portal_registrations'?{total:0,items:[]}:{whatsapp:'',grupo_url:''},error:null}),
           auth:{getSession:async()=>({data:{session:{user:{email:'qa@example.invalid'}}},error:null}),onAuthStateChange:()=>{},signOut:async()=>({error:null})},
           from:(table)=>{const q={select:()=>q,eq:()=>q,order:()=>q,limit:()=>q,range:async()=>({data:[],error:null,count:0}),
             maybeSingle:async()=>({data:table==='direct_admins'?${role === 'admin' ? "{email:'qa@example.invalid'}" : 'null'}:
@@ -147,7 +147,7 @@ async function runRoleNavigation() {
         assert.equal(result.status, 0, `Cópia do navegador não restaurou: ${result.stderr}`);
         const operational = path.join(work, 'browser-operational.db');
         const drill = spawnSync(process.env.PYTHON || 'python3', ['-c',
-          'import sys; sys.path.insert(0,"scripts"); from restore_backup import restore_operational; counts=restore_operational(sys.argv[1],sys.argv[2],sys.argv[3]); assert len(counts) == 18',
+          'import sys; sys.path.insert(0,"scripts"); from restore_backup import restore_operational; counts=restore_operational(sys.argv[1],sys.argv[2],sys.argv[3]); assert len(counts) == 24',
           archive, 'senha-de-teste-12345', operational], { cwd: root, encoding: 'utf8' });
         assert.equal(drill.status, 0, `Cópia operacional não restaurou: ${drill.stderr}`);
         console.log('Backup no navegador → verificação → SQLite operacional isolado OK');
@@ -159,6 +159,7 @@ async function runRoleNavigation() {
       await page.locator('#nav-crm').click();
       await page.locator('#crm-page').waitFor({state:'visible'});
       assert.equal(await page.locator('[data-crm-area=financeiro]').isVisible(), ['admin','financeiro'].includes(role));
+      assert.equal(await page.locator('[data-crm-scope=payment]').isVisible(), ['admin','financeiro'].includes(role));
       assert.equal(await page.locator('[data-crm-area=cadastros]').isVisible(), role!=='consulta');
       assert.equal(await page.locator('#crm-support').isVisible(), role!=='consulta');
       assert.equal(await page.locator('#crm-filters').isVisible(),false);
@@ -400,11 +401,13 @@ async function runCRMWorkflow() {
       await page.locator('#nav-crm').click();await page.locator('.crm-record').first().waitFor();await page.waitForLoadState('networkidle');
       assert.equal(await page.locator('#crm-page h1').innerText(),'Pendências');assert.equal(await page.locator('#crm-filters').isVisible(),false);assert.equal(await page.locator('.crm-column').count(),0);
       assert.ok(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth+2),'Pendências com dados não devem transbordar');
+      for(const [task,title] of [['vacancy','Precisa de diarista'],['response','Aguardando confirmação'],['attendance','Presença a registrar'],['payment','Pagamento a realizar']]){await page.locator(`[data-crm-scope=${task}]`).click();assert.match(await page.locator('#crm-list-title').innerText(),new RegExp(title));assert.equal(await page.locator(`[data-crm-scope=${task}]`).getAttribute('aria-pressed'),'true');await page.locator('#crm-all').click();}await page.locator('[data-crm-area=operacao]').click();
       const before=await page.locator('.crm-record').count();await page.locator('#crm-board').getByRole('button',{name:/Ver mais/}).click();assert.ok(await page.locator('.crm-record').count()>before,'Paginação revela pedidos sem duplicar dias');
       assert.equal(await page.locator('[data-crm-key="pedido:'+fixtures[1].id+'"]').count(),1);
+      await page.locator('#crm-filter-toggle').click();
       await page.locator('[data-crm-scope=waiting]').click();assert.match(await page.locator('#crm-list-title').innerText(),/Aguardando retorno/);await page.locator('#crm-all').click();
       await page.locator('[data-crm-scope=overdue]').click();assert.match(await page.locator('#crm-list-title').innerText(),/Atrasadas/);await page.locator('#crm-all').click();
-      await page.locator('#crm-filter-toggle').click();await page.locator('#crm-search').fill('Pendências Teste 1');
+      await page.locator('#crm-search').fill('Pendências Teste 1');
       const first=page.locator('.crm-record').first();await first.locator('summary').click();assert.equal(await first.locator('.pending-issue').count(),2);await first.getByRole('button',{name:'Escalar diarista',exact:true}).first().click();await page.locator('#order-detail-dialog').waitFor({state:'visible'});await page.locator('#order-detail-close').click();await page.locator('#nav-crm').click();
       await page.locator('#crm-clear').click();await page.locator('[data-crm-area=financeiro]').click();await page.locator('#crm-search').fill('Pessoa Financeira');assert.ok(await page.locator('.crm-record').count()>0);assert.equal(await page.locator('.crm-record').evaluateAll(items=>items.every(x=>x.textContent.includes('Pessoa Financeira'))),true);
       const group=page.locator('[data-crm-key^="pagamentos:"]').first();await group.getByRole('button',{name:'Conferir diárias',exact:true}).click();await page.locator('#finance-group-dialog').waitFor({state:'visible'});assert.match(await page.locator('#finance-group-title').innerText(),/Pessoa Financeira/);assert.equal(await page.locator('#finance-status-filter').inputValue(),'pendente');await page.locator('#finance-group-close').click();await page.locator('#nav-crm').click();
@@ -767,13 +770,41 @@ async function runAssistantFlow(){
   }
 }
 
+async function runMessagesFlow() {
+ const api=async(method,route,data)=>{const response=await fetch(url.slice(0,-1)+route,{method,headers:{'Content-Type':'application/json'},body:data?JSON.stringify(data):undefined});const result=await response.json();assert.ok(response.ok,JSON.stringify(result));return result;};
+ const cpfFor=n=>{let v=String(n);for(const size of [9,10]){const sum=[...v].reduce((total,x,i)=>total+Number(x)*(size+1-i),0),digit=(sum*10)%11;v+=digit===10?'0':String(digit);}return v;};let serial=999008000;
+ const today=new Intl.DateTimeFormat('en-CA',{timeZone:'America/Fortaleza',year:'numeric',month:'2-digit',day:'2-digit'}).format(new Date());const d=new Date(today+'T12:00:00Z');d.setUTCDate(d.getUTCDate()+1);const tomorrow=d.toISOString().slice(0,10);
+ for(const [engine,name]of [[chromium,'Chromium'],[webkit,'WebKit']]){const browser=await engine.launch();try{for(const width of [1280,390,320]){
+  const context=await browser.newContext({viewport:{width,height:844},isMobile:width<500,hasTouch:width<500});const page=await context.newPage(),errors=[];page.on('pageerror',e=>errors.push(e.message));
+  await page.addInitScript(()=>{window.messageCopies=[];Object.defineProperty(navigator,'clipboard',{value:{writeText:async text=>{window.messageCopies.push(text);}}});});
+  const person=await api('POST','/api/diaristas',{nome:`Mensagens Teste ${name} ${width}`,cpf:cpfFor(++serial),setores:['Repositor de FLV'],trabalhando:false,pode_se_deslocar:true,transporte:'Ônibus',disponibilidade:['segunda','terca','quarta','quinta','sexta','sabado','domingo'].map(dia=>({dia,inicio:'00:00',fim:'23:59'}))});
+  const order=await api('POST','/api/pedidos',{supermercado:'Super do Povo',unidade:'Meireles',setor:'Repositor de FLV',quantidade_diaristas:1,turnos:[{data:today,inicio:'07:00',fim:'15:20'},{data:tomorrow,inicio:'07:00',fim:'15:20'}]});
+  await api('POST',`/api/pedidos/${order.id}/escalas`,{diarista_id:person.id,data:today,disponibilidade_confirmada:true});
+  await page.goto(url+'#pedidos');await page.waitForFunction(id=>orderRecords.some(o=>o.id===id),order.id);await page.evaluate(id=>openOrderDetail(id),order.id);await page.locator('#order-detail-shifts .order-worker-row').waitFor();await page.locator('#order-messages').click();await page.locator('#messages-dialog').waitFor({state:'visible',timeout:5000}).catch(async e=>{throw Error(`Mensagens: ${await page.locator('#order-detail-error').innerText()} | ${errors.join(';')} | ${e.message}`);});
+  const text=await page.locator('#messages-preview').inputValue();assert.match(text,new RegExp(person.nome));assert.match(text,/Júlio Ibiapina/);assert.doesNotMatch(text,new RegExp(person.cpf));await page.locator('#messages-copy').click();assert.equal(await page.evaluate(()=>messageCopies.at(-1)),text);
+  await page.locator('#messages-kind').selectOption('address');assert.match(await page.locator('#messages-preview').inputValue(),/\*Endereço:\*/);assert.equal(await page.locator('#messages-person-wrap').isVisible(),false);
+  await page.locator('#messages-kind').selectOption('vacancy');assert.match(await page.locator('#messages-preview').inputValue(),new RegExp(tomorrow.split('-').reverse().join('/')));assert.doesNotMatch(await page.locator('#messages-preview').inputValue(),new RegExp(today.split('-').reverse().join('/')));
+  await page.locator('#messages-preview').fill('Texto corrigido pela operação');await page.locator('#messages-copy').click();assert.equal(await page.evaluate(()=>messageCopies.at(-1)),'Texto corrigido pela operação');await page.locator('#messages-reset').click();assert.match(await page.locator('#messages-preview').inputValue(),/DIÁRIA DISPONÍVEL/);
+  if(width===320){await page.evaluate(()=>navigator.clipboard.writeText=async()=>{throw Error('bloqueado');});await page.locator('#messages-copy').click();assert.match(await page.locator('#messages-feedback').innerText(),/copiar manualmente/);await page.evaluate(()=>navigator.clipboard.writeText=async text=>messageCopies.push(text));}
+  assert.ok(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth+2));if(width<500)assert.ok(await page.locator('#messages-preview').evaluate(e=>parseFloat(getComputedStyle(e).fontSize)>=16));
+  await page.screenshot({path:path.join(root,`.design-qa/mensagens-${name}-${width}.png`),fullPage:true,animations:'disabled'});await page.locator('#messages-close').click();await page.locator('#order-detail-close').click();
+  await page.locator('#nav-diaristas').click();await page.getByRole('button',{name:`Completar cadastro de ${person.nome}`,exact:true}).click();await page.locator('#form-dialog').waitFor({state:'visible'});assert.equal(await page.locator('#nome').inputValue(),person.nome);await page.locator('#close-button').click();
+  const scale=(await api('GET',`/api/pedidos/${order.id}/escalas`))[0];await api('PATCH',`/api/pedidos/${order.id}/escalas/${scale.id}`,{status:'presente'});
+  await page.goto(url+'#financeiro');await page.locator('#finance-all-months').check();await page.locator('#finance-search').fill(person.nome);await page.getByRole('button',{name:`Ver 1 diária de ${person.nome}`,exact:true}).click();await page.locator('#finance-payment-message').click();await page.locator('#messages-dialog').waitFor({state:'visible'});assert.match(await page.locator('#messages-preview').inputValue(),/Total a pagar/);await page.locator('#messages-copy').click();assert.match(await page.evaluate(()=>messageCopies.at(-1)),/90,00/);
+  await page.locator('#messages-close').click();await page.locator('#finance-group-close').click();await api('PATCH',`/api/pedidos/${order.id}/escalas/${scale.id}`,{status:'escalada'});await api('DELETE',`/api/pedidos/${order.id}/escalas/${scale.id}`);await api('DELETE',`/api/pedidos/${order.id}`);await api('DELETE',`/api/diaristas/${person.id}`);
+  assert.deepEqual(errors,[],`${name} ${width}: mensagens sem erro JS`);console.log(`${name} ${width}: mensagem com equipe/endereço, vagas, correção/cópia, cadastro parcial e pagamento OK`);await context.close();
+ }}finally{await browser.close();}}
+}
+
 try {
   await ready();
-  if(process.env.DIRECT_FINANCE_ONLY==='1'){await runFinancialWorkflow();}
+  if(process.env.DIRECT_MESSAGES_ONLY==='1'){await runMessagesFlow();await runRoleNavigation();}
+  else if(process.env.DIRECT_FINANCE_ONLY==='1'){await runFinancialWorkflow();}
   else if(process.env.DIRECT_CALENDAR_ONLY==='1'){await runPaymentCalendars();}
   else if(process.env.DIRECT_ASSISTANT_ONLY==='1'){await runAssistantFlow();}
   else if(process.env.DIRECT_REMAINING_ONLY==='1'){await runLinkedReading();await runOrderFilters();await runScaleLifecycle();await runRecentOrderAttendance();await runAssistantFlow();}
   else {
+  await runMessagesFlow();
   await runBrowser(chromium, 'Chromium');
   await runBrowser(webkit, 'WebKit');
   await runRoleNavigation();
