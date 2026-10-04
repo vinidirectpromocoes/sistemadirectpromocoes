@@ -31,6 +31,7 @@ jobs:
         run: pnpm test:unit
       - name: Navegação, perfis e telas móveis
         run: |
+          node tests/automation_e2e.mjs
           pnpm test:e2e
           node tests/portal_e2e.mjs
           node tests/portal_admin_e2e.mjs

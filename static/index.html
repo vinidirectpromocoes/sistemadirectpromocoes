@@ -33,7 +33,7 @@
   <script src="/operations.js" defer></script>
   <script src="/workflow.js" defer></script>
   <script src="/finance.js" defer></script>
-  <script src="/matching.js" defer></script>
+  <script src="/automation-model.js" defer></script><script src="/matching.js" defer></script>
   <script src="/messages-model.js" defer></script>
   <script src="/orders.js" defer></script>
   <script src="/messages.js" defer></script>
@@ -50,6 +50,7 @@
   <script src="/portal-admin.js" defer></script>
   <script src="/vacancies-admin.js" defer></script>
   <link rel="stylesheet" href="/messages.css">
+<link rel="stylesheet" href="automation.css"><script src="automation.js" defer></script>
 </head>
 <body>
   <div id="global-loading" class="global-loading" role="progressbar" aria-label="Carregando dados" hidden><span></span></div>
@@ -128,7 +129,7 @@
     </main>
     <main class="main-content" id="crm-page" hidden>
       <header class="page-header"><div><div class="eyebrow">GESTÃO <span>/</span> ROTINA</div><h1>Pendências</h1><p>O que precisa ser resolvido agora?</p></div><button id="crm-refresh" class="button button-outline" type="button" aria-label="Atualizar pendências"><span aria-hidden="true">↻</span><span class="button-label">Atualizar</span></button></header>
-      <p id="crm-feedback" class="feedback" role="status" hidden></p>
+      <details id="deadline-alerts" class="card profile-more" hidden><summary id="deadline-alerts-title">Alertas por prazo</summary><div id="deadline-alerts-list" class="automation-list"></div></details><p id="crm-feedback" class="feedback" role="status" hidden></p>
       <section class="crm-summary" aria-label="O que fazer agora">
         <button data-crm-scope="vacancy" class="finance-stat" type="button" aria-pressed="false"><span>Precisa de diarista</span><strong id="crm-count-vacancy">0</strong><small>Escalar ou substituir</small></button>
         <button data-crm-scope="response" class="finance-stat" type="button" aria-pressed="false"><span>Aguardando confirmação</span><strong id="crm-count-response">0</strong><small>Conferir se a pessoa vai</small></button>
@@ -262,7 +263,7 @@
     <main class="main-content" id="pedidos-page" hidden>
       <header class="page-header">
         <div><div class="eyebrow">OPERAÇÃO <span>/</span> PEDIDOS</div><h1>Pedidos dos supermercados</h1><p>Registre a demanda de diaristas por setor, data e horário.</p></div>
-        <button class="button button-primary" id="new-order-button" type="button" aria-label="Novo pedido" title="Novo pedido"><span aria-hidden="true">＋</span><span class="button-label">Novo pedido</span></button>
+        <button class="button button-outline" id="order-models-button" type="button">▧ Modelos</button><button class="button button-primary" id="new-order-button" type="button" aria-label="Novo pedido" title="Novo pedido"><span aria-hidden="true">＋</span><span class="button-label">Novo pedido</span></button>
       </header>
       <section class="list-card orders-filter-panel" aria-label="Filtros dos pedidos">
         <div class="orders-filter-toolbar"><div class="search-wrap"><span aria-hidden="true">⌕</span><input id="orders-search" type="search" placeholder="Rede, loja, setor ou número" aria-label="Buscar pedidos"></div><button id="orders-filter-toggle" class="button button-outline" type="button" aria-expanded="false" aria-controls="orders-filter-fields">Filtros</button><button id="orders-filter-clear" class="button button-quiet" type="button" title="Limpar todos os filtros" disabled>Limpar</button></div>
@@ -362,6 +363,7 @@
         <div class="field-grid two"><label>Bairro<input id="store-district" maxlength="100"></label><label>Cidade <span class="required">*</span><input id="store-city" maxlength="80" required value="Fortaleza"></label></div>
         <label>Link da fonte<input id="store-source" type="url" maxlength="500" placeholder="https://..."><small>Site da rede, lista de lojas ou outra referência.</small></label>
         <label>Situação do endereço<select id="store-status"><option value="revisar">Precisa conferir</option><option value="confirmado">Endereço confirmado</option></select></label>
+        <details class="profile-more"><summary>Orientações para a diária</summary><div class="automation-fields"><label>Responsável na loja<input id="store-responsavel" maxlength="180"></label><label>Telefone da loja<input id="store-telefone_contato" maxlength="180"></label><label>Entrada de funcionários<input id="store-entrada" maxlength="180"></label><label>Onde se apresentar<input id="store-apresentacao" maxlength="180"></label><label>Uniforme<input id="store-uniforme" maxlength="180"></label><label>Orientações por setor<textarea id="store-orientacoes" maxlength="1000" rows="3" placeholder="Ex.: FLV: apresentar-se ao encarregado do setor."></textarea></label></div></details>
         <label>Observação<textarea id="store-note" maxlength="400" rows="2" placeholder="Ex.: endereço divergente em outra fonte"></textarea></label>
       </div>
       <div class="dialog-footer"><button class="button button-quiet" id="store-cancel-button" type="button">Cancelar</button><button class="button button-primary" id="store-save-button" type="submit">Salvar loja</button></div>
@@ -461,19 +463,20 @@
     <form id="order-form" novalidate>
       <div class="dialog-header"><div><span class="eyebrow">SOLICITAÇÃO DE DIARISTAS</span><h2 id="order-form-title">Novo pedido</h2></div><button class="icon-button" type="button" id="order-close-button" aria-label="Fechar">×</button></div>
       <div class="dialog-body">
-        <div id="order-form-error" class="form-error" role="alert" hidden></div>
+        <p id="order-model-feedback" class="feedback" role="status" hidden></p><div id="order-form-error" class="form-error" role="alert" hidden></div>
         <fieldset><legend>Supermercado</legend><label>Nome do supermercado <span class="required">*</span><input id="order-market" list="order-market-options" maxlength="180" required placeholder="Ex.: Super do Povo"></label><datalist id="order-market-options"></datalist><div class="field-grid two order-field-row"><label>Unidade ou local<input id="order-unit" list="order-unit-options" maxlength="180" placeholder="Ex.: Meireles"></label><datalist id="order-unit-options"></datalist><label>Contato do solicitante<input id="order-contact" maxlength="180" placeholder="Nome ou telefone"></label></div><p id="order-store-hint" class="section-help" aria-live="polite"></p></fieldset>
         <fieldset><legend>Equipe solicitada</legend><div class="field-grid two"><label>Setor <span class="required">*</span><input id="order-sector" list="order-sector-options" maxlength="80" required placeholder="Ex.: Operador de caixa"></label><datalist id="order-sector-options"></datalist><label>Diaristas por dia <span class="required">*</span><input id="order-quantity" type="number" min="1" max="100" step="1" inputmode="numeric" required value="1"></label></div></fieldset>
         <fieldset><legend>Dias e horários</legend><p class="section-help">Adicione cada data solicitada. O horário pode variar de um dia para outro.</p><div id="order-shifts" class="order-shifts"></div><button class="button button-outline order-add-day" id="order-add-day" type="button">＋ Adicionar data</button><p id="order-demand-preview" class="order-demand-preview" aria-live="polite">1 dia · 1 diária solicitada</p></fieldset>
         <fieldset><legend>Acompanhamento</legend><label>Situação<select id="order-status"><option value="novo">Novo pedido</option><option value="em_selecao">Em seleção</option><option value="confirmado">Confirmado</option><option value="concluido">Concluído</option><option value="cancelado">Cancelado</option></select></label><label class="daily-notes-label">Observações<textarea id="order-notes" maxlength="500" rows="3" placeholder="Ex.: uniforme necessário, ponto de encontro ou instruções da loja"></textarea></label></fieldset>
       </div>
-      <div class="dialog-footer"><button class="button button-quiet" id="order-cancel-button" type="button">Cancelar</button><button class="button button-primary" id="order-save-button" type="submit">Salvar pedido</button></div>
+      <div class="dialog-footer"><button class="button button-quiet" id="order-cancel-button" type="button">Cancelar</button><button class="button button-outline" id="order-save-model" type="button">Salvar modelo</button><button class="button button-primary" id="order-save-button" type="submit">Salvar pedido</button></div>
     </form>
   </dialog>
   <dialog id="order-detail-dialog" aria-labelledby="order-detail-title">
     <div class="dialog-header"><div><span class="eyebrow">PEDIDO DO SUPERMERCADO</span><h2 id="order-detail-title"></h2></div><button class="icon-button" type="button" id="order-detail-close" aria-label="Fechar">×</button></div>
-    <div class="dialog-body"><div id="order-detail-fields" class="detail-fields"></div><button id="order-messages" class="button button-outline" type="button">▧ Mensagens para copiar</button><section class="history-section"><h3>Dias e horários solicitados</h3><div id="order-detail-shifts" class="order-detail-shifts"></div></section><div id="order-detail-success" class="feedback" role="status" aria-live="polite" hidden></div><div id="order-detail-error" class="form-error" role="alert" hidden></div></div>
+    <div class="dialog-body"><div id="order-detail-fields" class="detail-fields"></div><details id="order-suggestions" class="profile-more" hidden><summary>Sugestões para a escala inteira</summary><div id="order-suggestions-list" class="automation-list"></div></details><button id="order-messages" class="button button-outline" type="button">▧ Mensagens para copiar</button><section class="history-section"><h3>Dias e horários solicitados</h3><div id="order-detail-shifts" class="order-detail-shifts"></div></section><div id="order-detail-success" class="feedback" role="status" aria-live="polite" hidden></div><div id="order-detail-error" class="form-error" role="alert" hidden></div></div>
     <div class="dialog-footer detail-footer"><button class="button button-danger" id="order-delete-button" type="button">Excluir pedido</button><div><button class="button button-quiet" id="order-detail-close-bottom" type="button">Fechar</button><button class="button button-primary" id="order-edit-button" type="button">Editar pedido</button></div></div>
   </dialog>
+<dialog id="order-model-dialog" aria-labelledby="order-model-title"><div class="dialog-header"><h2 id="order-model-title">Modelos de pedidos</h2><button id="order-model-close" class="icon-button" type="button" aria-label="Fechar modelos">×</button></div><div class="dialog-body"><p class="section-help">Gera um rascunho para conferir. A vaga só será publicada ao salvar o pedido.</p><label>Início da nova escala<input id="order-model-start" type="date" required></label><div id="order-model-list" class="automation-list"></div><p id="order-model-error" class="form-error" role="alert" hidden></p></div></dialog>
 </body>
 </html>

@@ -231,6 +231,11 @@ def init_db():
             atualizado_em TEXT NOT NULL,
             UNIQUE(rede, nome)
         )""")
+        for column in ('responsavel','telefone_contato','entrada','apresentacao','uniforme','orientacoes'):
+            if column not in {r['name'] for r in db.execute('PRAGMA table_info(lojas)')}:
+                db.execute(f"ALTER TABLE lojas ADD COLUMN {column} TEXT NOT NULL DEFAULT ''")
+        db.execute("CREATE TABLE IF NOT EXISTS pedido_modelos (id INTEGER PRIMARY KEY AUTOINCREMENT, nome TEXT NOT NULL CHECK(length(trim(nome)) BETWEEN 1 AND 120), dados TEXT NOT NULL, criado_em TEXT NOT NULL, atualizado_em TEXT NOT NULL)")
+        db.execute("CREATE UNIQUE INDEX IF NOT EXISTS pedido_modelos_nome_ci ON pedido_modelos(lower(trim(nome)))")
         db.execute("CREATE INDEX IF NOT EXISTS idx_lojas_rede_cidade ON lojas(rede, cidade)")
         db.execute("""CREATE TABLE IF NOT EXISTS tarifas_redes (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -283,6 +288,7 @@ def init_db():
             "financeiro_lancamentos": ("id", "tipo", "descricao", "contraparte", "valor_centavos", "vencimento", "data_pagamento", "forma_pagamento", "motivo_ajuste"),
             "pedido_escalas": ("id", "pedido_id", "diarista_id", "data", "status", "disponibilidade_pedido_confirmada", "desistencia_motivo", "desistencia_em", "desistencia_por", "substituida_por_escala_id"),
             "tarifas_redes": ("id", "rede", "valor_recebido_centavos", "valor_padrao_centavos", "pagamento_primeira_quinzena", "pagamento_segunda_quinzena", "pagamento_semanal_dia"),
+            "pedido_modelos": ("id", "nome", "dados"),
             "tarifas_setores": ("id", "rede", "setor", "valor_pago_centavos"),
         }.items():
             for event in (("UPDATE",) if table == "tarifas_redes" else ("INSERT", "UPDATE", "DELETE")):
@@ -722,6 +728,7 @@ def validate_store(payload):
         "fonte_url": fonte,
         "situacao": situacao,
         "observacao": clean_text(payload.get("observacao", ""), "a observação", 400, False),
+        **{k: clean_text(payload.get(k, ""), k, 1000 if k == 'orientacoes' else 180, False) for k in ('responsavel','telefone_contato','entrada','apresentacao','uniforme','orientacoes')},
     }
 
 
@@ -815,6 +822,11 @@ class Handler(BaseHTTPRequestHandler):
                     return self.respond(HTTPStatus.NOT_FOUND, {"erro": "Pedido não encontrado."})
                 scales = order_scale_rows(db, scale_route[0])
             return self.respond(HTTPStatus.OK, scales)
+        if path == "/api/modelos-pedidos":
+            with connect() as db:
+                items = [dict(r) for r in db.execute('SELECT * FROM pedido_modelos ORDER BY nome')]
+            for item in items: item['dados'] = json.loads(item['dados'])
+            return self.respond(HTTPStatus.OK, items)
         if path == "/api/lojas":
             with connect() as db:
                 rows = db.execute("SELECT * FROM lojas ORDER BY rede COLLATE NOCASE, cidade COLLATE NOCASE, nome COLLATE NOCASE").fetchall()
@@ -833,7 +845,7 @@ class Handler(BaseHTTPRequestHandler):
             return self.respond(HTTPStatus.OK, [dict(row) for row in rows])
         if path == "/":
             path = "/index.html"
-        assets = {"/index.html": "text/html; charset=utf-8", "/style.css": "text/css; charset=utf-8", "/brand.css": "text/css; charset=utf-8", "/theme.css": "text/css; charset=utf-8", "/mobile.css": "text/css; charset=utf-8", "/reading.css": "text/css; charset=utf-8", "/motion.css": "text/css; charset=utf-8", "/operations.css": "text/css; charset=utf-8", "/workflow.css": "text/css; charset=utf-8", "/app.js": "text/javascript; charset=utf-8", "/theme.js": "text/javascript; charset=utf-8", "/finance.js": "text/javascript; charset=utf-8", "/forecast.js": "text/javascript; charset=utf-8", "/operations.js": "text/javascript; charset=utf-8", "/workflow.js": "text/javascript; charset=utf-8", "/matching.js": "text/javascript; charset=utf-8", "/backup.js": "text/javascript; charset=utf-8", "/orders.js": "text/javascript; charset=utf-8", "/stores.js": "text/javascript; charset=utf-8", "/settings.js": "text/javascript; charset=utf-8", "/reading.js": "text/javascript; charset=utf-8", "/reading-parser.js": "text/javascript; charset=utf-8", "/remote.js": "text/javascript; charset=utf-8", "/payment-calendar.js": "text/javascript; charset=utf-8", "/vendor/supabase-2.117.2.js": "text/javascript; charset=utf-8", "/stores.css": "text/css; charset=utf-8", "/settings.css": "text/css; charset=utf-8", "/login.css": "text/css; charset=utf-8", "/favicon.svg": "image/svg+xml", "/logo-direct-promocoes.jpg": "image/jpeg", "/logo-direct-promocoes-transparente.png": "image/png"}
+        assets = {"/automation-model.js":"text/javascript; charset=utf-8", "/automation.js":"text/javascript; charset=utf-8", "/automation.css":"text/css; charset=utf-8", "/index.html": "text/html; charset=utf-8", "/style.css": "text/css; charset=utf-8", "/brand.css": "text/css; charset=utf-8", "/theme.css": "text/css; charset=utf-8", "/mobile.css": "text/css; charset=utf-8", "/reading.css": "text/css; charset=utf-8", "/motion.css": "text/css; charset=utf-8", "/operations.css": "text/css; charset=utf-8", "/workflow.css": "text/css; charset=utf-8", "/app.js": "text/javascript; charset=utf-8", "/theme.js": "text/javascript; charset=utf-8", "/finance.js": "text/javascript; charset=utf-8", "/forecast.js": "text/javascript; charset=utf-8", "/operations.js": "text/javascript; charset=utf-8", "/workflow.js": "text/javascript; charset=utf-8", "/matching.js": "text/javascript; charset=utf-8", "/backup.js": "text/javascript; charset=utf-8", "/orders.js": "text/javascript; charset=utf-8", "/stores.js": "text/javascript; charset=utf-8", "/settings.js": "text/javascript; charset=utf-8", "/reading.js": "text/javascript; charset=utf-8", "/reading-parser.js": "text/javascript; charset=utf-8", "/remote.js": "text/javascript; charset=utf-8", "/payment-calendar.js": "text/javascript; charset=utf-8", "/vendor/supabase-2.117.2.js": "text/javascript; charset=utf-8", "/stores.css": "text/css; charset=utf-8", "/settings.css": "text/css; charset=utf-8", "/login.css": "text/css; charset=utf-8", "/favicon.svg": "image/svg+xml", "/logo-direct-promocoes.jpg": "image/jpeg", "/logo-direct-promocoes-transparente.png": "image/png"}
         for asset in ['messages-model.js','messages.js','backup-model.js']:
             assets['/'+asset]='text/javascript; charset=utf-8'
         assets['/messages.css']='text/css; charset=utf-8'
@@ -989,6 +1001,23 @@ class Handler(BaseHTTPRequestHandler):
                 return self.respond(HTTPStatus.BAD_REQUEST, {"erro": str(exc)})
             except sqlite3.IntegrityError:
                 return self.respond(HTTPStatus.CONFLICT, {"erro": "Esta diarista já está escalada para esse dia."})
+        if urlparse(self.path).path == "/api/modelos-pedidos":
+            try:
+                payload = self.read_json()
+                name = clean_text(payload.get('nome'), 'o nome do modelo', 120)
+                data = validate_order(payload.get('dados'))
+                with connect() as db:
+                    if not db.execute('SELECT 1 FROM lojas WHERE lower(rede)=lower(?) AND lower(nome)=lower(?)',(data['supermercado'],data['unidade'])).fetchone():
+                        raise ValueError('Escolha uma loja cadastrada.')
+                data['turnos'] = json.loads(data['turnos']) if isinstance(data['turnos'], str) else data['turnos']
+                now = datetime.now(timezone.utc).isoformat()
+                with connect() as db:
+                    cur = db.execute('INSERT INTO pedido_modelos(nome,dados,criado_em,atualizado_em) VALUES (?,?,?,?)', (name,json.dumps(data,ensure_ascii=False),now,now))
+                return self.respond(HTTPStatus.CREATED, {'id':cur.lastrowid,'nome':name,'dados':data})
+            except sqlite3.IntegrityError:
+                return self.respond(HTTPStatus.CONFLICT, {'erro':'Já existe um modelo com esse nome.'})
+            except (ValueError,TypeError,json.JSONDecodeError) as exc:
+                return self.respond(HTTPStatus.BAD_REQUEST, {'erro':str(exc)})
         if urlparse(self.path).path == "/api/lojas":
             try:
                 data = validate_store(self.read_json())
@@ -1366,6 +1395,11 @@ class Handler(BaseHTTPRequestHandler):
     def do_DELETE(self):
         if not self._allowed_origin():
             return self.respond(HTTPStatus.FORBIDDEN, {"erro": "Acesso não permitido."})
+        model = re.fullmatch(r"/api/modelos-pedidos/(\d+)", urlparse(self.path).path)
+        if model:
+            with connect() as db:
+                cur = db.execute('DELETE FROM pedido_modelos WHERE id=?', (int(model.group(1)),))
+            return self.respond(HTTPStatus.OK if cur.rowcount else HTTPStatus.NOT_FOUND, {'ok': bool(cur.rowcount)})
         reading_match = re.fullmatch(r"/api/leituras-pendentes/(\d+)", urlparse(self.path).path)
         if reading_match:
             with connect() as db:

@@ -6,6 +6,7 @@
   const money=n=>Number.isSafeInteger(n)?new Intl.NumberFormat('pt-BR',{style:'currency',currency:'BRL'}).format(n/100):'Valor a confirmar';
   function storeFor(order,stores=[]){const found=stores.filter(s=>norm(s.rede)===norm(order.supermercado)&&norm(s.nome)===norm(order.unidade));return found.length===1?found[0]:null;}
   function address(order,stores){const s=storeFor(order,stores);return s?[s.endereco,s.bairro,[s.cidade,s.uf||'CE'].filter(Boolean).join('/')].filter(Boolean).map(clean).join(', '):'Confirmar endereço com a Direct';}
+  function guidance(s){return s?[['Responsável',s.responsavel],['Contato da loja',s.telefone_contato],['Entrada',s.entrada],['Apresentar-se',s.apresentacao],['Uniforme',s.uniforme],['Orientações por setor',s.orientacoes]].filter(x=>x[1]).map(([label,v])=>'*'+label+':* '+clean(v)).join('\n'):'';}
   const active=s=>['escalada','presente'].includes(s.status);
   function compose(kind,{order,scales=[],stores=[],personId=null,today='',time=''}){
     if(!order)throw Error('Pedido não encontrado.');
@@ -29,6 +30,8 @@
     }
     if(kind==='vacancy'||kind==='replacement')lines.push('','É necessário ter disponibilidade para todos os dias e horários informados. O aceite depende de cadastro e confirmação da Direct.');
     if(kind==='reminder')lines.push('','Confirme com a Direct se mantém sua disponibilidade. A presença será registrada após o atendimento.');
+    const instructions=guidance(storeFor(order,stores));if(instructions)lines.push('','*ORIENTAÇÕES DA LOJA*',instructions);
+    if(order.observacoes)lines.push('','*Orientações do pedido:* '+clean(order.observacoes));
     return lines.join('\n');
   }
   function payment(items=[]){
@@ -41,5 +44,5 @@
     if(pending.length)lines.push('',`*Total a pagar:* ${sum(pending)}`);if(paid.length)lines.push(`*Total pago:* ${sum(paid)}`);
     lines.push('','Resumo informativo. A data prevista não significa que o pagamento foi realizado.');return lines.join('\n');
   }
-  return {compose,payment,storeFor,address};
+  return {compose,payment,storeFor,address,guidance};
 });

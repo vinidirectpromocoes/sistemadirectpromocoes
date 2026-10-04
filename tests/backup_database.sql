@@ -23,11 +23,11 @@ begin
  end loop;
  perform set_config('request.jwt.claims',jsonb_build_object('sub',admin_uid,'email',admin_email,'role','authenticated')::text,true);
  execute 'set local role authenticated';payload:=public.direct_backup_snapshot();execute 'reset role';
- if payload->>'format'<>'direct-data-v5' or (payload->'snapshot'->>'consistent')::boolean is not true
-   or (select count(*) from jsonb_object_keys(payload->'tables'))<>24 then raise exception 'Cópia incompleta.';end if;
+ if payload->>'format'<>'direct-data-v6' or (payload->'snapshot'->>'consistent')::boolean is not true
+   or (select count(*) from jsonb_object_keys(payload->'tables'))<>25 then raise exception 'Cópia incompleta.';end if;
  if exists(select 1 from jsonb_each(payload->'tables') t where jsonb_array_length(t.value)<>(payload->'snapshot'->'counts'->>t.key)::int) then raise exception 'Contagens divergentes.';end if;
  if payload->'tables'->'portal_config'<>(select coalesce(jsonb_agg(to_jsonb(t) order by to_jsonb(t)::text),'[]'::jsonb) from direct_private.portal_config t)
  or payload->'tables'->'portal_vagas_link'<>(select coalesce(jsonb_agg(to_jsonb(t) order by to_jsonb(t)::text),'[]'::jsonb) from direct_private.portal_vagas_link t) then raise exception 'Contatos ou links divergentes.';end if;
 end $$;
-select 'Backup v5: 24 tabelas, snapshot consistente e acesso restrito ao admin verificados; teste revertido.' result;
+select 'Backup v6: 25 tabelas, snapshot consistente e acesso restrito ao admin verificados; teste revertido.' result;
 rollback;
