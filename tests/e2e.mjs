@@ -41,7 +41,7 @@ async function runBrowser(engine, name) {
       page.on('pageerror', error => errors.push(error.message));
       await page.goto(url, { waitUntil: 'domcontentloaded' });
       await page.locator('#nav-diaristas').waitFor({ state: 'visible' });
-      for (const tab of ['inicio', 'crm', 'diaristas', 'pedidos', 'leitura', 'redes', 'financeiro', 'configuracoes', 'convites']) {
+      for (const tab of ['inicio', 'crm', 'diaristas', 'pedidos', 'leitura', 'redes', 'financeiro', 'configuracoes', 'convites', 'vagas']) {
         await page.locator(`#nav-${tab}`).click();
         assert.equal(new URL(page.url()).hash, `#${tab}`, `${name} ${viewport.width}: navegação ${tab}`);
         const overflow = await page.evaluate(() => document.documentElement.scrollWidth - innerWidth);
@@ -95,7 +95,7 @@ async function runRoleNavigation() {
       });
       await context.route('**/vendor/supabase-2.117.2.js', route => route.fulfill({
         contentType: 'text/javascript', body: `window.supabase={createClient:()=>({
-          rpc:async(name)=>({data:name==='direct_portal_registrations'?{total:0,items:[]}:{whatsapp:'',grupo_url:''},error:null}),
+          rpc:async(name)=>({data:name==='direct_portal_vacancies'?[]:name==='direct_portal_registrations'?{total:0,items:[]}:{whatsapp:'',grupo_url:''},error:null}),
           auth:{getSession:async()=>({data:{session:{user:{email:'qa@example.invalid'}}},error:null}),onAuthStateChange:()=>{},signOut:async()=>({error:null})},
           from:(table)=>{const q={select:()=>q,eq:()=>q,order:()=>q,limit:()=>q,range:async()=>({data:[],error:null,count:0}),
             maybeSingle:async()=>({data:table==='direct_admins'?${role === 'admin' ? "{email:'qa@example.invalid'}" : 'null'}:
@@ -108,12 +108,17 @@ async function runRoleNavigation() {
       await page.waitForFunction(expected => window.directRemote?.role === expected, role);
       for (const [id, allowed] of Object.entries({
         'nav-financeiro': ['admin', 'financeiro'], 'nav-configuracoes': ['admin', 'financeiro'],
-        'nav-convites': ['admin', 'operacao'], 'nav-leitura': ['admin', 'operacao'], 'new-order-button': ['admin', 'operacao'],
+        'nav-vagas': ['admin', 'operacao'], 'nav-convites': ['admin', 'operacao'], 'nav-leitura': ['admin', 'operacao'], 'new-order-button': ['admin', 'operacao'],
         'backup-settings': ['admin'], 'staff-settings': ['admin'],
       })) {
         const enabledForRole = await page.locator(`#${id}`).evaluate(element => !element.hidden);
         assert.equal(enabledForRole, allowed.includes(role), `${role}: permissão de ${id}`);
       }
+      await page.evaluate(() => { location.hash = '#vagas'; });
+      if (['admin','operacao'].includes(role)) {
+        await page.locator('#vagas-page').waitFor({state:'visible'});
+        await page.getByText('Nenhuma escala completa disponível. Cadastre um pedido na Leitura IA ou na aba Pedidos.').waitFor();
+      } else { await page.waitForFunction(() => location.hash === '#inicio'); }
       await page.evaluate(() => { location.hash = '#convites'; });
       if (['admin', 'operacao'].includes(role)) {
         await page.locator('#convites-page').waitFor({state:'visible'});

@@ -89,3 +89,14 @@ html[data-theme="dark"] .portal-registration-row small { color: var(--dark-muted
 #convites-page .list-header h2 { margin: 0 0 8px; }
 #convites-page .list-header .section-help, .portal-invite-card .section-help { margin: 0 0 12px; line-height: 1.5; }
 @media (max-width: 700px) { #convites-page .list-header { padding: 14px 14px 8px; } }
+.vacancy-share-card { padding: 18px 20px; margin-bottom: 20px; }
+.vacancy-share-card summary { font-size: 14px; font-weight: 600; cursor: pointer; }
+.vacancy-share-card .section-help { margin: 12px 0; line-height: 1.5; }
+.vacancy-heading { padding: 20px; }
+.vacancy-heading h2 { margin: 0 0 8px; }
+.vacancy-heading .section-help { margin: 0; line-height: 1.5; }
+#vacancy-share-result { display: flex; align-items: end; flex-wrap: wrap; gap: 10px; margin-top: 14px; }
+#vacancy-share-result[hidden] { display: none; }
+#vacancy-share-result label { flex: 1; min-width: 180px; font-size: 12px; }
+#vacancy-share-url { width: 100%; }
+@media(max-width:700px) { .vacancy-share-card, .vacancy-heading { padding: 14px; } #vacancy-share-result { flex-direction: column; align-items: stretch; } #vacancy-share-result label { min-width: 0; } }

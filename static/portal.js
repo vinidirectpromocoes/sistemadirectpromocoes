@@ -4,7 +4,7 @@
   const kind = document.body.dataset.page, $ = id => document.getElementById(id);
   const sb = supabase.createClient('https://jxthqgtzybcyediyciqc.supabase.co', 'sb_publishable_sulYm_YcfXUosfNvhQnDXg_I4lgxjth',
     {auth:{storageKey:'direct-formulario-privado',persistSession:false,autoRefreshToken:false,detectSessionInUrl:false}});
-  let context = null, jobs = [], chosen = null, loading = false;
+  let context = null, jobs = [], chosen = null, loading = false, accepting = false;
   const date = value => value.split('-').reverse().join('/');
   const money = value => new Intl.NumberFormat('pt-BR',{style:'currency',currency:'BRL'}).format(value/100);
   const node = (tag,text,cls='') => {const e=document.createElement(tag);e.textContent=text;e.className=cls;return e;};
@@ -73,12 +73,14 @@
       const button=node('button','Quero pegar essa vaga','primary');button.type='button';button.addEventListener('click',()=>reviewJob(o));card.append(button);list.append(card);
     }
   }
-  async function loadJobs(){if(!context||loading||!$('jobs-list'))return;loading=true;try{jobs=await rpc('direct_portal_orders',{p_convite:invitation});renderJobs();}catch(e){feedback(friendly(e),true);$('jobs-list').replaceChildren(node('p','Não foi possível carregar as vagas. Reabra este link para tentar novamente.'));}finally{loading=false;}}
+  async function loadJobs(){if(!context||loading||!$('jobs-list'))return;loading=true;try{jobs=await rpc('direct_portal_orders',{p_convite:invitation});renderJobs();if(chosen&&!jobs.some(o=>o.id===chosen.id)&&!accepting){chosen=null;if($('confirm-dialog').open){$('confirm-dialog').close();feedback('Esta escala não está mais disponível. As vagas foram atualizadas.');}}}catch(e){jobs=[];chosen=null;$('confirm-dialog')?.close();feedback(friendly(e),true);$('jobs-list').replaceChildren(node('p','Não foi possível carregar as vagas. Reabra este link para tentar novamente.'));}finally{loading=false;}}
   for(const id of ['confirm-close','confirm-cancel'])$(id)?.addEventListener('click',()=>$('confirm-dialog').close());
-  $('confirm-accept')?.addEventListener('click',async e=>{const b=e.target,cpf=$('confirm-cpf').value.replace(/\D/g,'');$('confirm-error').hidden=true;if(!validCpf(cpf)){$('confirm-error').textContent='Confira seu CPF.';$('confirm-error').hidden=false;return;}b.disabled=true;
-    try{const result=await rpc('direct_portal_take_order',{p_pedido_id:chosen.id,p_convite:invitation,p_cpf:cpf});$('confirm-dialog').close();feedback(result.mensagem);await loadJobs();}catch(error){$('confirm-error').textContent=friendly(error);$('confirm-error').hidden=false;await loadJobs();}finally{b.disabled=false;}
+  $('confirm-accept')?.addEventListener('click',async e=>{const b=e.target,cpf=$('confirm-cpf').value.replace(/\D/g,'');$('confirm-error').hidden=true;if(!validCpf(cpf)){$('confirm-error').textContent='Confira seu CPF.';$('confirm-error').hidden=false;return;}if(!chosen)return feedback('Esta escala não está mais disponível. Escolha uma vaga atual.',true);b.disabled=true;accepting=true;
+    try{const result=await rpc('direct_portal_take_order',{p_pedido_id:chosen.id,p_convite:invitation,p_cpf:cpf});$('confirm-dialog').close();feedback(result.mensagem);await loadJobs();}catch(error){$('confirm-error').textContent=friendly(error);$('confirm-error').hidden=false;await loadJobs();}finally{b.disabled=false;accepting=false;}
   });
   async function boot(){try{if(!invitation)throw Error('Acesso somente pelo link privado enviado pela Direct.');context=await rpc('direct_portal_context',{p_convite:invitation,p_tipo:kind});if(kind==='cadastro'){if(context.bloqueado)throw Error('Cadastro bloqueado. Fale com a Direct.');if(context.cadastrado)completed(context);else setupRegistration();}else await loadJobs();}catch(error){feedback(friendly(error),true);$('registration-form')?.setAttribute('hidden','');$('jobs-list')?.replaceChildren();}}
   window.addEventListener('hashchange',()=>location.reload());
-  boot();if($('jobs-list'))setInterval(()=>{if(!document.hidden)loadJobs();},45000);
+  function refreshJobs(){if(!document.hidden&&navigator.onLine)loadJobs();}
+  if($('jobs-list')){window.addEventListener('focus',refreshJobs);window.addEventListener('online',refreshJobs);document.addEventListener('visibilitychange',refreshJobs);setInterval(refreshJobs,15000);}
+  boot();
 })();

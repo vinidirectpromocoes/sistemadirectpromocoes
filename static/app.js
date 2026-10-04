@@ -69,10 +69,15 @@ async function request(url, options = {}) {
     }, 140);
   }
   try {
-    if (window.directRemote) return await window.directRemote.request(url, options);
+    if (window.directRemote) {
+      const data = await window.directRemote.request(url, options);
+      if ((options.method || 'GET').toUpperCase() !== 'GET') window.dispatchEvent(new CustomEvent('direct:data-changed', { detail: { url } }));
+      return data;
+    }
     const response = await fetch(url, options);
     const data = await response.json();
     if (!response.ok) throw new Error(data.erro || 'Não foi possível concluir a operação.');
+    if ((options.method || 'GET').toUpperCase() !== 'GET') window.dispatchEvent(new CustomEvent('direct:data-changed', { detail: { url } }));
     return data;
   } finally {
     activeRequests -= 1;
