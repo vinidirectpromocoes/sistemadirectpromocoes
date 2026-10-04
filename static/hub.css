@@ -22,7 +22,9 @@ html[data-theme=dark] .pending-details,html[data-theme=dark] .pending-issue{bord
  .sidebar-foot{margin-top:auto;padding-top:14px}
 }
 @media(max-width:700px){
- .sidebar nav{grid-template-columns:repeat(5,minmax(0,1fr))}
+ .sidebar nav{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:4px;overflow:visible}
+ .sidebar nav a{min-height:44px;padding:5px 2px;gap:3px}
+ .sidebar nav a::after{font-size:9px}
  .sidebar .nav-group{display:contents}
  .sidebar .nav-group-label{display:none}
 }
