@@ -299,8 +299,8 @@ function eyeIcon() {
 }
 
 function render() {
-  const term = $('#search').value.trim().toLocaleLowerCase('pt-BR').replace(/\D/g, '');
   const rawTerm = $('#search').value.trim().toLocaleLowerCase('pt-BR');
+  const term = /^[\d.\s-]+$/.test(rawTerm) ? rawTerm.replace(/\D/g, '') : '';
   const filtered = records.filter(item => !rawTerm || item.nome.toLocaleLowerCase('pt-BR').includes(rawTerm) || item.setores.some(setor => setor.toLocaleLowerCase('pt-BR').includes(rawTerm)) || (term && item.cpf.includes(term)));
   $('#total-count').textContent = records.length;
   $('#available-count').textContent = records.filter(item => !item.bloqueada && item.disponibilidade.length).length;
