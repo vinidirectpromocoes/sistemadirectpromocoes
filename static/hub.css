@@ -10,3 +10,21 @@ html[data-theme=dark] .hub-controls input,html[data-theme=dark] .hub-controls se
 .crm-summary{grid-template-columns:repeat(3,minmax(0,1fr))}.crm-summary small{display:block;font-size:11px;margin-top:5px;opacity:.8}.crm-filters[hidden]{display:none}.pending-areas{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:18px}.pending-areas .button{flex:1 1 120px;justify-content:center;gap:8px}.pending-areas span{font-size:11px;padding:2px 6px;border-radius:7px;background:#2378eb18}.pending-areas button[aria-pressed=true]{background:#135bec;color:#fff;border-color:#135bec}.pending-areas button[aria-pressed=true] span{background:#ffffff26}.pending-toolbar,.pending-heading{display:flex;align-items:center;justify-content:space-between;gap:8px;flex-wrap:wrap;margin-bottom:12px}.pending-toolbar>div{display:flex;gap:5px}.pending-toolbar button[aria-pressed=true]{color:#135bec;background:#2378eb15}.pending-heading h2{font-size:16px;margin:0}.pending-list{display:grid;gap:10px}.pending-record{display:grid;grid-template-columns:minmax(0,1fr) auto;align-items:center;gap:8px 18px;padding:13px 15px}.pending-info{min-width:0}.pending-record strong{font-size:14px}.pending-record small{margin:4px 0}.pending-record p{margin:5px 0}.pending-record .crm-record-tools{margin:0;max-width:190px}.pending-meta{display:flex;flex-wrap:wrap;align-items:center;gap:6px 12px;font-size:11px}.pending-meta strong{font-size:13px}.pending-details{grid-column:1/-1;border-top:1px solid var(--line,#dce5f2);padding-top:9px}.pending-details summary{font-size:12px;font-weight:600;cursor:pointer;width:fit-content;padding:4px 0;color:#135bec}.pending-issue{display:flex;align-items:center;justify-content:space-between;gap:12px;border-top:1px solid var(--line,#dce5f2);padding:10px 0}.pending-issue:first-of-type{margin-top:8px}.pending-issue>div{min-width:0}.pending-issue strong{font-size:12px}.pending-issue .button{flex-shrink:0;max-width:150px}.pending-empty{padding:25px 10px;text-align:center}.pending-empty p{font-size:13px}.pending-support{margin-top:20px;padding:15px 18px;min-height:0}.pending-support>summary{cursor:pointer;font-size:14px;font-weight:600}.pending-support .crm-tools{margin-top:10px}
 html[data-theme=dark] .pending-details,html[data-theme=dark] .pending-issue{border-color:var(--dark-border)}html[data-theme=dark] .pending-details summary,html[data-theme=dark] .pending-toolbar button[aria-pressed=true]{color:#a9c9ff}html[data-theme=dark] .pending-areas button:not([aria-pressed=true]){background:var(--dark-field);color:var(--dark-text)}
 @media(max-width:700px){.crm-summary{grid-template-columns:repeat(3,minmax(0,1fr));gap:7px}.crm-summary .finance-stat{padding:10px 8px}.crm-summary .finance-stat span{font-size:11px;line-height:1.4}.crm-summary small{display:none}.pending-areas{gap:5px;margin-bottom:12px;flex-wrap:nowrap}.pending-areas .button{flex:1 1 0;min-width:0;font-size:11px;padding:8px 5px;gap:4px}.pending-areas span{padding:1px 4px}.pending-record{grid-template-columns:minmax(0,1fr);padding:11px;gap:6px}.pending-record strong{font-size:13px}.pending-record .crm-record-tools{max-width:none;justify-content:flex-end}.pending-record .button{min-height:36px}.pending-toolbar .button{font-size:12px;padding:7px 9px}.pending-issue{gap:8px}.pending-issue .button{max-width:105px;font-size:11px;padding:6px}.pending-support{padding:13px}.pending-heading h2{font-size:14px}}
+
+/* Sidebar: rotina primeiro, cadastros juntos e gestão no final. */
+@media(min-width:701px){
+ .sidebar .brand{padding-bottom:19px}
+ .sidebar nav{gap:12px}
+ .sidebar nav a{min-height:36px;padding:8px 10px}
+ .sidebar .nav-group{display:grid;gap:3px}
+ .sidebar .nav-group:not(:has(a:not([hidden]))){display:none}
+ .sidebar .nav-group-label{padding:0 10px 3px;color:#a8c0e4;font-size:10px;font-weight:700;line-height:1.3;letter-spacing:.12em;text-transform:uppercase}
+ .sidebar-foot{margin-top:auto;padding-top:14px}
+}
+@media(max-width:700px){
+ .sidebar nav{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:4px;overflow:visible}
+ .sidebar nav a{min-height:44px;padding:5px 2px;gap:3px}
+ .sidebar nav a::after{font-size:9px}
+ .sidebar .nav-group{display:contents}
+ .sidebar .nav-group-label{display:none}
+}
