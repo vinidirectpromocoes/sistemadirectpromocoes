@@ -28,3 +28,7 @@ html[data-theme=dark] .pending-details,html[data-theme=dark] .pending-issue{bord
  .sidebar .nav-group{display:contents}
  .sidebar .nav-group-label{display:none}
 }
+
+/* Quatro tarefas principais; os demais detalhes continuam sob demanda. */
+.crm-summary{grid-template-columns:repeat(4,minmax(0,1fr))}.crm-summary .finance-stat[hidden]{display:none}.pending-priorities{display:flex;flex-wrap:wrap;gap:6px;flex-basis:100%}.pending-priorities .button{font-size:12px;padding:6px 9px}.crm-summary button[aria-pressed=true]{outline:2px solid #2378eb;outline-offset:2px}
+@media(max-width:700px){.crm-summary{grid-template-columns:repeat(2,minmax(0,1fr))}.crm-summary .finance-stat span{font-size:12px}.crm-summary small{display:block;font-size:10px}.pending-priorities .button{font-size:11px}}

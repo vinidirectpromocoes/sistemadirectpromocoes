@@ -21,6 +21,8 @@ TABLES = (
     "leituras_pendentes", "direct_staff", "direct_auditoria", "cobrancas",
     "cobranca_itens", "cobranca_recebimentos", "pagamento_lotes", "custos_extras", "contratos", "ocorrencias",
 )
+EXTRA_TABLES = ("direct_admins", "portal_cadastros", "portal_config", "portal_convites", "portal_registros", "portal_vagas_link")
+ALL_TABLES = TABLES + EXTRA_TABLES
 LEGACY_TABLES = TABLES[:11]
 
 
@@ -34,23 +36,31 @@ def decrypt_archive(archive, password):
         raise ValueError("Parâmetros de criptografia inválidos")
     key = __import__("hashlib").pbkdf2_hmac("sha256", password.encode(), salt, 200000, 32)
     payload = json.loads(AESGCM(key).decrypt(iv, ciphertext, None))
-    if payload.get("format") not in ("direct-data-v1", "direct-data-v2", "direct-data-v3", "direct-data-v4") or not isinstance(payload.get("tables"), dict):
+    if payload.get("format") not in ("direct-data-v1", "direct-data-v2", "direct-data-v3", "direct-data-v4", "direct-data-v5") or not isinstance(payload.get("tables"), dict):
         raise ValueError("Conteúdo da cópia não reconhecido")
-    required = TABLES if payload["format"] == "direct-data-v4" else TABLES[:16] if payload["format"] == "direct-data-v3" else TABLES[:15] if payload["format"] == "direct-data-v2" else LEGACY_TABLES
+    required = ALL_TABLES if payload["format"] == "direct-data-v5" else TABLES if payload["format"] == "direct-data-v4" else TABLES[:16] if payload["format"] == "direct-data-v3" else TABLES[:15] if payload["format"] == "direct-data-v2" else LEGACY_TABLES
     for table in required:
         if not isinstance(payload["tables"].get(table), list):
             raise ValueError(f"Tabela ausente: {table}")
         if not all(isinstance(row, dict) for row in payload["tables"][table]):
             raise ValueError(f"Registros inválidos: {table}")
-    for table in TABLES:
+    if payload["format"] == "direct-data-v5":
+        snapshot = payload.get("snapshot", {})
+        if snapshot.get("consistent") is not True or any(snapshot.get("counts", {}).get(t) != len(payload["tables"][t]) for t in required):
+            raise ValueError("Contagens ou consistência inválidas")
+    for table in ALL_TABLES:
         payload["tables"].setdefault(table, [])
     return payload
 
 
 def relationship_errors(data):
     ids = {table: {str(row["id"]) for row in data[table] if row.get("id") is not None}
-           for table in ("diaristas", "pedidos", "pedido_escalas", "diarias", "cobrancas", "pagamento_lotes", "contratos")}
+           for table in ("diaristas", "pedidos", "pedido_escalas", "diarias", "cobrancas", "pagamento_lotes", "contratos", "portal_convites")}
     links = (
+        ("portal_cadastros", "diarista_id", "diaristas"),
+        ("portal_convites", "diarista_id", "diaristas"),
+        ("portal_registros", "diarista_id", "diaristas"),
+        ("portal_registros", "convite_id", "portal_convites"),
         ("diarias", "contrato_id", "contratos"),
         ("contratos", "versao_anterior_id", "contratos"),
         ("ocorrencias", "pedido_id", "pedidos"),
@@ -91,12 +101,12 @@ def restore(archive_path, password, output_path):
             db.execute("create table backup_meta (format text not null, exported_at text not null)")
             db.execute("insert into backup_meta values (?, ?)", (payload["format"], payload["exportedAt"]))
             db.execute("create table backup_rows (source_table text not null, ordinal integer not null, source_id text, record_json text not null, primary key(source_table, ordinal))")
-            for table in TABLES:
+            for table in ALL_TABLES:
                 db.executemany("insert into backup_rows values (?, ?, ?, ?)",
                                ((table, index, str(row.get("id", row.get("email", ""))), json.dumps(row, ensure_ascii=False))
                                 for index, row in enumerate(payload["tables"][table])))
             actual = dict(db.execute("select source_table, count(*) from backup_rows group by source_table"))
-            expected = {table: len(payload["tables"][table]) for table in TABLES}
+            expected = {table: len(payload["tables"][table]) for table in ALL_TABLES}
             if any(actual.get(table, 0) != count for table, count in expected.items()):
                 raise ValueError("Contagem divergente após restauração")
             if db.execute("pragma integrity_check").fetchone()[0] != "ok":
@@ -159,6 +169,10 @@ def restore_operational(archive_path, password, output_path):
                     names = ", ".join(values)
                     markers = ", ".join("?" for _ in values)
                     db.execute(f"INSERT INTO direct_auditoria ({names}) VALUES ({markers})", tuple(values.values()))
+            with db:
+                db.execute("CREATE TABLE backup_private_rows (source_table TEXT NOT NULL, ordinal INTEGER NOT NULL, record_json TEXT NOT NULL, PRIMARY KEY(source_table,ordinal))")
+                for table in EXTRA_TABLES:
+                    db.executemany("INSERT INTO backup_private_rows VALUES (?,?,?)", ((table,index,json.dumps(row,ensure_ascii=False)) for index,row in enumerate(data[table])))
             db.execute("PRAGMA foreign_keys = ON")
             invalid = db.execute("PRAGMA foreign_key_check").fetchall()
             if invalid:
@@ -166,7 +180,8 @@ def restore_operational(archive_path, password, output_path):
             if db.execute("PRAGMA integrity_check").fetchone()[0] != "ok":
                 raise ValueError("Falha de integridade da base restaurada")
             actual = {table: db.execute(f"SELECT count(*) FROM {table}").fetchone()[0] for table in TABLES}
-            expected = {table: len(data[table]) for table in TABLES}
+            actual.update({table: db.execute("SELECT count(*) FROM backup_private_rows WHERE source_table=?", (table,)).fetchone()[0] for table in EXTRA_TABLES})
+            expected = {table: len(data[table]) for table in ALL_TABLES}
             if actual != expected:
                 raise ValueError("Contagem divergente após restauração operacional")
             return actual
@@ -185,7 +200,7 @@ def main():
     args = parser.parse_args()
     action = restore_operational if args.operational else restore
     counts = action(args.archive, getpass.getpass("Senha da cópia: "), args.output)
-    print(f"Restauração isolada concluída: {sum(counts.values())} registros, {len(TABLES)} tabelas. Arquivo: {args.output}")
+    print(f"Restauração isolada concluída: {sum(counts.values())} registros, {len(counts)} tabelas. Arquivo: {args.output}")
     print("O arquivo restaurado contém dados sem criptografia; proteja-o e apague-o após a conferência.")
 
 

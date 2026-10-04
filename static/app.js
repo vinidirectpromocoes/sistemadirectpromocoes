@@ -305,7 +305,11 @@ function render() {
     view.setAttribute('aria-label', `Ver ficha e histórico de ${item.nome}`);
     view.title = 'Ver ficha e histórico';
     view.addEventListener('click', () => openDetail(item.id));
-    actions.append(view); tr.append(actions); body.append(tr);
+    actions.append(view);
+    if (partialWorker(item) && (!window.directRemote || ['admin','operacao'].includes(window.directRemote.role))) {
+      const complete = document.createElement('button'); complete.type='button';complete.className='text-button profile-complete';complete.textContent='Completar';complete.setAttribute('aria-label', `Completar cadastro de ${item.nome}`);complete.addEventListener('click',()=>openForm(item));actions.append(complete);
+    }
+    tr.append(actions); body.append(tr);
   });
 }
 
@@ -345,12 +349,16 @@ function renderDetail(record) {
     return `${label}: ${slot.inicio === '00:00' && slot.fim === '23:59' ? 'qualquer horário' : `${slot.inicio} às ${slot.fim}`}`;
   }).join('\n');
   const address = [[record.logradouro, record.numero].filter(Boolean).join(', '), record.complemento, record.bairro, [record.cidade, record.uf].filter(Boolean).join('/'), record.cep ? `CEP ${formatCep(record.cep)}` : ''].filter(Boolean).join(' · ');
+  $('#edit-button').textContent = partialWorker(record) ? 'Completar cadastro' : 'Editar cadastro';
   $('#detail-fields').replaceChildren(
     detailSection('Dados pessoais', [['Nome completo', record.nome], ['CPF', formatCpf(record.cpf)], ['Telefone / WhatsApp', record.telefone || 'Não informado'], ['Nascimento', record.data_nascimento ? record.data_nascimento.split('-').reverse().join('/') : 'Não informado'], ['Setores de experiência', record.setores.join(', ')]]),
     detailSection('Endereço', [['Endereço completo', address]]),
     detailSection('Trabalho e disponibilidade', [['Trabalha atualmente', record.trabalhando == null ? 'Não informado' : record.trabalhando ? 'Sim' : 'Não'], ['Local de trabalho', record.local_trabalho || (record.trabalhando === false ? '—' : 'Não informado')], ['Dias e horários', schedule]]),
     detailSection('Locomoção', [['Pode atender qualquer região', record.pode_se_deslocar == null ? 'Não informado' : record.pode_se_deslocar ? 'Sim' : 'Regiões limitadas'], ['Meio de transporte', record.transporte || (record.pode_se_deslocar === false ? '—' : 'Não informado')], ['Observações', record.observacoes_locomocao || '—']]),
   );
+  const optional = document.createElement('details'); optional.className = 'profile-more';
+  const summary = document.createElement('summary'); summary.textContent = 'Ver endereço, disponibilidade e locomoção'; optional.append(summary);
+  const fields = $('#detail-fields'); for (const section of [...fields.children].slice(1)) optional.append(section); fields.append(optional);
 }
 
 function dateLabel(value) {

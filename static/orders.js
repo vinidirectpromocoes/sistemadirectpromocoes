@@ -592,6 +592,9 @@ async function openOrderDetail(id) {
       ['Pedido registrado em', new Date(item.criado_em).toLocaleString('pt-BR')],
     ]),
   );
+  const optional = document.createElement('details'); optional.className='profile-more';
+  const summary=document.createElement('summary');summary.textContent='Ver detalhes do pedido';optional.append(summary);
+  const fields=$('#order-detail-fields');for(const section of [...fields.children].slice(1))optional.append(section);fields.append(optional);
   const showStore = () => {
     if (orderDetailId !== id || !$('#order-detail-dialog').open) return;
     const store = matchingOrderStore(item.supermercado, item.unidade);

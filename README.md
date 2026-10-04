@@ -1,139 +1,80 @@
 # Sistema Direct Promoções
 
-Sistema da Direct Promoções com abas de Início, Diaristas, Pedidos, Leitura IA, Redes e lojas, Financeiro e Configurações. O site público é hospedado na Vercel; o acesso aos dados exige login e autorização no Supabase. A versão local em Python continua disponível para desenvolvimento, usando seu próprio SQLite.
+Gestão interna de diaristas, pedidos, escalas e financeiro. Site: **https://sistemadirectpromocoes-zeta.vercel.app/**. Funcionários entram com Supabase Auth e autorização da Direct. Diaristas não criam conta nem acessam o painel interno.
 
-## Site publicado e primeiro acesso
+## Rotina de trabalho
 
-Endereço público: **https://sistemadirectpromocoes-zeta.vercel.app/**. A página de login é pública; os dados exigem uma conta administradora autorizada.
+1. Receba o cadastro por link privado ou salve manualmente **nome e CPF**. Telefone, endereço e disponibilidade podem ser completados depois. A lista identifica cadastros parciais com botão **Completar**.
+2. Registre os pedidos em **Pedidos** ou **Leitura IA**. A leitura é local, aceita texto/fotos/PDFs, apresenta revisão e só grava após confirmação. Nome/CPF junto ao pedido permite cadastrar a pessoa e escalar todos os dias do pedido, conforme a revisão.
+3. Pedidos sem equipe aparecem na plataforma de vagas. Ao preencher a escala, a vaga sai da plataforma; o pedido permanece no sistema. Desistência/substituição preservam o histórico.
+4. **Confirmou que vai** registra o compromisso. **Presença** registra atendimento e cria a diária financeira; **Falta** retira uma diária ainda não paga. Presença futura é bloqueada. Diárias pagas exigem reabrir o fechamento antes de corrigir.
+5. **Financeiro** mostra os indicadores e previsões acima da lista. Diárias são agrupadas por pessoa; **Ver diárias** mostra os itens. Fechamento registra pagamento, data e forma; não transfere dinheiro.
 
-O administrador autorizado entra com o e-mail e a senha já cadastrados no Supabase. A tela pública contém apenas o formulário de login. O e-mail precisa estar registrado em `public.direct_admins`; uma conta sem essa autorização não consegue ler ou alterar os dados da operação. Funcionários individuais precisam de conta no Supabase Auth **e** autorização de seu e-mail em Configurações → Acesso dos funcionários.
+O Início reúne cards e gráficos. Pendências tem quatro atalhos: **Precisa de diarista**, **Aguardando confirmação**, **Presença a registrar** e **Pagamento a realizar**. As áreas Operação, Financeiro e Cadastros preservam acesso às demais pendências. Filtros e histórico ficam sob demanda, sem um quadro CRM paralelo.
 
-O arquivo `vercel.json` publica `static/`. O JavaScript desta pasta usa a chave publicável do Supabase, e as políticas RLS verificam o administrador em cada tabela. A chave de serviço e o banco SQLite não pertencem ao site ou repositório. Enviar alterações para `main` no GitHub aciona um novo deploy pela integração Git da Vercel.
+## Mensagens copiáveis
 
-O fluxo recomendado de publicação é abrir um pull request, esperar o teste **Qualidade antes da publicação** ficar verde e só então integrar em `main`. O mesmo teste roda após cada atualização de `main`. A integração Git da Vercel publica automaticamente o commit; por isso, não envie commits diretamente a `main` antes de testar. O teste usa apenas banco temporário e dados sintéticos, sem credenciais de produção. Uma regra obrigatória de proteção da branch ainda deve ser configurada no GitHub para impedir integrações com testes reprovados.
+Na ficha do pedido, abra **Mensagens para copiar**. Escolha pedido/equipe, divulgar vaga, endereço, lembrete ou substituição. A prévia pode ser corrigida antes de **Copiar mensagem**. Rede, loja, endereço, setor, dias/horários e equipe são consultados ao abrir a prévia. Não são incluídos CPF, telefone de terceiros ou valor recebido da rede.
 
-Para adicionar outro administrador, inclua seu e-mail em `public.direct_admins` usando um acesso seguro ao banco. Não coloque a lista de administradores no código publicado. As permissões de funcionários são Operação (cadastros, pedidos, escalas e leituras), Financeiro (lançamentos e tarifas) e Consulta (pedidos e lojas). O administrador autoriza ou desativa o e-mail em Configurações; a conta e a senha devem ser criadas separadamente em Supabase Auth. Os esquemas e políticas estão em `supabase/migrations/`.
+O modelo de equipe distingue quem confirmou que vai, quem aguarda resposta e quem teve presença registrada em cada dia. Divulgação usa dias com vagas e informa a necessidade de atender todos eles. Lembrete individual usa os dias da pessoa selecionada. Revise disponibilidade e destinatários antes de enviar. No Financeiro, **Ver diárias → Resumo para copiar** mostra somente os pagamentos da pessoa e os itens do filtro atual, separando valores pagos de valores previstos. Copiar não envia WhatsApp automaticamente.
 
-## Como iniciar
+## Links separados dos diaristas
 
-No Terminal, dentro desta pasta:
+- **Cadastros por link**: acompanhe cadastros recebidos e gere/copie o link privado de cadastro. Não há criação de conta. O formulário inclui telefone, nascimento, CEP/endereço, setores, disponibilidade, transporte e trabalho atual; ViaCEP preenche o endereço com possibilidade de correção manual. A tela final agradece e mostra WhatsApp, grupo e vagas.
+- **Vagas disponíveis**: gere/copie o link compartilhado privado para acompanhar as vagas. Não há filtro nem escolha individual de dias. O link compartilhado não autoriza alguém a assumir escala pelo CPF de outra pessoa.
+- Para aceitar, um diarista já cadastrado precisa do convite individual vinculado à pessoa/CPF. O aceite confirma todos os dias restantes; presença continua sendo registrada pela Direct. Bloqueio, conflito, capacidade e trabalho na mesma rede são conferidos no banco.
+
+WhatsApp da Direct e convite do grupo estão em **Configurações → Links dos diaristas**. Não compartilhe convites individuais de outra pessoa. Detalhes: [PORTAL_DIARISTAS_2026-10-03.md](PORTAL_DIARISTAS_2026-10-03.md).
+
+## Calendários e valores
+
+Valores em Configurações são em reais; armazenamento/cálculo usa centavos. Presenças congelam os valores vigentes e alterações posteriores não reescrevem pagamentos históricos. Tarifas ausentes não são inventadas. Pedidos cancelados não entram na previsão; faltas sem substituição reduzem o previsto. Previsão não é recebimento em caixa.
+
+| Rede | Recebido por diária | Pagamento padrão | Prazo de recebimento/pagamento |
+|---|---:|---:|---|
+| Hipermarket | R$ 124 | R$ 85 | dias 1–15: dia 20; segunda quinzena: dia 05 seguinte |
+| Fazendinha | R$ 129 | R$ 85 | dias 1–15: dia 20; segunda quinzena: dia 05 seguinte |
+| Super do Povo | R$ 134 | R$ 90 | dias 1–15: dia 30; segunda quinzena: dia 15 seguinte |
+| Super Lagoa | R$ 134 | R$ 90 | dias 1–15: dia 30; segunda quinzena: dia 15 seguinte |
+| Pinheiro | R$ 134 | R$ 90 | semana de segunda a domingo: sexta/sábado da semana seguinte |
+| Variedades | R$ 134 | R$ 90 | semana de segunda a domingo: sexta/sábado da semana seguinte |
+
+Pinheiro/Variedades usam sábado como prazo final inicial, configurável para sexta. Pagamento efetuado na sexta pode ser registrado com a data real. Vencido somente após o prazo escolhido. Datas de calendário automáticas atualizam diárias pendentes; datas manuais e registros pagos são preservados.
+
+O financeiro mantém os mecanismos históricos de cobranças, conferência e lotes no banco; as seções extensas foram retiradas da tela principal a pedido do proprietário. Não é necessário reintroduzi-las para usar os indicadores, pagamentos ou mensagens.
+
+## Backup e recuperação
+
+**Configurações → Cópia de segurança → Baixar cópia** exige administrador e senha de pelo menos 12 caracteres. O backup v5 lê as **24 tabelas** em um único snapshot consistente do Postgres, inclui tarifas, calendários, equipe, autorizações internas, contatos, convites, origem dos cadastros e link de vagas. O navegador criptografa o arquivo com AES-GCM antes de baixar. **Verificar cópia** confere decriptação, contagens, duplicidade e vínculos entre registros. Cópias v1–v4 permanecem aceitas, com aviso das configurações ausentes.
+
+Guarde arquivo e senha separadamente, faça uma cópia semanal e após alterações importantes e verifique o arquivo. Tokens privados do portal também são sensíveis e pertencem à cópia criptografada. Credenciais e contas do Supabase Auth, chaves do projeto, infraestrutura e código não estão no backup dos dados; código/migrações permanecem no GitHub.
+
+Ensaio em destino novo e isolado:
+
+```bash
+python3 -m pip install cryptography==50.0.1
+python3 scripts/restore_backup.py /caminho/backup.json /caminho/consulta.db
+python3 scripts/restore_backup.py --operational /caminho/backup.json /caminho/operacional.db
+```
+
+O programa pede senha sem mostrá-la, recusa sobrescrever e valida vínculos/contagens. O modo operacional recupera as tabelas de trabalho do servidor local; configurações privadas e vínculos Auth ficam preservados em `backup_private_rows` para recuperação administrativa, sem habilitar os convites no servidor local. O arquivo SQLite restaurado contém dados sem criptografia e deve permanecer restrito. Reimportar no Supabase exige destino separado, esquema pelas migrações, revisão das autorizações/UUIDs Auth e validação antes de troca da produção. Não existe botão que sobrescreva a produção automaticamente.
+
+## Acesso e publicação
+
+Administrador: conta Auth mais e-mail em `direct_admins`. Funcionários: conta Auth e autorização em **Configurações → Acesso dos funcionários**, perfil Operação, Financeiro ou Consulta. Dados privados exigem autorização no banco; a chave publicável do frontend não dá acesso administrativo. Contas de diaristas não são necessárias.
+
+Publicação: branch `codex/...` → pull request → teste **Qualidade antes da publicação / test** aprovado no commit atual → merge → Vercel. O workflow executa backend, regras, restauração, navegador Chromium/WebKit e portal. A regra de proteção da `main` deve exigir PR, check `test` do GitHub Actions, branch atualizada e conversas resolvidas, inclusive para administradores. Não declare a regra ativa sem conferir no GitHub.
+
+Os testes usam banco temporário e dados sintéticos. Testes SQL em `tests/backup_database.sql`, `tests/full_cycle_database.sql` e `tests/weekly_calendar_database.sql` terminam em rollback e exigem o projeto/administrador previstos. Não crie dados de teste permanentes na operação.
+
+## Desenvolvimento e limitações
 
 ```bash
 python3 server.py
 ```
 
-Abra `http://127.0.0.1:8000` no navegador. Para encerrar, pressione `Ctrl+C` no Terminal.
+Abra `http://127.0.0.1:8000`. O SQLite local não sincroniza automaticamente com Supabase. `static/` é publicado pela Vercel; schema/regras ficam em `supabase/migrations/`; `tests/` e `.github/workflows/quality.yml` verificam a publicação.
 
-Se `python3` não estiver disponível no Mac, use o Python incluído no Codex:
+Leitura local usa Tesseract.js/PDF.js e exige internet para baixar bibliotecas/modelos na primeira utilização. OCR pouco legível ou mensagem ambígua exige revisão; não é um modelo generativo com entendimento ilimitado. Offline conserva agenda/rascunhos cifrados por sessão; presença e financeiro exigem conexão. Fontes de campos móveis têm 16px para evitar zoom automático; zoom de acessibilidade permanece disponível. Emulação Chromium/WebKit não substitui uma conferência em iPhone/Android físico.
 
-```bash
-/Users/vini/.cache/codex-runtimes/codex-primary-runtime/dependencies/python/bin/python3 server.py
-```
-
-O servidor local aceita conexões somente do próprio computador e usa o arquivo SQLite em `data/`. Os dados salvos localmente não são sincronizados automaticamente com o Supabase após a migração inicial. Para operação compartilhada, use o site publicado. Como o CPF é um dado pessoal, mantenha a pasta `data/` restrita e faça cópias de segurança do arquivo `diaristas.db`.
-
-## Cópia de segurança e ensaio de recuperação
-
-No site publicado, o administrador pode ir a **Configurações → Cópia de segurança**, baixar o arquivo criptografado e conferir a senha e a integridade pela opção **Verificar cópia**. Repita semanalmente e após mudanças importantes. A tela lembra a data da última verificação neste aparelho; esse lembrete local não substitui um calendário de trabalho nem comprova cópias em outros aparelhos.
-
-Para ensaiar uma recuperação sem tocar na produção, execute em um computador confiável:
-
-```bash
-python3 -m pip install cryptography==50.0.1
-python3 scripts/restore_backup.py /caminho/direct-backup-AAAA-MM-DD.json /caminho/ensaio-direct.db
-python3 scripts/restore_backup.py --operational /caminho/direct-backup-AAAA-MM-DD.json /caminho/ensaio-operacional.db
-```
-
-O primeiro comando materializa as 18 tabelas da cópia em registros de consulta. O segundo recria as tabelas operacionais do servidor local em um arquivo novo, verifica contagens, vínculos e integridade e permite conferir pedidos, diárias e cobranças. Cópias antigas continuam aceitas. O programa pede a senha sem mostrá-la e recusa sobrescrever arquivos. A saída contém dados pessoais e financeiros **sem criptografia**; mantenha-a com acesso restrito e apague-a após o ensaio. A recuperação ainda não reimporta automaticamente para o Supabase e não inclui usuários do Supabase Auth, senhas nem configurações do projeto. Para desastre no serviço hospedado, será necessário criar um projeto Supabase separado e validar a importação nele.
-
-## Proteção da publicação
-
-O workflow `.github/workflows/quality.yml` executa testes de backend, regras de negócio, restauração e navegação Chromium/WebKit em cada pull request. A proteção da branch `main` deve exigir o check `test` do GitHub Actions, merge por pull request, branch atualizada e conversas resolvidas. Se a proteção não aparecer em GitHub → Settings → Branches, configure-a antes de publicar novas mudanças.
-
-## Campos disponíveis
-
-- Nome e CPF com validação e bloqueio de duplicidade
-- Um ou mais setores de experiência
-- Endereço em Fortaleza–CE: CEP, logradouro, número, complemento e bairro. Cidade e estado são definidos automaticamente.
-- Situação de trabalho atual e local onde trabalha
-- Dias da semana e horários específicos de disponibilidade
-- Disponibilidade de locomoção, meio de transporte e observações
-- Situação disponível ou bloqueada; a ficha completa é aberta pelo botão de olho
-- Histórico de diárias com data, setor, local, observações e data do pagamento. A data do pagamento pode ser registrada ou corrigida depois; sem ela, a diária aparece como pendente.
-
-Os indicadores contam como **disponíveis** os cadastros não bloqueados e como **bloqueados** os cadastros bloqueados. A informação sobre estar trabalhando atualmente continua na ficha da diarista.
-
-## Financeiro
-
-- As diárias aparecem automaticamente como saídas. Informe valor, vencimento, data e forma de pagamento na ficha da diária ou na aba Financeiro.
-- A previsão operacional mostra faturamento, custo das diárias e margem bruta do mês (ou de todos os meses), com gráfico circular e divisão por rede. O cenário ideal considera todas as vagas de todos os dias atendidas; a previsão atual desconta faltas sem substituição e usa os valores congelados das presenças confirmadas. Vagas futuras ainda sem escala permanecem como hipótese de atendimento. Pedidos cancelados não entram. Valores de tarifas ausentes são avisados e não são inventados.
-- Ao confirmar uma presença, a diária registra os valores vigentes de faturamento e pagamento. Alterar uma tarifa depois não reescreve esse histórico. Uma falta sem pagamento retira a diária ligada à escala. O faturamento previsto é uma estimativa de serviço prestado, não equivale a dinheiro já recebido da rede: registre a cobrança e sua liquidação como entrada no financeiro para acompanhar o caixa.
-- Registre outras entradas e saídas com descrição, cliente ou favorecido, categoria, valor, vencimento, data de liquidação e observações.
-- Os cards mostram entradas, saídas e saldo **realizados no mês selecionado**, além do total de valores pendentes de receber e pagar em todos os períodos.
-- O filtro de mês afeta a lista; a opção **Ver todos os meses** mostra todo o histórico. Há busca, filtros por tipo e situação, e exportação CSV do resultado filtrado.
-- Diárias antigas sem valor ficam sinalizadas e não entram nos totais até serem completadas.
-- Uma diária marcada como paga não pode ser excluída diretamente. Cadastros com diárias registradas também não podem ser excluídos, para preservar o histórico financeiro; use o bloqueio da diarista quando necessário.
-- Em **Cobranças das redes**, gere uma cobrança por rede e período a partir das presenças confirmadas, com número de nota opcional e vencimento. A ficha mostra os pedidos e as diárias incluídos. Cada diária só pode ser cobrada uma vez enquanto a cobrança estiver ativa. Registre recebimentos parciais; o saldo, os cards, o gráfico e o razão financeiro são recalculados. Um recebimento incorreto pode ser estornado com motivo. Para corrigir uma presença já cobrada, cancele a cobrança antes; os itens voltam a ficar disponíveis e a alteração fica na auditoria.
-- Em um grupo de diárias por pessoa, **Fechar pagamento** permite selecionar várias diárias, registrar data e forma uma vez e preservar o total do lote. Para corrigir, reabra o lote com motivo; o pagamento das diárias volta a pendente.
-
-## Pedidos dos supermercados
-
-- Registre supermercado, unidade, contato, setor e número de diaristas necessário por dia.
-- Adicione uma ou mais datas, cada uma com seu próprio horário de início e fim. A quantidade de dias e o total de diárias solicitadas são calculados automaticamente.
-- Acompanhe a situação do pedido: novo, em seleção, confirmado, concluído ou cancelado.
-- A lista oferece busca e filtro por situação; a ficha mostra todos os dias e horários e permite editar ou excluir o pedido.
-- Um pedido corresponde a um setor e a uma quantidade de diaristas por dia. Para demandas diferentes por setor, registre pedidos separados.
-- A escala semanal mostra horários, equipe e vagas abertas. Na ficha do pedido, associe diaristas e confirme presença ou falta por data. A página Início reúne vagas abertas, presenças pendentes, leituras pendentes e lançamentos vencidos.
-- A lista de pessoas disponíveis prioriza experiência no setor, bairro da loja e locomoção. Bloqueio, indisponibilidade no turno, deslocamento limitado e conflito com outra escala impedem a sugestão. A confirmação de falta reabre a vaga para substituição e atualiza a previsão financeira. A página Início aponta pedidos, presenças e cobranças vencidas com links diretos para resolver cada pendência.
-
-## Leitura IA
-
-- A aba **Leitura IA** aceita vários registros em texto, várias fotos e PDFs de até 10 MB e 20 páginas. O reconhecimento de texto em imagens usa Tesseract.js no navegador; PDFs usam PDF.js para texto e OCR nas páginas digitalizadas. As bibliotecas e o modelo de português são baixados da internet na primeira leitura. Não há chamada à API OpenAI nem cobrança por créditos.
-- O sistema separa cadastros e pedidos pelas etiquetas das mensagens, identifica seus campos e registra automaticamente os completos. Verifica CPF, datas, loja e duplicidade antes de salvar. Informações incompletas ficam na lista **Informações pendentes**, preservadas no banco e disponíveis para completar no formulário.
-- O resultado mostra o arquivo de origem, a confiança da leitura de imagem, os totais por arquivo e um filtro para registrados, pendentes, duplicados ou erros. Imagens com confiança baixa exigem revisão antes do registro.
-- Para pedidos, intervalos abreviados como `29 a 05` são interpretados com base no dia atual em Fortaleza. A rede é associada ao nome da loja quando há correspondência única no catálogo. A quantidade de dias nunca é usada como quantidade de diaristas. Se a quantidade de pessoas não vier informada, o padrão da empresa é 1 por dia.
-- A leitura segue formatos com etiquetas como `Nome Completo:`, `CPF:`, `Loja:`, `Função:` e `Horário:`. Texto ilegível, escrita manual ou mensagens ambíguas podem exigir revisão na lista de pendências.
-- Cada resultado da leitura pode ser expandido para conferir os campos identificados. OCR com baixa confiança vai para revisão, e o último pedido salvo pode ser desfeito se ainda não tiver escala associada.
-
-## Cópia de segurança
-
-Em Configurações, o administrador pode baixar uma cópia **criptografada** das 18 tabelas operacionais e verificar se o arquivo abre com sua senha. Guarde arquivo e senha separadamente. O ensaio com `scripts/restore_backup.py --operational` recria uma base SQLite local utilizável e confere vínculos e contagens. A cópia não inclui contas do Supabase Auth nem configuração do projeto; a recuperação do banco hospedado exige um procedimento separado. Faça a verificação do arquivo após baixar; perder a senha impede a leitura da cópia.
-
-## Redes e lojas
-
-- O catálogo inicial contém 44 unidades pesquisadas das seis redes informadas: Super do Povo, Super Lagoa, Fazendinha, Hipermarket, Pinheiro e Variedades. Abrange Fortaleza, Caucaia, Eusébio, Aquiraz e Maranguape. Nova Metrópole fica em Caucaia.
-- Busque por rede, loja, bairro ou cidade e filtre por rede e município. Cada unidade mostra o endereço, a fonte pública e um botão **Copiar dados** que gera uma mensagem com rede, loja e endereço.
-- Oito endereços têm divergência, fonte indireta ou informação incompleta e aparecem como **Conferir endereço**. O botão de cópia pede confirmação nesses casos. Use **Editar** para corrigir o registro e registrar uma observação; alterações persistem mesmo após reiniciar o servidor.
-- Use **Nova loja** quando a rede confirmar outra unidade. A pesquisa pública não confirma quais unidades são efetivamente atendidas por cada contrato nem garante que a lista de lojas esteja completa ou atualizada. Confira unidades e endereços operacionais com cada rede.
-- As fontes individuais ficam no próprio cadastro e a lista inicial está em `catalogo_lojas.py`. Foi feito um backup antes da migração em `data/backups/diaristas-before-redes.db`.
-
-## Estrutura
-
-- `server.py`: servidor local, validação e banco de dados
-- `static/reading-parser.js`: classificação e extração local das informações
-- `static/`: interface do cadastro
-- `data/`: banco local criado automaticamente na primeira execução, ignorado pelo Git
-- `supabase/migrations/`: esquema e regras de acesso do banco publicado
-- `vercel.json`: configuração de publicação da interface
-
-Para evoluir o sistema por partes, novos módulos podem usar este mesmo servidor e banco, mantendo as diaristas cadastradas.
-
-
-## Operação ampliada (30/09/2026)
-
-- Início: indicadores com período, plantão, reservas por setor/bairro e qualidade dos registros.
-- Ficha da diarista: Contato e reserva registra telefone, reserva e reconfirmação da disponibilidade.
-- Pedido: confirmar/recusar, copiar convite de WhatsApp, validação da loja com horário efetivo e ocorrência. A confirmação é lançada pela equipe; não envia mensagens nem abre acesso externo.
-- Configurações: contratos por rede, loja e setor com vigência, prazo e novas versões. Diárias de presença guardam o contrato e valores da época.
-- Financeiro: resultado por loja/setor, conferência/contestação e demonstrativo para imprimir/salvar PDF. Contestação não é recebimento nem desconto automático.
-- Repetir pedido abre formulário para revisar novas datas; não copia diaristas nem presença.
-- Offline: instalação do shell estático; agenda mínima e rascunhos cifrados em IndexedDB. A chave fica na sessão do navegador e é apagada no logout. Revise e envie rascunhos antes de sair/fechar o navegador. Nenhuma presença ou lançamento financeiro é gravado sem conexão. Reenvio do mesmo rascunho usa UUID para não duplicar o pedido.
-- Backup v4 inclui contratos e ocorrências; as versões v1–v3 continuam aceitas. Restauração operacional ensaiada localmente; Supabase Auth e configurações do projeto são separados.
-
-`supabase/tests/operacao_completa.sql` realiza gravações de teste em uma transação e termina em ROLLBACK. Executar apenas em ambiente controlado com o administrador e banco previstos, sem transformar fixtures em registros de produção. Não cria contas de Auth.
-
-Em Configurações → Conferência neste aparelho, o administrador pode gerar um diagnóstico do aparelho físico. O diagnóstico de largura não substitui a conferência com teclado aberto, rotação e zoom.
-
-## Links públicos dos diaristas
-
-Em Configurações → Links dos diaristas, gere dois links privados e separados por pessoa: cadastro e vagas. Cada um exige seu próprio convite com validade. O link de vagas mostra apenas escalas completas disponíveis e o botão “Quero pegar essa vaga”. Exige conta cadastrada ativa e aceite de todos os dias, sem seleção de datas. Confirmar que vai salva a escala; presença/falta continuam sendo registradas pela Direct. Detalhes e evidências: `PORTAL_DIARISTAS_2026-10-03.md`.
+As 44 lojas, seis redes e dez setores estão preservados. Relatórios anteriores são históricos: consulte a documentação atual para recursos alterados posteriormente.

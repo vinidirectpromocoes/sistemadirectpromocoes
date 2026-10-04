@@ -209,7 +209,7 @@ function groupedFinanceRows(items) {
     if (shown.has(item.diarista_id)) return [];
     shown.add(item.diarista_id);
     const days = byDiarista.get(item.diarista_id);
-    return days.length > 1 ? [{ kind: 'daily-group', diarista_id: item.diarista_id, items: days }] : [item];
+    return [{ kind: 'daily-group', diarista_id: item.diarista_id, items: days }];
   });
 }
 
@@ -250,6 +250,7 @@ function renderFinanceGroup() {
   if (!items.length) { if ($('#finance-group-dialog').open) $('#finance-group-dialog').close(); return false; }
   $('#finance-group-dialog').querySelector('.finance-group-notice')?.remove();
   $('#finance-group-dialog').querySelector('.finance-batch-button')?.remove();
+  $('#finance-payment-message')?.remove();
   $('#finance-group-title').textContent = items[0].contraparte;
   const totals = financeGroupTotals(items);
   const summary = $('#finance-group-summary');
@@ -285,6 +286,7 @@ function renderFinanceGroup() {
     notice.textContent = `${totals.missing} diária${totals.missing === 1 ? '' : 's'} sem valor. Complete para calcular o total definitivo.`;
     summary.after(notice);
   }
+  const message = document.createElement('button');message.id='finance-payment-message';message.type='button';message.className='button button-outline';message.textContent='▧ Resumo para copiar';message.addEventListener('click',()=>window.DirectMessages.payment(items));list.before(message);
   const payable = items.filter(item => !item.data_pagamento && item.valor_centavos > 0);
   if (payable.length && typeof window.openPaymentBatch === 'function') {
     const button = document.createElement('button'); button.type = 'button'; button.className = 'button button-primary';
@@ -354,7 +356,7 @@ function renderFinance() {
       const totals = financeGroupTotals(days);
       const row = document.createElement('tr'); row.className = 'finance-group-row';
       const description = document.createElement('td');
-      const title = document.createElement('strong'); title.textContent = `${days.length} diárias agrupadas`;
+      const title = document.createElement('strong'); title.textContent = days.length === 1 ? '1 diária' : `${days.length} diárias agrupadas`;
       const category = document.createElement('small'); category.textContent = 'Pagamento de diarista';
       description.append(title, category); row.append(description);
       row.append(cell(days[0].contraparte));
@@ -371,7 +373,7 @@ function renderFinance() {
       status.append(badge); row.append(status);
       const actions = document.createElement('td'); actions.className = 'finance-actions';
       const view = document.createElement('button'); view.type = 'button'; view.className = 'text-button'; view.textContent = 'Ver diárias';
-      view.setAttribute('aria-label', `Ver ${days.length} diárias de ${days[0].contraparte}`);
+      view.setAttribute('aria-label', `Ver ${days.length} diária${days.length === 1 ? '' : 's'} de ${days[0].contraparte}`);
       view.addEventListener('click', () => openFinanceGroup(item.diarista_id));
       actions.append(view); row.append(actions); body.append(row);
       return;

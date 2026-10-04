@@ -10,7 +10,7 @@ from pathlib import Path
 from cryptography.hazmat.primitives.ciphers.aead import AESGCM
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "scripts"))
-from restore_backup import TABLES, restore, restore_operational
+from restore_backup import TABLES, ALL_TABLES, restore, restore_operational
 
 
 class BackupRestoreTests(unittest.TestCase):
@@ -18,6 +18,8 @@ class BackupRestoreTests(unittest.TestCase):
 
     def archive(self, path, data, version="direct-data-v1"):
         payload = {"format": version, "exportedAt": "2026-09-29T12:00:00Z", "tables": data}
+        if version == "direct-data-v5":
+            payload["snapshot"] = {"consistent": True, "counts": {table: len(rows) for table, rows in data.items()}}
         salt, iv = os.urandom(16), os.urandom(12)
         key = __import__("hashlib").pbkdf2_hmac("sha256", self.password.encode(), salt, 200000, 32)
         encrypted = AESGCM(key).encrypt(iv, json.dumps(payload).encode(), None)
@@ -56,6 +58,42 @@ class BackupRestoreTests(unittest.TestCase):
             self.archive(archive, {table: [] for table in TABLES})
             with self.assertRaises(Exception):
                 restore(archive, "incorrecta", output)
+            self.assertFalse(output.exists())
+
+    def test_v5_restores_private_portal_settings_and_links(self):
+        import server
+        previous_path = server.DB_PATH
+        data = {table: [] for table in ALL_TABLES}
+        data["portal_config"] = [{"id": True, "whatsapp": "5585999999999", "grupo_url": "https://chat.whatsapp.com/TestGroupExample"}]
+        data["portal_vagas_link"] = [{"id": True, "token": "a" * 64, "ativo": True}]
+        data["portal_convites"] = [{"id": "invite-test", "cadastro_hash": "\\xabcdef", "diarista_id": None}]
+        data["direct_admins"] = [{"email": "admin@example.invalid"}]
+        try:
+            with tempfile.TemporaryDirectory() as directory:
+                root = Path(directory)
+                archive = root / "backup.json"
+                self.archive(archive, data, "direct-data-v5")
+                for operational in (False, True):
+                    output = root / ("operational.db" if operational else "records.db")
+                    counts = (restore_operational if operational else restore)(archive, self.password, output)
+                    self.assertEqual(counts["portal_config"], 1)
+                    self.assertEqual(counts["portal_vagas_link"], 1)
+                    self.assertEqual(output.stat().st_mode & 0o777, 0o600)
+                    with sqlite3.connect(output) as db:
+                        table = "backup_private_rows" if operational else "backup_rows"
+                        saved = json.loads(db.execute(f"SELECT record_json FROM {table} WHERE source_table='portal_vagas_link'").fetchone()[0])
+                        self.assertEqual(saved["token"], "a" * 64)
+        finally:
+            server.DB_PATH = previous_path
+
+    def test_v5_rejects_dangling_portal_registration(self):
+        data = {table: [] for table in ALL_TABLES}
+        data["portal_registros"] = [{"diarista_id": 999, "convite_id": "missing"}]
+        with tempfile.TemporaryDirectory() as directory:
+            archive, output = Path(directory) / "backup.json", Path(directory) / "restored.db"
+            self.archive(archive, data, "direct-data-v5")
+            with self.assertRaisesRegex(ValueError, "referências quebradas"):
+                restore(archive, self.password, output)
             self.assertFalse(output.exists())
 
     def test_operational_restore_recovers_linked_finance(self):

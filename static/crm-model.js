@@ -60,6 +60,7 @@
     for(const r of tasks){
       if(r.kind==='pedido')continue;
       let issue={...r,waiting:false,label:{worker:'Completar cadastro',reading:'Revisar leitura',invoice:'Conferir cobrança',finance:'Conferir lançamento',bill:'Criar cobrança',occurrence:'Resolver ocorrência',contract:'Revisar contrato'}[r.action]||'Abrir pedido'};
+      issue.task = r.kind==='pagamento' && r.stage!=='concluido' ? 'payment' : '';
       if(r.kind==='escala'){
         const o=orders.get(r.orderId);if(o?.situacao==='cancelado')continue;
         const s=r.key.startsWith('escala:')?scales.get(Number(r.key.split(':')[1])):null;
@@ -69,6 +70,7 @@
         else if(s.confirmacao==='recusou')issue.label='Substituir diarista';
         else if(s.data<=today)issue.label='Conferir presença';
         else {if(s.confirmacao==='confirmou')continue;issue.waiting=true;issue.label='Conferir resposta';}
+        issue.task = !s || ['falta','desistiu'].includes(s.status) || s.confirmacao==='recusou' ? 'vacancy' : s.status==='escalada' ? (s.data<=today?'attendance':'response') : '';
         const shift=o?.turnos?.find(t=>t.data===r.date);
         const message=!s?`${r.title.split(' ')[0]} vaga(s) sem diarista`:['falta','desistiu'].includes(s.status)?r.stage==='concluido'?`${s.status==='desistiu'?'Desistência':'Falta'} com substituição registrada`:`${s.status==='desistiu'?'Desistência':'Falta'}; precisa de substituição`:s.status==='presente'?r.stage==='concluido'?'Presença validada':s.loja_validacao==='divergencia'?'Conferir divergência da loja':'Presença registrada; falta validar com a loja':s.confirmacao==='recusou'?'Recusou; precisa de substituição':s.data<=today?'Registrar presença ou falta':'Aguardando resposta do diarista';
         issue.detail=[s?r.title:'',message,shift?`${shift.inicio}–${shift.fim}`:''].filter(Boolean).join(' · ');
@@ -114,8 +116,8 @@
   }
   function pendingFilter(entries,{area='operacao',view='pending',scope='all',search='',network='all',start='',end=''}={},today){
     return entries.filter(e=>e.area===area&&e.view===view).flatMap(e=>{
-      let issues=e.issues.filter(i=>(network==='all'||norm(i.network||e.network)===norm(network))&&(!start||(i.date&&i.date>=start))&&(!end||(i.date&&i.date<=end)));
-      if(!e.issues.length){if((network!=='all'&&norm(e.network)!==norm(network))||(start&&(!e.date||e.date<start))||(end&&(!e.date||e.date>end)))return [];}
+      let issues=e.issues.filter(i=>(!['vacancy','response','attendance','payment'].includes(scope)||i.task===scope)&&(network==='all'||norm(i.network||e.network)===norm(network))&&(!start||(i.date&&i.date>=start))&&(!end||(i.date&&i.date<=end)));
+      if(!e.issues.length){if(['vacancy','response','attendance','payment'].includes(scope))return [];if((network!=='all'&&norm(e.network)!==norm(network))||(start&&(!e.date||e.date<start))||(end&&(!e.date||e.date>end)))return [];}
       else if(!issues.length)return [];
       const item=summarize(e,issues,today,view);
       if(search&&!norm(`${item.title} ${item.subtitle} ${issues.map(i=>`${i.title} ${i.detail}`).join(' ')}`).includes(norm(search)))return [];

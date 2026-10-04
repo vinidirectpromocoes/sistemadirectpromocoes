@@ -13,6 +13,7 @@
     document.querySelector('[data-crm-area="financeiro"]').hidden=!financeAccess();document.querySelector('[data-crm-area="cadastros"]').hidden=!workerAccess();
     if(area==='financeiro'&&!financeAccess()||area==='cadastros'&&!workerAccess())area='operacao';
     get('crm-support').hidden=role()==='consulta';
+    document.querySelector('[data-crm-scope=payment]').hidden=!financeAccess();
   }
   function period(){return DirectForecast.periodRange(get('home-period').value,get('home-date').value||homeToday());}
   function chart(id,items,donut=true){const container=get(id);container.replaceChildren();const total=items.reduce((n,x)=>n+x.value,0);if(donut){let cursor=0;const stops=items.map((x,i)=>{const start=cursor;cursor+=total?x.value/total*100:0;return `${colors[i%colors.length]} ${start}% ${cursor}%`;});const ring=node('div','','hub-donut');ring.style.background=total?`conic-gradient(${stops.join(',')})`:'#bed2ed55';ring.setAttribute('role','img');ring.setAttribute('aria-label',items.map(x=>`${x.label}: ${x.value}`).join(', '));ring.append(node('strong',String(total)));container.append(ring);}const legend=node('div','','hub-legend');for(const [i,x]of items.entries()){const a=node('a');a.href=x.href;const label=node('span');const dot=node('i');dot.style.background=colors[i%colors.length];label.append(dot,document.createTextNode(x.label));a.append(label,node('strong',String(x.value)));legend.append(a);if(!donut){const bar=node('div','','hub-bar');const fill=node('span');fill.style.width=`${total?x.value/total*100:0}%`;fill.style.background=colors[i%colors.length];bar.append(fill);legend.append(bar);}}container.append(legend);}
@@ -41,11 +42,11 @@
   function renderCRM(reset=false){
     const pageSize=matchMedia('(max-width:700px)').matches?6:10;if(reset)limit=pageSize;restrict();
     const today=homeToday(),base={area,view:'pending',search:get('crm-search').value,network:get('crm-network').value,start:get('crm-start').value,end:get('crm-end').value};
-    for(const key of ['today','overdue','waiting']){get(`crm-count-${key}`).textContent=String(DirectCRM.pendingFilter(entries,{...base,scope:key},today).length);document.querySelector(`[data-crm-scope="${key}"]`).setAttribute('aria-pressed',String(view==='pending'&&scope===key));}
+    for(const key of ['today','overdue','waiting','vacancy','response','attendance','payment']){get(`crm-count-${key}`).textContent=String(DirectCRM.pendingFilter(entries,{...base,area:key==='payment'?'financeiro':['vacancy','response','attendance'].includes(key)?'operacao':area,scope:key},today).length);document.querySelector(`[data-crm-scope="${key}"]`).setAttribute('aria-pressed',String(view==='pending'&&scope===key));}
     for(const b of document.querySelectorAll('[data-crm-area]')){const key=b.dataset.crmArea;b.setAttribute('aria-pressed',String(area===key));get(`crm-area-${key}`).textContent=String(entries.filter(e=>e.area===key&&e.view==='pending').length);}
     get('crm-pending').setAttribute('aria-pressed',String(view==='pending'));get('crm-history').setAttribute('aria-pressed',String(view==='history'));
     get('crm-all').hidden=scope==='all'||view==='history';
-    get('crm-list-title').textContent=`${areas[area]} · ${view==='history'?'Histórico':{all:'A resolver',today:'Para hoje',overdue:'Atrasadas',waiting:'Aguardando retorno'}[scope]}`;
+    get('crm-list-title').textContent=`${areas[area]} · ${view==='history'?'Histórico':{all:'A resolver',today:'Para hoje',overdue:'Atrasadas',waiting:'Aguardando retorno',vacancy:'Precisa de diarista',response:'Aguardando confirmação',attendance:'Presença a registrar',payment:'Pagamento a realizar'}[scope]}`;
     const visible=DirectCRM.pendingFilter(entries,{...base,view,scope:view==='history'?'all':scope},today);
     const activeFilters=base.search||base.network!=='all'||base.start||base.end;get('crm-filter-toggle').textContent=activeFilters?'⌕ Filtros ativos':'⌕ Filtrar';
     get('crm-result-count').textContent=`${visible.length} item(ns)${activeFilters?' com os filtros aplicados':''}. ${area==='operacao'?'Cada pedido aparece uma vez; abra os detalhes para ver os dias.':area==='financeiro'?'Diárias a pagar agrupadas por diarista.':'Complete os dados ou revise as leituras.'}`;
@@ -72,7 +73,7 @@
   get('home-date').value=homeToday();for(const id of ['home-period','home-date'])get(id).addEventListener('change',renderHome);get('home-refresh').onclick=get('crm-refresh').onclick=()=>loadHome();
   for(const id of ['crm-search','crm-network','crm-start','crm-end'])get(id).addEventListener(id==='crm-search'?'input':'change',()=>renderCRM(true));
   for(const b of document.querySelectorAll('[data-crm-area]'))b.onclick=()=>{area=b.dataset.crmArea;scope='all';renderCRM(true);};
-  for(const b of document.querySelectorAll('[data-crm-scope]'))b.onclick=()=>{scope=scope===b.dataset.crmScope?'all':b.dataset.crmScope;view='pending';renderCRM(true);};
+  for(const b of document.querySelectorAll('[data-crm-scope]'))b.onclick=()=>{scope=scope===b.dataset.crmScope?'all':b.dataset.crmScope;if(scope==='payment')area='financeiro';else if(['vacancy','response','attendance'].includes(scope))area='operacao';view='pending';renderCRM(true);};
   get('crm-pending').onclick=()=>{view='pending';scope='all';renderCRM(true);};get('crm-history').onclick=()=>{view='history';scope='all';renderCRM(true);};get('crm-all').onclick=()=>{scope='all';renderCRM(true);};
   get('crm-filter-toggle').onclick=()=>{const open=get('crm-filters').hidden;get('crm-filters').hidden=!open;get('crm-filter-toggle').setAttribute('aria-expanded',String(open));if(open)get('crm-search').focus();};
   get('crm-clear').onclick=()=>{get('crm-network').value='all';for(const id of ['crm-search','crm-start','crm-end'])get(id).value='';scope='all';renderCRM(true);};
