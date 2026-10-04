@@ -132,7 +132,7 @@
   const money = value => value == null || value === '' ? null : Math.round(Number(value) * 100);
   function diaristaPayload(p) {
     return {
-      nome: p.nome, cpf: String(p.cpf).replace(/\D/g, ''), setores: p.setores || [],
+      nome: p.nome, cpf: String(p.cpf).replace(/\D/g, ''), ...(p.telefone !== undefined ? {telefone:String(p.telefone || '').replace(/\D/g,'')} : {}), setores: p.setores || [],
       cep: String(p.cep || '').replace(/\D/g, ''), logradouro: p.logradouro || '', numero: p.numero || '',
       complemento: p.complemento || '', bairro: p.bairro || '', cidade: p.cidade || 'Fortaleza', uf: p.uf || 'CE', data_nascimento: p.data_nascimento || null, rede_trabalho: p.rede_trabalho || '',
       trabalhando: p.trabalhando ?? null, local_trabalho: p.local_trabalho || '',

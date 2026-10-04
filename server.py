@@ -114,6 +114,8 @@ def init_db():
         columns = {row["name"] for row in db.execute("PRAGMA table_info(diaristas)")}
         if "bloqueada" not in columns:
             db.execute("ALTER TABLE diaristas ADD COLUMN bloqueada INTEGER NOT NULL DEFAULT 0")
+        if "telefone" not in columns:
+            db.execute("ALTER TABLE diaristas ADD COLUMN telefone TEXT NOT NULL DEFAULT ''")
         if "data_nascimento" not in columns:
             db.execute("ALTER TABLE diaristas ADD COLUMN data_nascimento TEXT")
         if "rede_trabalho" not in columns:
@@ -348,6 +350,9 @@ def validate(payload):
     cpf = re.sub(r"\D", "", str(payload.get("cpf", "")))
     if not valid_cpf(cpf):
         raise ValueError("Informe um CPF válido.")
+    telefone = re.sub(r"\D", "", str(payload.get("telefone") or ""))
+    if telefone and not re.fullmatch(r"[0-9]{10,13}", telefone):
+        raise ValueError("Confira o telefone com DDD (10 a 13 números).")
     setores = payload.get("setores", [])
     if not isinstance(setores, list) or len(setores) > 12:
         raise ValueError("Informe até 12 setores de experiência.")
@@ -400,7 +405,7 @@ def validate(payload):
         raise ValueError("Confira a UF.")
     return {
         "data_nascimento": nascimento, "rede_trabalho": clean_text(payload.get("rede_trabalho", ""), "a empresa", 100, False),
-        "nome": nome, "cpf": cpf, "setores": json.dumps(setores, ensure_ascii=False),
+        "nome": nome, "cpf": cpf, "telefone": telefone, "setores": json.dumps(setores, ensure_ascii=False),
         "cep": cep, **address, "cidade": cidade, "uf": uf,
         "trabalhando": None if trabalhando is None else int(trabalhando),
         "local_trabalho": local_trabalho,

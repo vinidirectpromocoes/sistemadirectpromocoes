@@ -44,6 +44,18 @@
       $('vacancy-status').hidden=false; $('vacancy-status').textContent='Não foi possível carregar as vagas: '+e.message;
     } finally { if(version===sequence)$('vacancy-refresh').disabled=false; }
   }
+  async function boardLink() {
+    const version=session;
+    try { const data=await rpc('direct_portal_board_link');if(version!==session||!allowed())return;
+      $('vacancy-board-url').value=new URL('/vagas.html#painel='+data.token,location.origin).href;
+      $('vacancy-board-copy').disabled=false;$('vacancy-board-feedback').textContent='O mesmo link acompanha as vagas atuais. Compartilhe somente com seus diaristas.';
+    } catch(e) {if(version===session){$('vacancy-board-url').value='';$('vacancy-board-copy').disabled=true;$('vacancy-board-feedback').textContent=e.message;}}
+  }
+  $('vacancy-board-copy').addEventListener('click',async()=>{
+    if(!allowed()||!$('vacancy-board-url').value)return;
+    try {await navigator.clipboard.writeText($('vacancy-board-url').value);$('vacancy-board-feedback').textContent='Link compartilhado das vagas copiado.';}
+    catch {$('vacancy-board-url').focus();$('vacancy-board-url').select();$('vacancy-board-feedback').textContent='Selecione e copie o link acima.';}
+  });
   async function workers() {
     const version=session;
     $('vacancy-share-form').querySelector('button').disabled=!allowed();
@@ -74,7 +86,7 @@
     try { await navigator.clipboard.writeText($('vacancy-share-url').value); $('vacancy-share-feedback').textContent='Link das vagas copiado. Envie no privado do diarista.'; }
     catch { $('vacancy-share-url').focus(); $('vacancy-share-url').select(); $('vacancy-share-feedback').textContent='Selecione e copie o link acima.'; }
   });
-  function update() { if(active()){refresh();workers();} }
+  function update() { if(active()){refresh();workers();boardLink();} }
   function visibleUpdate() { if(active()&&allowed()&&!document.hidden){refresh();} }
   $('vacancy-refresh').addEventListener('click',update);
   $('vacancy-share-form').closest('details').addEventListener('toggle',e=>{if(e.target.open)workers();});
@@ -83,7 +95,7 @@
   window.addEventListener('direct:data-changed',visibleUpdate);
   document.addEventListener('visibilitychange',visibleUpdate); setInterval(visibleUpdate,15000);
   window.addEventListener('direct:signed-out',()=>{
-    session++;sequence++;$('vacancy-list').replaceChildren();$('vacancy-count').textContent='0';$('vacancy-status').textContent='';
+    session++;sequence++;$('vacancy-board-url').value='';$('vacancy-board-copy').disabled=true;$('vacancy-board-feedback').textContent='';$('vacancy-list').replaceChildren();$('vacancy-count').textContent='0';$('vacancy-status').textContent='';
     $('vacancy-share-result').hidden=true;$('vacancy-share-url').value='';$('vacancy-share-feedback').textContent='';
     $('vacancy-worker').replaceChildren(new Option('Selecione um diarista',''));
   });
