@@ -7,6 +7,7 @@ import os
 import re
 import sqlite3
 import scale_lifecycle
+import store_portal
 from datetime import date, datetime, timezone
 from decimal import Decimal, InvalidOperation
 from http import HTTPStatus
@@ -316,6 +317,7 @@ def init_db():
             db.execute("INSERT INTO direct_config_meta (chave, valor) VALUES ('setores_iniciais_v1', 'aplicado')")
         workflow.ensure_schema(db)
         extended.ensure_schema(db)
+        store_portal.ensure_schema(db)
         if not db.execute("SELECT 1 FROM direct_config_meta WHERE chave='calendario_pagamentos_v1'").fetchone():
             for network, (first, second) in calendar.INITIAL_CALENDARS.items():
                 db.execute("UPDATE tarifas_redes SET pagamento_primeira_quinzena=?, pagamento_segunda_quinzena=? WHERE rede=?", (first, second, network))
@@ -732,6 +734,71 @@ def validate_store(payload):
     }
 
 
+def apply_local_attendance(db, order_id, scale_id, payload):
+    status = payload.get('status')
+    if status not in ('escalada','presente','falta','desistiu'): raise ValueError('Selecione presença ou falta.')
+    scale = db.execute("SELECT * FROM pedido_escalas WHERE id = ? AND pedido_id = ?", (scale_id, order_id)).fetchone()
+    if not scale:
+        raise ValueError("Escala não encontrada.")
+    order = db.execute("SELECT * FROM pedidos WHERE id = ?", (order_id,)).fetchone()
+    if scale['status']=='desistiu' and status!='desistiu': raise ValueError('Preserve a desistência registrada. Escolha uma substituição.')
+    if status=='desistiu' and scale['status'] not in ('escalada','desistiu'): raise ValueError('Desistência disponível apenas antes da presença ou falta.')
+    if status != scale["status"]:
+        reason = clean_text(payload.get("motivo"), "o motivo da falta ou desistência", 300) if status in ("falta","desistiu") else None
+        if reason is not None and len(reason) < 5:
+            raise ValueError("Informe o motivo da falta com pelo menos 5 caracteres.")
+        if status in {"presente", "falta"} and scale["data"] > datetime.now(FORTALEZA).date().isoformat():
+            raise ValueError("Presença ou falta só pode ser registrada a partir da data da diária.")
+        if scale["status"] == "presente":
+            daily = db.execute("SELECT data_pagamento FROM diarias WHERE pedido_escala_id = ?", (scale["id"],)).fetchone()
+            if daily and daily["data_pagamento"]:
+                raise ValueError("A diária já foi paga. Corrija o pagamento antes de alterar a presença.")
+            if db.execute("""SELECT 1 FROM cobranca_itens i JOIN diarias d ON d.id = i.diaria_id
+                WHERE d.pedido_escala_id = ?""", (scale["id"],)).fetchone():
+                raise ValueError("Esta presença já entrou numa cobrança. Cancele a cobrança antes de corrigir a falta.")
+            db.execute("DELETE FROM diarias WHERE pedido_escala_id = ?", (scale["id"],))
+        if scale["status"] == "falta" and status != "falta":
+            person = db.execute("SELECT * FROM diaristas WHERE id=?", (scale["diarista_id"],)).fetchone()
+            if not person or person["bloqueada"] or order["situacao"] in {"cancelado", "concluido"}:
+                raise ValueError("Confira o cadastro e a situação do pedido antes de reativar a escala.")
+            validate_worker_shift(db, person, order, scale["data"], scoped_availability=bool(scale["disponibilidade_pedido_confirmada"]))
+            count = db.execute("SELECT count(*) FROM pedido_escalas WHERE pedido_id = ? AND data = ? AND status NOT IN ('falta','desistiu')", (order_id, scale["data"])).fetchone()[0]
+            if count >= order["quantidade_diaristas"]:
+                raise ValueError("A quantidade de diaristas deste dia já foi preenchida.")
+        if status == "presente":
+            local = order["supermercado"] + (f" · {order['unidade']}" if order["unidade"] else "")
+            network_rate = db.execute("SELECT * FROM tarifas_redes WHERE lower(rede) = lower(?)", (order["supermercado"],)).fetchone()
+            sector_rate = db.execute("""SELECT valor_pago_centavos FROM tarifas_setores
+                WHERE lower(setor) = lower(?) AND (lower(rede) = lower(?) OR rede IS NULL) AND valor_pago_centavos IS NOT NULL
+                ORDER BY CASE WHEN lower(rede) = lower(?) THEN 0 ELSE 1 END LIMIT 1""",
+                (order["setor"], order["supermercado"], order["supermercado"])).fetchone()
+            paid_rate = sector_rate[0] if sector_rate else (network_rate["valor_padrao_centavos"] if network_rate else None)
+            received_rate = network_rate["valor_recebido_centavos"] if network_rate else None
+            contract = extended.effective_contract(db, order, scale['data'])
+            if contract:
+                paid_rate = contract['valor_pago_centavos'] if contract['valor_pago_centavos'] is not None else paid_rate
+                received_rate = contract['valor_recebido_centavos'] if contract['valor_recebido_centavos'] is not None else received_rate
+            due = calendar.payment_due(scale['data'], network_rate['pagamento_primeira_quinzena'], network_rate['pagamento_segunda_quinzena'], network_rate['pagamento_semanal_dia']) if network_rate else None
+            db.execute("""INSERT INTO diarias (diarista_id, data, local, setor, observacoes, pedido_escala_id,
+                valor_centavos, valor_recebido_centavos, vencimento_pagamento, criado_em, contrato_id, vencimento_recebimento, vencimento_origem)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+                (scale["diarista_id"], scale["data"], local, order["setor"],
+                 f"Presença no pedido #{order_id}", scale["id"], paid_rate, received_rate,
+                 due, datetime.now(timezone.utc).isoformat(), contract["id"] if contract else None, due, "calendario" if due else "nao_informado"))
+        now = datetime.now(timezone.utc).isoformat()
+        db.execute("""UPDATE pedido_escalas SET status = ?, atualizado_em = ?,
+            falta_motivo = ?, falta_confirmada_por = ?, falta_confirmada_em = ?,
+            substituida_por_escala_id = CASE WHEN ? IN ('falta','desistiu') THEN substituida_por_escala_id ELSE NULL END
+            WHERE id = ?""", (status, now, reason if status=='falta' else None, "Servidor local" if status=='falta' else None,
+            now if status=='falta' else None, status, scale["id"]))
+        if status=='desistiu': db.execute('UPDATE pedido_escalas SET desistencia_motivo=?,desistencia_em=?,desistencia_por=? WHERE id=?',(reason,now,'Servidor local',scale['id']))
+        scale_lifecycle.sync(db,order_id)
+        if scale['status'] == 'presente' and status != 'presente':
+            db.execute("UPDATE pedido_escalas SET loja_validacao='pendente',loja_responsavel='',loja_observacao='',chegada_em=NULL,saida_em=NULL,loja_validada_em=NULL,loja_validada_por=NULL WHERE id=?", (scale['id'],))
+    row = next(row for row in order_scale_rows(db, order_id) if row["id"] == scale["id"])
+    return row
+
+
 class Handler(BaseHTTPRequestHandler):
     def _allowed_origin(self):
         host = self.headers.get("Host", "")
@@ -777,6 +844,7 @@ class Handler(BaseHTTPRequestHandler):
             return self.respond(HTTPStatus.FORBIDDEN, {"erro": "Acesso não permitido."})
         path = urlparse(self.path).path
         if extended.handle(self, "GET", sys.modules[__name__]): return
+        if store_portal.handle(self, "GET", sys.modules[__name__]): return
         if path == "/api/diaristas":
             with connect() as db:
                 rows = db.execute("SELECT * FROM diaristas ORDER BY nome COLLATE NOCASE").fetchall()
@@ -845,7 +913,7 @@ class Handler(BaseHTTPRequestHandler):
             return self.respond(HTTPStatus.OK, [dict(row) for row in rows])
         if path == "/":
             path = "/index.html"
-        assets = {"/automation-model.js":"text/javascript; charset=utf-8", "/automation.js":"text/javascript; charset=utf-8", "/automation.css":"text/css; charset=utf-8", "/index.html": "text/html; charset=utf-8", "/style.css": "text/css; charset=utf-8", "/brand.css": "text/css; charset=utf-8", "/theme.css": "text/css; charset=utf-8", "/mobile.css": "text/css; charset=utf-8", "/reading.css": "text/css; charset=utf-8", "/motion.css": "text/css; charset=utf-8", "/operations.css": "text/css; charset=utf-8", "/workflow.css": "text/css; charset=utf-8", "/app.js": "text/javascript; charset=utf-8", "/theme.js": "text/javascript; charset=utf-8", "/finance.js": "text/javascript; charset=utf-8", "/forecast.js": "text/javascript; charset=utf-8", "/operations.js": "text/javascript; charset=utf-8", "/workflow.js": "text/javascript; charset=utf-8", "/matching.js": "text/javascript; charset=utf-8", "/backup.js": "text/javascript; charset=utf-8", "/orders.js": "text/javascript; charset=utf-8", "/stores.js": "text/javascript; charset=utf-8", "/settings.js": "text/javascript; charset=utf-8", "/reading.js": "text/javascript; charset=utf-8", "/reading-parser.js": "text/javascript; charset=utf-8", "/remote.js": "text/javascript; charset=utf-8", "/payment-calendar.js": "text/javascript; charset=utf-8", "/vendor/supabase-2.117.2.js": "text/javascript; charset=utf-8", "/stores.css": "text/css; charset=utf-8", "/settings.css": "text/css; charset=utf-8", "/login.css": "text/css; charset=utf-8", "/favicon.svg": "image/svg+xml", "/logo-direct-promocoes.jpg": "image/jpeg", "/logo-direct-promocoes-transparente.png": "image/png"}
+        assets = {"/management-model.js":"text/javascript; charset=utf-8", "/management.js":"text/javascript; charset=utf-8", "/management.css":"text/css; charset=utf-8", "/loja.html":"text/html; charset=utf-8", "/store-portal.js":"text/javascript; charset=utf-8", "/automation-model.js":"text/javascript; charset=utf-8", "/automation.js":"text/javascript; charset=utf-8", "/automation.css":"text/css; charset=utf-8", "/index.html": "text/html; charset=utf-8", "/style.css": "text/css; charset=utf-8", "/brand.css": "text/css; charset=utf-8", "/theme.css": "text/css; charset=utf-8", "/mobile.css": "text/css; charset=utf-8", "/reading.css": "text/css; charset=utf-8", "/motion.css": "text/css; charset=utf-8", "/operations.css": "text/css; charset=utf-8", "/workflow.css": "text/css; charset=utf-8", "/app.js": "text/javascript; charset=utf-8", "/theme.js": "text/javascript; charset=utf-8", "/finance.js": "text/javascript; charset=utf-8", "/forecast.js": "text/javascript; charset=utf-8", "/operations.js": "text/javascript; charset=utf-8", "/workflow.js": "text/javascript; charset=utf-8", "/matching.js": "text/javascript; charset=utf-8", "/backup.js": "text/javascript; charset=utf-8", "/orders.js": "text/javascript; charset=utf-8", "/stores.js": "text/javascript; charset=utf-8", "/settings.js": "text/javascript; charset=utf-8", "/reading.js": "text/javascript; charset=utf-8", "/reading-parser.js": "text/javascript; charset=utf-8", "/remote.js": "text/javascript; charset=utf-8", "/payment-calendar.js": "text/javascript; charset=utf-8", "/vendor/supabase-2.117.2.js": "text/javascript; charset=utf-8", "/stores.css": "text/css; charset=utf-8", "/settings.css": "text/css; charset=utf-8", "/login.css": "text/css; charset=utf-8", "/favicon.svg": "image/svg+xml", "/logo-direct-promocoes.jpg": "image/jpeg", "/logo-direct-promocoes-transparente.png": "image/png"}
         for asset in ['messages-model.js','messages.js','backup-model.js']:
             assets['/'+asset]='text/javascript; charset=utf-8'
         assets['/messages.css']='text/css; charset=utf-8'
@@ -878,6 +946,7 @@ class Handler(BaseHTTPRequestHandler):
             except (ValueError,TypeError,json.JSONDecodeError,sqlite3.IntegrityError) as error:
                 return self.respond(HTTPStatus.BAD_REQUEST,{'erro':str(error)})
         if extended.handle(self, "POST", sys.modules[__name__]): return
+        if store_portal.handle(self, "POST", sys.modules[__name__]): return
         if path == "/api/cobrancas" or re.fullmatch(r"/api/cobrancas/\d+/recebimentos", path):
             try:
                 payload = self.read_json()
@@ -1043,6 +1112,7 @@ class Handler(BaseHTTPRequestHandler):
                 now = datetime.now(timezone.utc).isoformat()
                 with connect() as db:
                     db.execute('BEGIN IMMEDIATE')
+                    store_request = store_portal.review_request(db,payload['solicitacao_loja_id'],data) if payload.get('solicitacao_loja_id') else None
                     existing = db.execute('SELECT * FROM pedidos WHERE chave_operacao=?',(key,)).fetchone() if key else None
                     if existing:
                         if any((json.loads(existing[k]) if k=='turnos' else existing[k]) != (json.loads(v) if k=='turnos' else v) for k,v in data.items() if k!='chave_operacao'):
@@ -1052,6 +1122,8 @@ class Handler(BaseHTTPRequestHandler):
                     marks = ", ".join("?" for _ in data)
                     cur = db.execute(f"INSERT INTO pedidos ({columns}, criado_em, atualizado_em) VALUES ({marks}, ?, ?)", (*data.values(), now, now))
                     row = db.execute("SELECT * FROM pedidos WHERE id = ?", (cur.lastrowid,)).fetchone()
+                    if store_request:
+                        db.execute("UPDATE loja_solicitacoes SET estado='aprovada',pedido_id=?,dados=?,atualizado_em=? WHERE id=?",(cur.lastrowid,json.dumps({**data,'turnos':json.loads(data['turnos'])},ensure_ascii=False),now,store_request['id']))
                 return self.respond(HTTPStatus.CREATED, public_order(row))
             except (ValueError, json.JSONDecodeError, TypeError) as exc:
                 return self.respond(HTTPStatus.BAD_REQUEST, {"erro": str(exc)})
@@ -1233,6 +1305,7 @@ class Handler(BaseHTTPRequestHandler):
             return self.respond(HTTPStatus.FORBIDDEN, {"erro": "Acesso não permitido."})
         path = urlparse(self.path).path
         if extended.handle(self, "PATCH", sys.modules[__name__]): return
+        if store_portal.handle(self, "PATCH", sys.modules[__name__]): return
         invoice_match = re.fullmatch(r"/api/cobrancas/(\d+)/cancelar", path)
         receipt_match = re.fullmatch(r"/api/recebimentos/(\d+)/estornar", path)
         batch_match = re.fullmatch(r"/api/pagamento-lotes/(\d+)/reabrir", path)

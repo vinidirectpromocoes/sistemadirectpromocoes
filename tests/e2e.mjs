@@ -95,7 +95,7 @@ async function runRoleNavigation() {
       });
       await context.route('**/vendor/supabase-2.117.2.js', route => route.fulfill({
         contentType: 'text/javascript', body: `window.supabase={createClient:()=>({
-          rpc:async(name)=>({data:name==='direct_backup_snapshot'?{format:'direct-data-v5',exportedAt:new Date().toISOString(),tables:Object.fromEntries(window.DirectBackup.versions['direct-data-v5'].map(t=>[t,[]])),snapshot:{consistent:true,counts:Object.fromEntries(window.DirectBackup.versions['direct-data-v5'].map(t=>[t,0]))}}:name==='direct_portal_vacancies'?[]:name==='direct_portal_registrations'?{total:0,items:[]}:{whatsapp:'',grupo_url:''},error:null}),
+          rpc:async(name)=>({data:name==='direct_backup_snapshot_v7'?{format:'direct-data-v7',exportedAt:new Date().toISOString(),tables:Object.fromEntries(window.DirectBackup.versions['direct-data-v7'].map(t=>[t,[]])),snapshot:{consistent:true,counts:Object.fromEntries(window.DirectBackup.versions['direct-data-v7'].map(t=>[t,0]))}}:name==='direct_portal_vacancies'?[]:name==='direct_portal_registrations'?{total:0,items:[]}:{whatsapp:'',grupo_url:''},error:null}),
           auth:{getSession:async()=>({data:{session:{user:{email:'qa@example.invalid'}}},error:null}),onAuthStateChange:()=>{},signOut:async()=>({error:null})},
           from:(table)=>{const q={select:()=>q,eq:()=>q,order:()=>q,limit:()=>q,range:async()=>({data:[],error:null,count:0}),
             maybeSingle:async()=>({data:table==='direct_admins'?${role === 'admin' ? "{email:'qa@example.invalid'}" : 'null'}:
@@ -110,6 +110,7 @@ async function runRoleNavigation() {
         'nav-financeiro': ['admin', 'financeiro'], 'nav-configuracoes': ['admin', 'financeiro'],
         'nav-vagas': ['admin', 'operacao'], 'nav-convites': ['admin', 'operacao'], 'nav-leitura': ['admin', 'operacao'], 'new-order-button': ['admin', 'operacao'],
         'backup-settings': ['admin'], 'staff-settings': ['admin'],
+        'store-requests-button': ['admin','operacao'], 'daily-summary-button': ['admin','operacao'], 'order-models-button': ['admin','operacao'], 'cash-agenda': ['admin','financeiro'],
       })) {
         const enabledForRole = await page.locator(`#${id}`).evaluate(element => !element.hidden);
         assert.equal(enabledForRole, allowed.includes(role), `${role}: permissão de ${id}`);
@@ -147,7 +148,7 @@ async function runRoleNavigation() {
         assert.equal(result.status, 0, `Cópia do navegador não restaurou: ${result.stderr}`);
         const operational = path.join(work, 'browser-operational.db');
         const drill = spawnSync(process.env.PYTHON || 'python3', ['-c',
-          'import sys; sys.path.insert(0,"scripts"); from restore_backup import restore_operational; counts=restore_operational(sys.argv[1],sys.argv[2],sys.argv[3]); assert len(counts) == 25',
+          'import sys; sys.path.insert(0,"scripts"); from restore_backup import restore_operational; counts=restore_operational(sys.argv[1],sys.argv[2],sys.argv[3]); assert len(counts) == 28',
           archive, 'senha-de-teste-12345', operational], { cwd: root, encoding: 'utf8' });
         assert.equal(drill.status, 0, `Cópia operacional não restaurou: ${drill.stderr}`);
         console.log('Backup no navegador → verificação → SQLite operacional isolado OK');
@@ -340,6 +341,7 @@ async function runFinancialWorkflow() {
     await page.locator('#batch-dialog').waitFor({state:'hidden'});
     const paidBatch=await api('GET','/api/pagamento-lotes');assert.ok(paidBatch.some(b=>b.valor_centavos===18000),'Pagamento em lote continua gravado sem o bloco na página');
     await page.locator('#finance-month').fill('2026-09');
+    await page.waitForFunction(()=>document.querySelector('#finance-out').textContent.includes('180,00'));
     assert.match(await page.locator('#finance-out').innerText(), /180,00/);
     assert.ok(scaleRequests.length > 0 && scaleRequests.every(path => path.endsWith('/api/escalas')),
       `Carregamento fez chamadas individuais por pedido: ${scaleRequests.join(', ')}`);
@@ -705,7 +707,7 @@ async function runRecentOrderAttendance() {
     const browser=await engine.launch({headless:true});
     try {for(const width of [1280,390,320]) {
       const person=`Presença recente ${name} ${width}`,cpf=cpfFor(++serial);
-      const context=await browser.newContext({viewport:{width,height:844},isMobile:width<500,hasTouch:width<500}),page=await context.newPage(),errors=[];
+      const context=await browser.newContext({viewport:{width,height:844},isMobile:width<500,hasTouch:width<500,serviceWorkers:'block'}),page=await context.newPage(),errors=[];
       page.on('pageerror',error=>errors.push(error.message));
       await page.goto(url+'#financeiro');await page.waitForFunction(()=>financeForecastInput!==null);await page.locator('#forecast-period').selectOption('day');await page.locator('#forecast-date').fill(firstDay);
       const amounts=async()=>Promise.all(['revenue','cost','profit'].map(async key=>Number((await page.locator('#confirmed-'+key).innerText()).replace(/\D/g,''))));
