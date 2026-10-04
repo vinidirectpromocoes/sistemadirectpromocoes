@@ -166,7 +166,7 @@
     return {
       rede: p.rede, nome: p.nome, endereco: p.endereco, bairro: p.bairro || '',
       cidade: p.cidade, uf: 'CE', fonte_url: p.fonte_url || '',
-      situacao: p.situacao || 'revisar', observacao: p.observacao || ''
+      situacao: p.situacao || 'revisar', observacao: p.observacao || '', ...Object.fromEntries(['responsavel','telefone_contato','entrada','apresentacao','uniforme','orientacoes'].map(k=>[k,p[k]||'']))
     };
   }
   const orderView = o => ({ ...o, quantidade_dias: o.turnos.length, total_diarias: o.turnos.length * o.quantidade_diaristas });
@@ -396,6 +396,11 @@
       }
       if (method === 'PUT') return orderView(unwrap(await sb.from('pedidos').update({ ...orderPayload(p), atualizado_em: new Date().toISOString() }).eq('id', id).select().single()));
       if (method === 'DELETE') { unwrap(await sb.from('pedidos').delete().eq('id', id)); return { ok: true }; }
+    }
+    if (entity === 'modelos-pedidos') {
+      if (method === 'GET') return await rows('pedido_modelos');
+      if (method === 'POST') return unwrap(await sb.from('pedido_modelos').insert({nome:p.nome,dados:p.dados}).select().single());
+      if (method === 'DELETE') { unwrap(await sb.from('pedido_modelos').delete().eq('id',id)); return {ok:true}; }
     }
     if (entity === 'lojas') {
       if (method === 'GET') return (await rows('lojas')).sort((a,b) => a.rede.localeCompare(b.rede, 'pt-BR') || a.cidade.localeCompare(b.cidade, 'pt-BR') || a.nome.localeCompare(b.nome, 'pt-BR'));

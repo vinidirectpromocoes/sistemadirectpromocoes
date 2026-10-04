@@ -78,3 +78,12 @@ Abra `http://127.0.0.1:8000`. O SQLite local não sincroniza automaticamente com
 Leitura local usa Tesseract.js/PDF.js e exige internet para baixar bibliotecas/modelos na primeira utilização. OCR pouco legível ou mensagem ambígua exige revisão; não é um modelo generativo com entendimento ilimitado. Offline conserva agenda/rascunhos cifrados por sessão; presença e financeiro exigem conexão. Fontes de campos móveis têm 16px para evitar zoom automático; zoom de acessibilidade permanece disponível. Emulação Chromium/WebKit não substitui uma conferência em iPhone/Android físico.
 
 As 44 lojas, seis redes e dez setores estão preservados. Relatórios anteriores são históricos: consulte a documentação atual para recursos alterados posteriormente.
+
+## Automação operacional — lote 1
+
+- **Pedidos → detalhes → Sugestões para a escala inteira:** experiência, horários em todos os dias restantes, deslocamento, conflito e empresa atual. A operação decide; o servidor reconfere e grava a escala inteira atomicamente.
+- **Redes e lojas → editar → Orientações para a diária:** responsável, telefone, entrada, apresentação, uniforme e orientações por setor. Dados opcionais, reaproveitados nas mensagens dos pedidos.
+- **Pendências → Alertas por prazo:** vagas/confirmacões a até 24 horas, urgência a até 2 horas e cadastro de disponibilidade sem atualização há mais de 30 dias. Derivado dos registros, atualizado ao recarregar e por minuto enquanto a aba está aberta.
+- **Pedidos → Modelos:** salve a configuração de um pedido, escolha nova data inicial e abra um rascunho. Preserva intervalos entre dias e horários; não copia diaristas, presenças ou pagamentos. Só publica ao salvar o pedido. Modelos podem ser excluídos sem afetar pedidos.
+- Modelos são exclusivos de admin/operação, auditados e incluídos no backup consistente v6 (25 tabelas). Versões v1–v5 continuam restauráveis.
+- `tests/automation_e2e.mjs`: fluxos novos em Chromium/WebKit, desktop e telas de 390/320 px, sem dados sintéticos em produção. `tests/automation_database.sql`: ensaio de permissões e validação, transação revertida.

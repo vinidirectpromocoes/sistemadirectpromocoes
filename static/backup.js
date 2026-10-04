@@ -61,7 +61,7 @@
         await key(password(), fromBase64(archive.salt)), fromBase64(archive.data));
       const payload = JSON.parse(decoder.decode(plain));
       const checked = window.DirectBackup.validate(payload);
-      const missing = payload.format === 'direct-data-v5' ? '' : ' Esta cópia antiga não inclui configurações e vínculos privados do portal.';
+      const missing = ['direct-data-v5','direct-data-v6'].includes(payload.format) ? '' : ' Esta cópia antiga não inclui configurações e vínculos privados do portal.';
       output.textContent = `Cópia legível e íntegra: ${checked.count} registro(s) em ${checked.tables} tabelas, criada em ${new Date(payload.exportedAt).toLocaleString('pt-BR')}.${missing}`;
       localStorage.setItem('direct-backup-verified-at', new Date().toISOString());
       showLastCheck();

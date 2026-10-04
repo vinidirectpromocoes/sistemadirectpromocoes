@@ -37,5 +37,19 @@
     if (worker.trabalhando === false) { score += 5; reasons.push('disponível no cadastro'); }
     return { eligible: true, score, reasons };
   }
-  return { rank, matchesSector, conflicts };
+  function rankOrder(worker, order, store, orders, scales) {
+    if (!matchesSector(worker, order.setor)) return {eligible:false,reason:'Sem experiência informada no setor'};
+    if (worker.trabalhando && normal(worker.rede_trabalho) && normal(worker.rede_trabalho)===normal(order.supermercado)) return {eligible:false,reason:'Trabalha nesta rede'};
+    const shifts=order.turnos||[];if(!shifts.length)return {eligible:false,reason:'Sem datas'};
+    const otherOrders=(orders||[]).filter(o=>o.id!==order.id), own=scales?.[order.id]||[], dates=[];let score=0,reasons=[];
+    for(const shift of shifts){
+      const rows=own.filter(s=>s.data===shift.data&&!['falta','desistiu'].includes(s.status));
+      if(rows.some(s=>s.diarista_id===worker.id))continue;
+      if(rows.length>=order.quantidade_diaristas)return {eligible:false,reason:'Um dos dias já está preenchido'};
+      const r=rank(worker,shift,order,store,otherOrders,scales);if(!r.eligible)return {...r,reason:shift.data+' · '+r.reason};dates.push(shift.data);score=r.score;reasons=r.reasons;
+    }
+    if(!dates.length)return {eligible:false,reason:'Já escalado em todos os dias'};
+    return {eligible:true,score,dates,reasons:[...reasons,'todos os '+shifts.length+' dias verificados']};
+  }
+  return { rank, rankOrder, matchesSector, conflicts };
 });

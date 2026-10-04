@@ -147,7 +147,7 @@ async function runRoleNavigation() {
         assert.equal(result.status, 0, `Cópia do navegador não restaurou: ${result.stderr}`);
         const operational = path.join(work, 'browser-operational.db');
         const drill = spawnSync(process.env.PYTHON || 'python3', ['-c',
-          'import sys; sys.path.insert(0,"scripts"); from restore_backup import restore_operational; counts=restore_operational(sys.argv[1],sys.argv[2],sys.argv[3]); assert len(counts) == 24',
+          'import sys; sys.path.insert(0,"scripts"); from restore_backup import restore_operational; counts=restore_operational(sys.argv[1],sys.argv[2],sys.argv[3]); assert len(counts) == 25',
           archive, 'senha-de-teste-12345', operational], { cwd: root, encoding: 'utf8' });
         assert.equal(drill.status, 0, `Cópia operacional não restaurou: ${drill.stderr}`);
         console.log('Backup no navegador → verificação → SQLite operacional isolado OK');
@@ -798,7 +798,8 @@ async function runMessagesFlow() {
 
 try {
   await ready();
-  if(process.env.DIRECT_MESSAGES_ONLY==='1'){await runMessagesFlow();await runRoleNavigation();}
+  if(process.env.DIRECT_RECENT_ONLY==='1'){await runRecentOrderAttendance();}
+  else if(process.env.DIRECT_MESSAGES_ONLY==='1'){await runMessagesFlow();await runRoleNavigation();}
   else if(process.env.DIRECT_FINANCE_ONLY==='1'){await runFinancialWorkflow();}
   else if(process.env.DIRECT_CALENDAR_ONLY==='1'){await runPaymentCalendars();}
   else if(process.env.DIRECT_ASSISTANT_ONLY==='1'){await runAssistantFlow();}

@@ -67,6 +67,7 @@ function renderStores() {
       title.append(storeElement('strong', '', item.nome));
       title.append(storeElement('span', item.situacao === 'confirmado' ? 'store-state ready' : 'store-state review', item.situacao === 'confirmado' ? 'Endereço confirmado' : 'Conferir endereço'));
       info.append(title, storeElement('p', 'store-address', storeAddress(item)));
+      const guidance=DirectMessagesModel.guidance(item);if(guidance){const d=storeElement('details','profile-more'),s=storeElement('summary','','Orientações para a diária'),t=storeElement('p','automation-guidance',guidance);d.append(s,t);info.append(d);}
       if (item.observacao) info.append(storeElement('p', 'store-note', item.observacao));
       const source = storeElement('a', 'store-source', 'Ver fonte ↗');
       if (item.fonte_url) { source.href = item.fonte_url; source.target = '_blank'; source.rel = 'noopener noreferrer'; info.append(source); }
@@ -111,6 +112,7 @@ function openStoreForm(item = null) {
   document.querySelector('#store-source').value = item?.fonte_url || '';
   document.querySelector('#store-status').value = item?.situacao || 'revisar';
   document.querySelector('#store-note').value = item?.observacao || '';
+  for(const k of ['responsavel','telefone_contato','entrada','apresentacao','uniforme','orientacoes'])document.getElementById('store-'+k).value=item?.[k]||'';
   document.querySelector('#store-dialog').showModal();
   document.querySelector('#store-name').focus();
 }
@@ -127,6 +129,7 @@ async function saveStore(event) {
     situacao: document.querySelector('#store-status').value,
     observacao: document.querySelector('#store-note').value,
   };
+  for(const k of ['responsavel','telefone_contato','entrada','apresentacao','uniforme','orientacoes'])payload[k]=document.getElementById('store-'+k).value.trim();
   const button = document.querySelector('#store-save-button'); button.disabled = true;
   try {
     await request(editingStoreId ? `/api/lojas/${editingStoreId}` : '/api/lojas', {method: editingStoreId ? 'PUT' : 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify(payload)});

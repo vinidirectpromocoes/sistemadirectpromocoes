@@ -247,6 +247,7 @@ function openOrderForm(item = null) {
   window.directDraftId = null;
   $('#order-form').reset();
   $('#order-form-error').hidden = true;
+  $('#order-model-feedback').hidden = true;
   $('#order-form-title').textContent = item ? 'Editar pedido' : 'Novo pedido';
   $('#order-save-button').textContent = item ? 'Salvar alterações' : 'Salvar pedido';
   $('#order-market').value = item?.supermercado || '';
@@ -467,6 +468,7 @@ function renderOrderShifts() {
   const item = orderRecords.find(row => row.id === orderDetailId);
   if (!item) return;
   const canOperate = !window.directRemote || ['admin', 'operacao'].includes(window.directRemote.role);
+  window.DirectAutomationUI?.suggest(item,orderWorkers,orderCatalogStores,orderRecords,weeklyScales,orderScales);
   const list = $('#order-detail-shifts'); list.replaceChildren();
   item.turnos.forEach(shift => {
     const scales = orderScales.filter(scale => scale.data === shift.data);
@@ -602,6 +604,7 @@ async function openOrderDetail(id) {
     if (!store) return;
     const section = detailSection('Loja cadastrada', [['Endereço', [store.endereco, store.bairro, `${store.cidade}/${store.uf}`].filter(Boolean).join(' · ')]]);
     section.id = 'order-detail-store';
+    const guidance=DirectMessagesModel.guidance(store);if(guidance){const d=document.createElement('details'),s=document.createElement('summary'),t=document.createElement('p');d.className='profile-more';s.textContent='Orientações da loja';t.className='automation-guidance';t.textContent=guidance;d.append(s,t);section.append(d);}
     const link = document.createElement('button'); link.type = 'button'; link.className = 'text-button'; link.textContent = 'Ver em Redes e lojas';
     link.addEventListener('click', () => {
       $('#order-detail-dialog').close();
