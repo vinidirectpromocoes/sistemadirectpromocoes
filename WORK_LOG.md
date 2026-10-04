@@ -20,3 +20,5 @@ Critérios: testes de cálculo e persistência; testes no Chromium e WebKit móv
 Lote 1 concluído e publicado via PR #32, CI 37217633621 aprovado no head final 01ca1d93, merge cc2d2cf8, Vercel READY e 33 assets conferidos. Rotina automática de backup instalada e recuperação ensaiada.
 
 Lote 2: busca global por perfil; pendências com prioridade/responsável/próxima ação/adiamento e CAS; substituição guiada com convites copiáveis, respostas por datas, auditoria e troca atômica de dias restantes; controles compactos e acessíveis nos dois temas. Backup atualizado para v8/30 tabelas com legado preservado. Migrações global_search_pending_queue e queue_response_history aplicadas. 79 testes JS, 56 Python, seis cenários novos de navegador e dez roteiros SQL aprovados localmente. Regressão completa e publicação exigem o check `test` aprovado na revisão final da PR do lote 2.
+
+A regressão no WebKit Linux detectou um campo de calendário herdando a fonte compacta do rótulo. Os valores editáveis em Configurações agora têm piso de 16px independente da media query; a verificação cobre todos os campos visíveis do calendário, mantendo o zoom de acessibilidade disponível.

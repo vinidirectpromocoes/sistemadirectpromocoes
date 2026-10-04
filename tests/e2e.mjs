@@ -541,7 +541,11 @@ async function runPaymentCalendars() {
       await form.getByRole('button', {name:'Salvar calendário'}).waitFor();
       const inputs = form.locator('input');
       assert.equal(await inputs.nth(0).inputValue(),'30'); assert.equal(await inputs.nth(1).inputValue(),'15');
-      assert.ok(await inputs.nth(1).evaluate(e=>parseFloat(getComputedStyle(e).fontSize))>=16,'Input deve evitar zoom de foco');
+      const calendarFields = await form.locator('input, select').evaluateAll(elements => elements
+        .filter(e => e.getClientRects().length)
+        .map(e => ({type:e.type, fontSize:parseFloat(getComputedStyle(e).fontSize)})));
+      assert.ok(calendarFields.every(field=>field.fontSize>=16),
+        `${name}: campos do calendário devem evitar zoom de foco: ${JSON.stringify(calendarFields)}`);
       for(const theme of ['light','dark']) {
         await page.evaluate(value=>document.documentElement.dataset.theme=value,theme);
         assert.ok(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth+2),'Calendários cabem em 320px');
