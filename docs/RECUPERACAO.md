@@ -2,7 +2,7 @@
 
 ## Conteúdo e limites
 
-A rotina diária guarda uma cópia criptografada AES-GCM fora do projeto, com 30 versões. Inclui as 28 tabelas operacionais, usuários e identidades do Auth (incluindo hashes, nunca sessões ativas), políticas, funções, estrutura e código/migrações. A senha e a credencial exclusiva de leitura ficam no Chaves do macOS (`br.com.direct.backup`). Não dependem de API paga. O Mac precisa estar ligado e com a sessão acessível; a tela de Configurações avisa se a última cópia ficou antiga. A execução retorna ao iniciar a sessão. Credenciais vencem em um ano e podem ser revogadas pelo administrador.
+A rotina diária guarda uma cópia criptografada AES-GCM fora do projeto, com 30 versões. Inclui as 30 tabelas operacionais (incluindo organização de pendências e respostas de substituição), usuários e identidades do Auth (incluindo hashes, nunca sessões ativas), políticas, funções, estrutura e código/migrações. A senha e a credencial exclusiva de leitura ficam no Chaves do macOS (`br.com.direct.backup`). Não dependem de API paga. O Mac precisa estar ligado e com a sessão acessível; a tela de Configurações avisa se a última cópia ficou antiga. A execução retorna ao iniciar a sessão. Credenciais vencem em um ano e podem ser revogadas pelo administrador.
 
 Se o iCloud Drive já estiver disponível no Mac, uma segunda cópia criptografada é criada em `Direct Backups`. Isso não contrata serviço nem confirma sincronização remota; verifique o espaço e a sincronização no seu iCloud. Sem ele, há uma cópia local fora do repositório: copie os arquivos para outro aparelho/disco. O Chaves também precisa ser preservado para recuperar a senha. Não existe recuperação de criptografia sem a senha.
 

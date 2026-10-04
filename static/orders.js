@@ -421,6 +421,7 @@ async function changeOrderAttendance(scale, status) {
       const notice = $('#order-detail-success');
       notice.textContent = `${status==='desistiu'?'Desistência':'Falta'} registrada. Vaga aberta para substituição; previsão financeira atualizada.`;
       notice.hidden = false;
+      const pending=orderScales.find(s=>s.id===scale.id),row=document.querySelector(`[data-scale-id="${scale.id}"]`);if(pending&&row&&!pending.substituida_por_escala_id){orderDetailBusy=false;showOrderSubstitute(pending,row);orderDetailBusy=true;}
     }
     if (!window.directRemote || ['admin', 'financeiro'].includes(window.directRemote.role)) {
       if (status === 'presente') $('#finance-month').value = scale.data.slice(0, 7);
@@ -441,6 +442,7 @@ function showOrderSubstitute(scale,row) {
   label.append(select);panel.append(label);
   const reason=document.createElement('input');reason.type='text';reason.maxLength=300;reason.placeholder='Motivo da desistência';reason.setAttribute('aria-label','Motivo da desistência para substituir');
   if(scale.status==='escalada')panel.append(reason);
+  const allLabel=document.createElement('label');allLabel.className='scope-choice';const all=document.createElement('input');all.type='checkbox';allLabel.append(all,document.createTextNode('Substituir nos demais dias deste pedido a partir deste dia'));panel.append(allLabel);
   const scope=document.createElement('label');scope.className='scope-choice';const checkbox=document.createElement('input');checkbox.type='checkbox';scope.append(checkbox,document.createTextNode('Confirmei a disponibilidade da substituta para este dia e horário'));panel.append(scope);
   const actions=document.createElement('div');actions.className='order-assign-actions';
   const save=document.createElement('button');save.type='button';save.className='button button-primary';save.textContent='Salvar substituição';
@@ -449,12 +451,13 @@ function showOrderSubstitute(scale,row) {
     if(scale.status==='escalada'&&reason.value.trim().length<5)return orderDetailError('Informe o motivo da desistência com pelo menos 5 caracteres.');
     orderDetailBusy=true;save.disabled=true;
     try {
-      await request(`/api/pedidos/${scale.pedido_id}/escalas/${scale.id}/substituir`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({diarista_id:Number(select.value),motivo:reason.value.trim(),disponibilidade_confirmada:checkbox.checked})});
+      await request(`/api/pedidos/${scale.pedido_id}/escalas/${scale.id}/substituir`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({diarista_id:Number(select.value),motivo:reason.value.trim(),disponibilidade_confirmada:checkbox.checked,todos_restantes:all.checked})});
       await refreshOrderScales();if(typeof loadFinance==='function'&&(!window.directRemote||['admin','financeiro'].includes(window.directRemote.role)))await loadFinance();
       $('#order-detail-success').textContent='Substituição registrada. Histórico preservado; confirme se a nova pessoa vai e depois registre presença ou falta.';$('#order-detail-success').hidden=false;
     }catch(error){orderDetailError(error.message);}finally{orderDetailBusy=false;save.disabled=false;}
   });
   const cancel=document.createElement('button');cancel.type='button';cancel.className='button button-quiet';cancel.textContent='Cancelar';cancel.addEventListener('click',()=>panel.remove());actions.append(save,cancel);panel.append(actions);row.append(panel);panel.scrollIntoView({block:'nearest'});
+  window.DirectUI.replacement(panel,{scale,order:orderRecords.find(o=>o.id===scale.pedido_id),workers:orderWorkers,stores:orderCatalogStores,orders:orderRecords,scales:orderScales,select,all});
 }
 
 async function removeOrderWorker(scale) {
@@ -488,7 +491,7 @@ function renderOrderShifts() {
       const empty = document.createElement('p'); empty.className = 'order-day-empty'; empty.textContent = 'Nenhuma diarista escalada para este dia.'; body.append(empty);
     }
     scales.forEach(scale => {
-      const row = document.createElement('div'); row.className = 'order-worker-row';
+      const row = document.createElement('div'); row.className = 'order-worker-row';row.dataset.scaleId=scale.id;
       const identity = document.createElement('div'); identity.className = 'order-worker-identity';
       const name = document.createElement('strong'); name.textContent = scale.diarista_nome;
       const state = document.createElement('span'); state.className = `order-attendance-status ${scale.status}`;

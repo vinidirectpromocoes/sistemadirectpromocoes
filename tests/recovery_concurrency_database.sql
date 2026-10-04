@@ -12,7 +12,7 @@ execute 'set local role anon';denied:=false;begin perform public.direct_backup_b
 if not denied then raise exception 'Credencial incorreta aceita.';end if;
 -- Correct secret is read-only; no JWT impersonation and no sessions are exported.
 bundle:=public.direct_backup_bundle(token,run);execute 'reset role';
-if bundle->>'format'<>'direct-recovery-v1' or jsonb_array_length(bundle->'auth'->'users')<>(select count(*) from auth.users) or bundle->'auth' ? 'sessions' or (select count(*) from jsonb_object_keys(bundle->'data'->'tables'))<>28 then raise exception 'Recuperação incompleta.';end if;
+if bundle->>'format'<>'direct-recovery-v1' or jsonb_array_length(bundle->'auth'->'users')<>(select count(*) from auth.users) or bundle->'auth' ? 'sessions' or (select count(*) from jsonb_object_keys(bundle->'data'->'tables'))<>30 then raise exception 'Recuperação incompleta.';end if;
 execute 'set local role anon';denied:=false;begin perform public.direct_backup_status();exception when insufficient_privilege then denied:=true;end;
 if not denied then raise exception 'Histórico exposto ao anônimo.';end if;
 denied:=false;begin perform public.direct_backup_agent_result(token,run,true,null,1,true,'');exception when others then denied:=true;end;

@@ -43,7 +43,9 @@
   <script src="/session-sync.js" defer></script>
   <script src="/operations-extended.js" defer></script>
   <script src="/crm-model.js" defer></script>
+  <script src="/usability-model.js" defer></script>
   <script src="/hub.js" defer></script>
+  <script src="/usability.js" defer></script><link rel="stylesheet" href="/usability.css">
   <link rel="stylesheet" href="/messages.css">
 <link rel="stylesheet" href="automation.css"><script src="automation.js" defer></script>
 <link rel="stylesheet" href="/management.css"><script src="/management.js" defer></script>
@@ -94,7 +96,7 @@
       </nav>
       <div class="sidebar-foot">
         <div class="sidebar-status"><span class="status-dot" aria-hidden="true"></span><span id="storage-status">Dados salvos neste computador</span></div>
-        <div class="sidebar-controls">
+        <a id="backup-health-alert" href="#configuracoes" class="sidebar-backup-alert" hidden>⚠ Conferir backup</a><div class="sidebar-controls"><button id="global-search-button" class="sidebar-control" type="button" aria-label="Buscar no sistema" title="Buscar (Ctrl/⌘ K)"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><circle cx="10" cy="10" r="6"/><path d="m15 15 6 6"/></svg></button>
           <button id="theme-toggle" class="sidebar-control theme-toggle" type="button" aria-label="Ativar tema escuro" title="Ativar tema escuro" aria-pressed="false">
             <svg class="theme-icon-moon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20.5 14.4A8.5 8.5 0 0 1 9.6 3.5 8.5 8.5 0 1 0 20.5 14.4Z"/></svg>
             <svg class="theme-icon-sun" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="4"/><path d="M12 2v2m0 16v2M4.93 4.93l1.42 1.42m11.3 11.3 1.42 1.42M2 12h2m16 0h2M4.93 19.07l1.42-1.42m11.3-11.3 1.42-1.42"/></svg>
@@ -134,7 +136,7 @@
       </section>
       <section class="list-card crm-panel" aria-label="Lista de pendências">
         <div class="pending-areas" role="group" aria-label="Área das pendências"><button data-crm-area="operacao" class="button button-outline" type="button" aria-pressed="true">Operação <span id="crm-area-operacao">0</span></button><button data-crm-area="financeiro" class="button button-outline" type="button" aria-pressed="false">Financeiro <span id="crm-area-financeiro">0</span></button><button data-crm-area="cadastros" class="button button-outline" type="button" aria-pressed="false">Cadastros <span id="crm-area-cadastros">0</span></button></div>
-        <div class="pending-toolbar"><div role="group" aria-label="Visualização"><button id="crm-pending" class="button button-quiet" type="button" aria-pressed="true">A resolver</button><button id="crm-history" class="button button-quiet" type="button" aria-pressed="false">Histórico</button></div><button id="crm-filter-toggle" class="button button-outline" type="button" aria-expanded="false" aria-controls="crm-filters">⌕ Filtrar</button></div>
+        <div class="pending-toolbar"><div role="group" aria-label="Visualização"><button id="crm-pending" class="button button-quiet" type="button" aria-pressed="true">A resolver</button><button id="crm-snoozed" class="button button-quiet" type="button" aria-pressed="false">Adiadas (0)</button><button id="crm-history" class="button button-quiet" type="button" aria-pressed="false">Histórico</button></div><button id="crm-filter-toggle" class="button button-outline" type="button" aria-expanded="false" aria-controls="crm-filters">⌕ Filtrar</button></div>
         <div id="crm-filters" class="crm-filters" hidden><div class="pending-priorities" role="group" aria-label="Prazo da pendência"><button data-crm-scope="today" class="button button-outline" type="button" aria-pressed="false">Hoje <span id="crm-count-today">0</span></button><button data-crm-scope="overdue" class="button button-outline" type="button" aria-pressed="false">Atrasadas <span id="crm-count-overdue">0</span></button><button data-crm-scope="waiting" class="button button-outline" type="button" aria-pressed="false">Aguardando retorno <span id="crm-count-waiting">0</span></button></div><label>Buscar<input id="crm-search" type="search" placeholder="Nome, pedido, rede, loja ou setor"></label><label>Rede<select id="crm-network"><option value="all">Todas as redes</option></select></label><label>De<input id="crm-start" type="date"></label><label>Até<input id="crm-end" type="date"></label><button id="crm-clear" class="button button-quiet" type="button">Limpar filtros</button></div>
         <div class="pending-heading"><h2 id="crm-list-title">Operação · A resolver</h2><button id="crm-all" class="button button-quiet" type="button" hidden>Mostrar todas</button></div>
         <p id="crm-result-count" class="section-help" aria-live="polite"></p><div id="crm-board" class="pending-list"></div>
@@ -476,5 +478,7 @@
   </dialog>
 <dialog id="order-model-dialog" aria-labelledby="order-model-title"><div class="dialog-header"><h2 id="order-model-title">Modelos de pedidos</h2><button id="order-model-close" class="icon-button" type="button" aria-label="Fechar modelos">×</button></div><div class="dialog-body"><p class="section-help">Gera um rascunho para conferir. A vaga só será publicada ao salvar o pedido.</p><label>Início da nova escala<input id="order-model-start" type="date" required></label><div id="order-model-list" class="automation-list"></div><p id="order-model-error" class="form-error" role="alert" hidden></p></div></dialog>
 <dialog id="management-dialog" aria-labelledby="management-title"><div class="dialog-header"><h2 id="management-title"></h2><button id="management-close" class="icon-button" type="button" aria-label="Fechar">×</button></div><div class="dialog-body"><div id="management-body"></div><p id="management-feedback" class="feedback" role="status" hidden></p></div><div class="dialog-footer"><button id="management-print" class="button button-outline" type="button" hidden>Imprimir / PDF</button><button id="management-copy" class="button button-primary" type="button" hidden>Copiar</button></div></dialog>
+<div id="direct-notice" role="status" aria-live="polite" hidden></div>
+<dialog id="global-search-dialog" aria-labelledby="global-search-title"><div class="dialog-header"><h2 id="global-search-title">Buscar no sistema</h2><button id="global-search-close" class="icon-button" type="button" aria-label="Fechar busca">×</button></div><div class="dialog-body"><label>Nome, CPF, pedido, rede ou loja<input id="global-search-input" type="search" maxlength="120" autocomplete="off"></label><p id="global-search-status" class="section-help" role="status"></p><div id="global-search-results"></div></div></dialog>
 </body>
 </html>

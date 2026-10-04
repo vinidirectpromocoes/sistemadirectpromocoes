@@ -6,6 +6,7 @@ import json
 import os
 import re
 import sqlite3
+import usability
 import scale_lifecycle
 import store_portal
 from datetime import date, datetime, timezone
@@ -317,6 +318,7 @@ def init_db():
             db.execute("INSERT INTO direct_config_meta (chave, valor) VALUES ('setores_iniciais_v1', 'aplicado')")
         workflow.ensure_schema(db)
         extended.ensure_schema(db)
+        usability.ensure_schema(db)
         store_portal.ensure_schema(db)
         if not db.execute("SELECT 1 FROM direct_config_meta WHERE chave='calendario_pagamentos_v1'").fetchone():
             for network, (first, second) in calendar.INITIAL_CALENDARS.items():
@@ -843,6 +845,7 @@ class Handler(BaseHTTPRequestHandler):
         if not self._allowed_origin():
             return self.respond(HTTPStatus.FORBIDDEN, {"erro": "Acesso não permitido."})
         path = urlparse(self.path).path
+        if usability.handle(self, "GET", sys.modules[__name__]): return
         if extended.handle(self, "GET", sys.modules[__name__]): return
         if store_portal.handle(self, "GET", sys.modules[__name__]): return
         if path == "/api/diaristas":
@@ -913,13 +916,13 @@ class Handler(BaseHTTPRequestHandler):
             return self.respond(HTTPStatus.OK, [dict(row) for row in rows])
         if path == "/":
             path = "/index.html"
-        assets = {"/management-model.js":"text/javascript; charset=utf-8", "/management.js":"text/javascript; charset=utf-8", "/management.css":"text/css; charset=utf-8", "/loja.html":"text/html; charset=utf-8", "/store-portal.js":"text/javascript; charset=utf-8", "/automation-model.js":"text/javascript; charset=utf-8", "/automation.js":"text/javascript; charset=utf-8", "/automation.css":"text/css; charset=utf-8", "/index.html": "text/html; charset=utf-8", "/style.css": "text/css; charset=utf-8", "/brand.css": "text/css; charset=utf-8", "/theme.css": "text/css; charset=utf-8", "/mobile.css": "text/css; charset=utf-8", "/reading.css": "text/css; charset=utf-8", "/motion.css": "text/css; charset=utf-8", "/operations.css": "text/css; charset=utf-8", "/workflow.css": "text/css; charset=utf-8", "/route-loader.js": "text/javascript; charset=utf-8", "/session-sync.js": "text/javascript; charset=utf-8",
+        assets = {"/usability.css":"text/css; charset=utf-8","/management-model.js":"text/javascript; charset=utf-8", "/management.js":"text/javascript; charset=utf-8", "/management.css":"text/css; charset=utf-8", "/loja.html":"text/html; charset=utf-8", "/store-portal.js":"text/javascript; charset=utf-8", "/automation-model.js":"text/javascript; charset=utf-8", "/automation.js":"text/javascript; charset=utf-8", "/automation.css":"text/css; charset=utf-8", "/index.html": "text/html; charset=utf-8", "/style.css": "text/css; charset=utf-8", "/brand.css": "text/css; charset=utf-8", "/theme.css": "text/css; charset=utf-8", "/mobile.css": "text/css; charset=utf-8", "/reading.css": "text/css; charset=utf-8", "/motion.css": "text/css; charset=utf-8", "/operations.css": "text/css; charset=utf-8", "/workflow.css": "text/css; charset=utf-8", "/route-loader.js": "text/javascript; charset=utf-8", "/session-sync.js": "text/javascript; charset=utf-8",
             "/app.js": "text/javascript; charset=utf-8", "/theme.js": "text/javascript; charset=utf-8", "/finance.js": "text/javascript; charset=utf-8", "/forecast.js": "text/javascript; charset=utf-8", "/operations.js": "text/javascript; charset=utf-8", "/workflow.js": "text/javascript; charset=utf-8", "/matching.js": "text/javascript; charset=utf-8", "/backup.js": "text/javascript; charset=utf-8", "/orders.js": "text/javascript; charset=utf-8", "/stores.js": "text/javascript; charset=utf-8", "/settings.js": "text/javascript; charset=utf-8", "/reading.js": "text/javascript; charset=utf-8", "/reading-parser.js": "text/javascript; charset=utf-8", "/remote.js": "text/javascript; charset=utf-8", "/payment-calendar.js": "text/javascript; charset=utf-8", "/vendor/supabase-2.117.2.js": "text/javascript; charset=utf-8", "/stores.css": "text/css; charset=utf-8", "/settings.css": "text/css; charset=utf-8", "/login.css": "text/css; charset=utf-8", "/favicon.svg": "image/svg+xml", "/logo-direct-promocoes.jpg": "image/jpeg", "/logo-direct-promocoes-transparente.png": "image/png"}
         for asset in ['messages-model.js','messages.js','backup-model.js']:
             assets['/'+asset]='text/javascript; charset=utf-8'
         assets['/messages.css']='text/css; charset=utf-8'
         assets["/reconciliation.js"] = "text/javascript; charset=utf-8"
-        for asset in ['reading-assistant.js','insights.js','offline.js','operations-extended.js','crm-model.js','hub.js','portal-admin.js','vacancies-admin.js','portal.js','sw.js']:
+        for asset in ['usability.js','usability-model.js','reading-assistant.js','insights.js','offline.js','operations-extended.js','crm-model.js','hub.js','portal-admin.js','vacancies-admin.js','portal.js','sw.js']:
             assets['/'+asset]='text/javascript; charset=utf-8'
         assets['/manifest.webmanifest']='application/manifest+json'
         assets['/extended.css']='text/css; charset=utf-8'
@@ -942,10 +945,13 @@ class Handler(BaseHTTPRequestHandler):
             try:
                 with connect() as db:
                     db.execute('BEGIN IMMEDIATE')
-                    result=scale_lifecycle.replace(db,int(replacement_route[1]),int(replacement_route[2]),self.read_json(),__import__(__name__))
+                    payload=self.read_json()
+                    replace=usability.replace_remaining if payload.get("todos_restantes") is True else scale_lifecycle.replace
+                    result=replace(db,int(replacement_route[1]),int(replacement_route[2]),payload,sys.modules[__name__])
                 return self.respond(HTTPStatus.OK,result)
             except (ValueError,TypeError,json.JSONDecodeError,sqlite3.IntegrityError) as error:
                 return self.respond(HTTPStatus.BAD_REQUEST,{'erro':str(error)})
+        if usability.handle(self, "POST", sys.modules[__name__]): return
         if extended.handle(self, "POST", sys.modules[__name__]): return
         if store_portal.handle(self, "POST", sys.modules[__name__]): return
         if path == "/api/cobrancas" or re.fullmatch(r"/api/cobrancas/\d+/recebimentos", path):
@@ -1173,6 +1179,7 @@ class Handler(BaseHTTPRequestHandler):
     def do_PUT(self):
         if not self._allowed_origin():
             return self.respond(HTTPStatus.FORBIDDEN, {"erro": "Acesso não permitido."})
+        if usability.handle(self, "PUT", sys.modules[__name__]): return
         if extended.handle(self, "PUT", sys.modules[__name__]): return
         if urlparse(self.path).path == "/api/custos-extras":
             try:

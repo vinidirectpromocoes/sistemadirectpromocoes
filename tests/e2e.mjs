@@ -95,7 +95,7 @@ async function runRoleNavigation() {
       });
       await context.route('**/vendor/supabase-2.117.2.js', route => route.fulfill({
         contentType: 'text/javascript', body: `window.supabase={createClient:()=>({
-          rpc:async(name)=>({data:name==='direct_backup_snapshot_v7'?{format:'direct-data-v7',exportedAt:new Date().toISOString(),tables:Object.fromEntries(window.DirectBackup.versions['direct-data-v7'].map(t=>[t,[]])),snapshot:{consistent:true,counts:Object.fromEntries(window.DirectBackup.versions['direct-data-v7'].map(t=>[t,0]))}}:name==='direct_portal_vacancies'?[]:name==='direct_portal_registrations'?{total:0,items:[]}:{whatsapp:'',grupo_url:''},error:null}),
+          rpc:async(name)=>({data:name==='direct_backup_snapshot_v8'?{format:'direct-data-v8',exportedAt:new Date().toISOString(),tables:Object.fromEntries(window.DirectBackup.versions['direct-data-v8'].map(t=>[t,[]])),snapshot:{consistent:true,counts:Object.fromEntries(window.DirectBackup.versions['direct-data-v8'].map(t=>[t,0]))}}:name==='direct_portal_vacancies'?[]:name==='direct_portal_registrations'?{total:0,items:[]}:{whatsapp:'',grupo_url:''},error:null}),
           auth:{getSession:async()=>({data:{session:{user:{email:'qa@example.invalid'}}},error:null}),onAuthStateChange:()=>{},signOut:async()=>({error:null})},
           from:(table)=>{const q={select:()=>q,eq:()=>q,order:()=>q,limit:()=>q,range:async()=>({data:[],error:null,count:0}),
             maybeSingle:async()=>({data:table==='direct_admins'?${role === 'admin' ? "{email:'qa@example.invalid'}" : 'null'}:
@@ -148,7 +148,7 @@ async function runRoleNavigation() {
         assert.equal(result.status, 0, `Cópia do navegador não restaurou: ${result.stderr}`);
         const operational = path.join(work, 'browser-operational.db');
         const drill = spawnSync(process.env.PYTHON || 'python3', ['-c',
-          'import sys; sys.path.insert(0,"scripts"); from restore_backup import restore_operational; counts=restore_operational(sys.argv[1],sys.argv[2],sys.argv[3]); assert len(counts) == 28',
+          'import sys; sys.path.insert(0,"scripts"); from restore_backup import restore_operational; counts=restore_operational(sys.argv[1],sys.argv[2],sys.argv[3]); assert len(counts) == 30',
           archive, 'senha-de-teste-12345', operational], { cwd: root, encoding: 'utf8' });
         assert.equal(drill.status, 0, `Cópia operacional não restaurou: ${drill.stderr}`);
         console.log('Backup no navegador → verificação → SQLite operacional isolado OK');
@@ -371,7 +371,7 @@ async function runExtendedWorkflow() {
     await page.getByRole('button',{name:'✓ Validar atendimento',exact:true}).click();await page.locator('#ext-loja_responsavel').fill('Ana da loja');await page.locator('#ext-chegada').fill('07:05');await page.locator('#ext-saida').fill('15:20');await page.locator('#extended-save').click();await page.locator('#extended-dialog').waitFor({state:'hidden'});await page.getByText('Loja: validado · Ana da loja').waitFor();
     await page.getByRole('button',{name:'⚑ Ocorrência',exact:true}).click();await page.locator('#ext-tipo').selectOption('elogio');await page.locator('#ext-descricao').fill('Atendimento bem avaliado na loja');await page.locator('#extended-save').click();await page.locator('#extended-dialog').waitFor({state:'hidden'});await page.locator('#order-detail-dialog').evaluate(e=>e.close());
     await page.locator('#occurrence-list').getByRole('button',{name:'✓ Resolver'}).click();await page.locator('#ext-resolucao').fill('Informado à equipe na conferência');await page.locator('#extended-save').click();await page.locator('#extended-dialog').waitFor({state:'hidden'});await page.locator('#occurrence-list').getByText(/resolvida/).waitFor();
-    await page.locator('#nav-configuracoes').click();await page.locator('#contract-section').getByRole('button',{name:'+ Contrato',exact:true}).click();await page.locator('#ext-rede').selectOption('Super do Povo');await page.locator('#ext-loja').selectOption('Meireles');await page.locator('#ext-setor').selectOption('Operador de caixa');await page.locator('#ext-inicio').fill(day);await page.locator('#ext-valor_recebido').fill('150');await page.locator('#ext-valor_pago').fill('95');
+    await page.locator('#nav-configuracoes').click();await page.locator('#contract-section').getByRole('button',{name:'+ Contrato',exact:true}).click();await page.locator('#ext-rede').selectOption('Super do Povo').catch(async e=>{await page.screenshot({path:'/tmp/direct-extended-fail.png'});throw Error(e.message+' STATE '+JSON.stringify(await page.evaluate(()=>({open:document.querySelector('#extended-dialog').open,title:document.querySelector('#extended-title').textContent,hash:location.hash,rect:document.querySelector('#ext-rede').getBoundingClientRect().toJSON(),feedback:document.querySelector('#extended-feedback').textContent,active:document.activeElement?.id}))));});await page.locator('#ext-loja').selectOption('Meireles');await page.locator('#ext-setor').selectOption('Operador de caixa');await page.locator('#ext-inicio').fill(day);await page.locator('#ext-valor_recebido').fill('150');await page.locator('#ext-valor_pago').fill('95');
     const width=await page.evaluate(()=>document.documentElement.scrollWidth-innerWidth);assert.ok(width<=2,'Contrato não pode transbordar');
     const font=await page.locator('#ext-valor_recebido').evaluate(e=>parseFloat(getComputedStyle(e).fontSize));assert.ok(font>=16,'Campo de contrato pode causar zoom');
     await page.locator('#extended-save').click();await page.locator('#extended-dialog').waitFor({state:'hidden'});await page.locator('#contract-list').getByText(/150,00/).waitFor();
@@ -801,7 +801,8 @@ async function runMessagesFlow() {
 
 try {
   await ready();
-  if(process.env.DIRECT_RECENT_ONLY==='1'){await runRecentOrderAttendance();}
+  if(process.env.DIRECT_EXTENDED_ONLY==='1'){await runFinancialWorkflow();await runExtendedWorkflow();}
+  else if(process.env.DIRECT_RECENT_ONLY==='1'){await runRecentOrderAttendance();}
   else if(process.env.DIRECT_MESSAGES_ONLY==='1'){await runMessagesFlow();await runRoleNavigation();}
   else if(process.env.DIRECT_FINANCE_ONLY==='1'){await runFinancialWorkflow();}
   else if(process.env.DIRECT_CALENDAR_ONLY==='1'){await runPaymentCalendars();}
