@@ -24,3 +24,5 @@ Lote 2: busca global por perfil; pendências com prioridade/responsável/próxim
 A regressão no WebKit Linux detectou um campo de calendário herdando a fonte compacta do rótulo. Os valores editáveis em Configurações agora têm piso de 16px independente da media query; a verificação cobre todos os campos visíveis do calendário, mantendo o zoom de acessibilidade disponível.
 
 Uma recarga com leituras locais ainda em andamento também expôs erros de origem descartada no WebKit. Leituras GET locais agora são canceladas em pagehide; gravações conservam seu ciclo. A regressão provoca uma recarga durante uma consulta atrasada e verifica ausência de exceções e funcionamento da leitura na página nova.
+
+O clique imediato em “Contrato”, antes da resposta das tarifas, acessava settingsData nulo. O formulário agora aguarda os setores, mostra falha de carregamento quando necessário e respeita uma mudança de aba durante a espera. A regressão atrasa deliberadamente a resposta das tarifas.

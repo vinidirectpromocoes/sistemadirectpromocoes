@@ -104,10 +104,15 @@
  }
  const amount=v=>v==null?'':(v/100).toFixed(2);
  function cents(v){if(!v.trim())return null;if(!/^\d+(?:[.,]\d{1,2})?$/.test(v))throw Error('Informe valores positivos com até duas casas decimais.');const n=Math.round(Number(v.replace(',','.'))*100);if(n<1||n>100000000)throw Error('Valor fora do limite permitido.');return n;}
- function openContract(c=null){open(c?'Nova versão do contrato #'+c.id:'Cadastrar contrato',()=>{
+ async function openContract(c=null){
+  if(!canFinance())throw Error('Sem permissão para contratos.');
+  if(!settingsData)await loadSettings();
+  if(!settingsData)throw Error('Não foi possível carregar os setores. Atualize as configurações e tente novamente.');
+  if(location.hash!=='#configuracoes')return;
+  open(c?'Nova versão do contrato #'+c.id:'Cadastrar contrato',()=>{
   const network=field('rede','Rede',c?.rede||data.stores[0]?.rede||'','text',[...new Set(data.stores.map(x=>x.rede))].sort().map(v=>[v,v]),true);
   const store=field('loja','Loja (opcional)',c?.loja||'','text',[]);const fill=()=>{store.replaceChildren(new Option('Toda a rede',''),...data.stores.filter(x=>x.rede===network.value).map(x=>new Option(x.nome,x.nome)));store.value=c?.loja||'';};network.onchange=fill;fill();
-  const sectors=[...new Set([...(typeof settingsData!=='undefined'?settingsData.setores:[]).map(x=>x.setor),...data.orders.map(x=>x.setor),c?.setor].filter(Boolean))].sort();field('setor','Setor',c?.setor||'','text',[['','Todos os setores'],...sectors.map(x=>[x,x])]);field('inicio','Início da vigência',homeToday(),'date',null,true);field('fim','Fim da vigência (opcional)','','date');
+  const sectors=[...new Set([...settingsData.setores.map(x=>x.setor),...data.orders.map(x=>x.setor),c?.setor].filter(Boolean))].sort();field('setor','Setor',c?.setor||'','text',[['','Todos os setores'],...sectors.map(x=>[x,x])]);field('inicio','Início da vigência',homeToday(),'date',null,true);field('fim','Fim da vigência (opcional)','','date');
   for(const [key,label]of [['valor_recebido','Recebido por diária (R$)'],['valor_pago','Pago por diária (R$)']]){const input=field(key,label,amount(c?.[key+'_centavos']));input.inputMode='decimal';}
   field('prazo_dias','Prazo de cobrança em dias',c?.prazo_dias??30,'number',null,true);field('responsavel','Responsável',c?.responsavel||'');field('contato','Contato',c?.contato||'');field('regras','Condições, cancelamentos e orientações',c?.regras||'','textarea');
   if(c){network.disabled=true;store.disabled=true;$('ext-setor').disabled=true;$('extended-fields').append(node('p','A nova versão encerra a anterior na véspera do novo início, quando as vigências se cruzarem.','section-help'));}
