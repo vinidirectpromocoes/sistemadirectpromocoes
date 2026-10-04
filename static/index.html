@@ -45,6 +45,7 @@
   <script src="/crm-model.js" defer></script>
   <script src="/hub.js" defer></script>
   <script src="/portal-admin.js" defer></script>
+  <script src="/vacancies-admin.js" defer></script>
 </head>
 <body>
   <div id="global-loading" class="global-loading" role="progressbar" aria-label="Carregando dados" hidden><span></span></div>
@@ -76,6 +77,7 @@
         <a href="#diaristas" id="nav-diaristas" aria-label="Diaristas" data-mobile-label="Equipe" class="nav-active" aria-current="page"><span class="nav-icon" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="9" cy="8" r="3"/><path d="M3.5 20v-2a5.5 5.5 0 0 1 11 0v2H3.5Z"/><path d="M16.5 5.5a3 3 0 0 1 0 5.8M17 14a5 5 0 0 1 3.5 4.8V20h-3"/></svg></span>Diaristas</a>
         <a href="#convites" id="nav-convites" aria-label="Cadastros por link" data-mobile-label="Links"><span class="nav-icon" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M10 13a5 5 0 0 0 7 0l3-3a5 5 0 0 0-7-7l-2 2M14 11a5 5 0 0 0-7 0l-3 3a5 5 0 0 0 7 7l2-2"/></svg></span>Cadastros por link</a>
         <a href="#pedidos" id="nav-pedidos" aria-label="Pedidos" data-mobile-label="Pedidos"><span class="nav-icon" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="5" y="4" width="14" height="17" rx="2"/><path d="M9 4.5V3h6v1.5M9 10h6M9 14h6M9 18h4"/></svg></span>Pedidos</a>
+        <a href="#vagas" id="nav-vagas" aria-label="Vagas disponíveis" data-mobile-label="Vagas"><span class="nav-icon" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="7" width="18" height="14" rx="2"/><path d="M8 7V3h8v4M3 12h18M10 12v3h4v-3"/></svg></span>Vagas disponíveis</a>
         <a href="#leitura" id="nav-leitura" aria-label="Leitura IA" data-mobile-label="Leitura"><span class="nav-icon" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M5 3h9l5 5v13H5V3Z"/><path d="M14 3v5h5M8 13h8M8 17h5"/><path d="m17 14 1 2 2 1-2 1-1 2-1-2-2-1 2-1 1-2Z"/></svg></span>Leitura IA</a>
         <a href="#redes" id="nav-redes" aria-label="Redes e lojas" data-mobile-label="Lojas"><span class="nav-icon" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M3 9h18l-2-5H5L3 9ZM4 9v11h16V9M9 20v-7h6v7"/><path d="M3 9c0 1.7 1.4 3 3 3s3-1.3 3-3c0 1.7 1.4 3 3 3s3-1.3 3-3c0 1.7 1.4 3 3 3s3-1.3 3-3"/></svg></span>Redes e lojas</a>
         <a href="#financeiro" id="nav-financeiro" aria-label="Financeiro" data-mobile-label="Finanças"><span class="nav-icon" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M20 8V6a2 2 0 0 0-2-2H6a3 3 0 0 0-3 3v10a3 3 0 0 0 3 3h14V8H6a3 3 0 0 1-3-3"/><path d="M20 11h-6a3 3 0 0 0 0 6h6M16 14h.01"/></svg></span>Financeiro</a>
@@ -158,6 +160,12 @@
         <p id="portal-registration-status" class="settings-empty" role="status" aria-live="polite"></p><div id="portal-registration-list" class="portal-registration-list"></div>
         <div id="portal-registration-pagination" class="portal-registration-pagination" hidden><button id="portal-registration-prev" class="button button-outline" type="button" aria-label="Página anterior">← Anterior</button><span id="portal-registration-page"></span><button id="portal-registration-next" class="button button-outline" type="button" aria-label="Próxima página">Próxima →</button></div>
       </section>
+    </main>
+
+    <main class="main-content" id="vagas-page" hidden>
+      <header class="page-header"><div><div class="eyebrow">OPERAÇÃO <span>/</span> VAGAS DISPONÍVEIS</div><h1>Vagas disponíveis</h1><p>Os pedidos com vagas aparecem automaticamente na plataforma dos diaristas.</p></div><button id="vacancy-refresh" class="button button-outline" type="button" aria-label="Atualizar vagas"><span aria-hidden="true">↻</span><span class="button-label">Atualizar</span></button></header>
+      <section class="list-card vacancy-share-card"><details><summary>Enviar link privado de vagas</summary><p class="section-help">Escolha um diarista cadastrado. O convite é individual, válido por 30 dias e separado do cadastro.</p><form id="vacancy-share-form" class="staff-form"><label>Diarista<select id="vacancy-worker" required><option value="">Selecione um diarista</option></select></label><button type="submit" class="button button-primary">Gerar link de vagas</button></form><div id="vacancy-share-result" hidden><label>Link das vagas<input id="vacancy-share-url" readonly></label><button id="vacancy-copy" class="button button-outline" type="button">Copiar link das vagas</button></div><p id="vacancy-share-feedback" class="section-help" role="status" aria-live="polite"></p></details></section>
+      <section class="list-card"><div class="vacancy-heading"><h2>Disponíveis para escala <span id="vacancy-count" class="badge available">0</span></h2><p class="section-help">Ao preencher a escala, o pedido sai apenas desta lista e da plataforma. O histórico continua em Pedidos.</p></div><p id="vacancy-status" class="settings-empty" role="status" aria-live="polite"></p><div id="vacancy-list"></div></section>
     </main>
 
     <main class="main-content" id="leitura-page" hidden>

@@ -34,3 +34,4 @@ jobs:
           pnpm test:e2e
           node tests/portal_e2e.mjs
           node tests/portal_admin_e2e.mjs
+          node tests/vacancies_e2e.mjs
