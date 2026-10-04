@@ -21,3 +21,19 @@ test('pendências respeitam o vencimento, com prazo de recebimento separado da d
   assert.equal(finance.length,2);
   assert.ok(finance.every(i=>i.date==='2026-10-15'&&!i.overdue));
 });
+
+test('semana completa recebe na próxima semana, com sábado como limite', () => {
+  for (const date of ['2026-09-28','2026-09-29','2026-09-30','2026-10-01','2026-10-02','2026-10-03','2026-10-04']) {
+    assert.equal(calendar.due(date,null,null,6),'2026-10-10');
+    assert.equal(calendar.due(date,null,null,5),'2026-10-09');
+  }
+  assert.equal(calendar.due('2026-10-05',null,null,6),'2026-10-17');
+  assert.equal(calendar.due('2026-12-31',null,null,6),'2027-01-09');
+  assert.equal(calendar.due('2028-02-29',null,null,6),'2028-03-11');
+  assert.equal(calendar.due('2026-02-31',null,null,6),null);
+  assert.equal(calendar.due('2026-10-03',null,null,7),null);
+  assert.equal(calendar.forNetwork('2026-10-03','PINHEIRO',[{rede:'Pinheiro',pagamento_semanal_dia:6}]),'2026-10-10');
+  const state={workers:[],orders:[],scales:[],finance:[{id:1,origem:'diaria',tipo:'despesa',vencimento:'2026-10-10',valor_centavos:9000}],invoices:[]};
+  for(const today of ['2026-10-09','2026-10-10']) assert.ok(CRM.build({...state,today},today).filter(i=>i.kind==='pagamento').every(i=>!i.overdue));
+  assert.ok(CRM.build({...state,today:'2026-10-11'},'2026-10-11').some(i=>i.kind==='pagamento'&&i.overdue));
+});

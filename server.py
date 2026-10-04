@@ -243,6 +243,8 @@ def init_db():
         for column in ("pagamento_primeira_quinzena", "pagamento_segunda_quinzena"):
             if column not in rate_columns:
                 db.execute(f"ALTER TABLE tarifas_redes ADD COLUMN {column} INTEGER CHECK ({column} BETWEEN 1 AND 31)")
+        if "pagamento_semanal_dia" not in rate_columns:
+            db.execute("ALTER TABLE tarifas_redes ADD COLUMN pagamento_semanal_dia INTEGER CHECK (pagamento_semanal_dia IN (5,6))")
         db.execute("""CREATE TABLE IF NOT EXISTS tarifas_setores (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             rede TEXT REFERENCES tarifas_redes(rede) ON UPDATE CASCADE,
@@ -280,7 +282,7 @@ def init_db():
             "diarias": ("id", "diarista_id", "data", "local", "setor", "valor_centavos", "vencimento_pagamento", "vencimento_recebimento", "vencimento_origem", "data_pagamento", "forma_pagamento", "motivo_ajuste"),
             "financeiro_lancamentos": ("id", "tipo", "descricao", "contraparte", "valor_centavos", "vencimento", "data_pagamento", "forma_pagamento", "motivo_ajuste"),
             "pedido_escalas": ("id", "pedido_id", "diarista_id", "data", "status", "disponibilidade_pedido_confirmada", "desistencia_motivo", "desistencia_em", "desistencia_por", "substituida_por_escala_id"),
-            "tarifas_redes": ("id", "rede", "valor_recebido_centavos", "valor_padrao_centavos", "pagamento_primeira_quinzena", "pagamento_segunda_quinzena"),
+            "tarifas_redes": ("id", "rede", "valor_recebido_centavos", "valor_padrao_centavos", "pagamento_primeira_quinzena", "pagamento_segunda_quinzena", "pagamento_semanal_dia"),
             "tarifas_setores": ("id", "rede", "setor", "valor_pago_centavos"),
         }.items():
             for event in (("UPDATE",) if table == "tarifas_redes" else ("INSERT", "UPDATE", "DELETE")):
@@ -319,6 +321,12 @@ def init_db():
             for network in db.execute("SELECT id FROM tarifas_redes").fetchall():
                 calendar.refresh_pending(db, network['id'])
             db.execute("INSERT INTO direct_config_meta VALUES ('calendario_pagamentos_v1','aplicado')")
+        if not db.execute("SELECT 1 FROM direct_config_meta WHERE chave='calendario_pagamentos_semanal_v1'").fetchone():
+            for network, weekday in calendar.INITIAL_WEEKLY_CALENDARS.items():
+                db.execute("UPDATE tarifas_redes SET pagamento_semanal_dia=? WHERE rede=? AND pagamento_primeira_quinzena IS NULL AND pagamento_segunda_quinzena IS NULL AND pagamento_semanal_dia IS NULL", (weekday, network))
+            for network in db.execute("SELECT id FROM tarifas_redes WHERE pagamento_semanal_dia IS NOT NULL").fetchall():
+                calendar.refresh_pending(db, network['id'])
+            db.execute("INSERT INTO direct_config_meta VALUES ('calendario_pagamentos_semanal_v1','aplicado')")
 
 
 def valid_cpf(cpf):
@@ -1084,7 +1092,7 @@ class Handler(BaseHTTPRequestHandler):
                 data = calendar.validate_calendar(self.read_json())
                 with connect() as db:
                     network_id = int(calendar_match.group(1))
-                    cur = db.execute("UPDATE tarifas_redes SET pagamento_primeira_quinzena=?, pagamento_segunda_quinzena=?, atualizado_em=? WHERE id=?", (*data.values(), datetime.now(timezone.utc).isoformat(), network_id))
+                    cur = db.execute("UPDATE tarifas_redes SET pagamento_primeira_quinzena=?, pagamento_segunda_quinzena=?, pagamento_semanal_dia=?, atualizado_em=? WHERE id=?", (*data.values(), datetime.now(timezone.utc).isoformat(), network_id))
                     if not cur.rowcount:
                         return self.respond(HTTPStatus.NOT_FOUND, {"erro": "Rede não encontrada."})
                     calendar.refresh_pending(db, network_id)
@@ -1275,7 +1283,7 @@ class Handler(BaseHTTPRequestHandler):
                             if contract:
                                 paid_rate = contract['valor_pago_centavos'] if contract['valor_pago_centavos'] is not None else paid_rate
                                 received_rate = contract['valor_recebido_centavos'] if contract['valor_recebido_centavos'] is not None else received_rate
-                            due = calendar.payment_due(scale['data'], network_rate['pagamento_primeira_quinzena'], network_rate['pagamento_segunda_quinzena']) if network_rate else None
+                            due = calendar.payment_due(scale['data'], network_rate['pagamento_primeira_quinzena'], network_rate['pagamento_segunda_quinzena'], network_rate['pagamento_semanal_dia']) if network_rate else None
                             db.execute("""INSERT INTO diarias (diarista_id, data, local, setor, observacoes, pedido_escala_id,
                                 valor_centavos, valor_recebido_centavos, vencimento_pagamento, criado_em, contrato_id, vencimento_recebimento, vencimento_origem)
                                 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",

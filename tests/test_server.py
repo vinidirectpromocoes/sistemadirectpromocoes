@@ -294,7 +294,7 @@ class CadastroTest(unittest.TestCase):
         server.init_db()
         self.assertEqual(len(self.call("GET", "/api/tarifas")[1]["setores"]), 9)
         with server.connect() as db:
-            self.assertEqual(db.execute("SELECT count(*) FROM direct_auditoria WHERE tabela LIKE 'tarifas_%'").fetchone()[0], 21)  # Includes four audited calendar seeds.
+            self.assertEqual(db.execute("SELECT count(*) FROM direct_auditoria WHERE tabela LIKE 'tarifas_%'").fetchone()[0], 23)  # Includes four quinzenal and two weekly audited calendar seeds.
 
     def test_blocking_and_daily_history(self):
         _, created = self.call("POST", "/api/diaristas", SAMPLE)

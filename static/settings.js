@@ -80,6 +80,18 @@ function renderPaymentCalendars() {
     const form = settingsNode('form', 'settings-network-card');
     form.setAttribute('aria-label', `Calendário de ${item.rede}`);
     const title = settingsNode('h3', '', item.rede);
+    const modeLabel = settingsNode('label', 'settings-field', 'Frequência de pagamento');
+    const mode = document.createElement('select');
+    for (const [value, caption] of [['quinzenal','Quinzenal'],['semanal','Semanal — semana seguinte']]) {
+      const option = settingsNode('option', '', caption); option.value = value; mode.append(option);
+    }
+    mode.value = item.pagamento_semanal_dia == null ? 'quinzenal' : 'semanal'; modeLabel.append(mode);
+    const weekLabel = settingsNode('label', 'settings-field', 'Prazo na semana seguinte');
+    const weekly = document.createElement('select');
+    for (const [value, caption] of [['5','Sexta-feira'],['6','Sábado (pode pagar na sexta)']]) {
+      const option = settingsNode('option', '', caption); option.value = value; weekly.append(option);
+    }
+    weekly.value = String(item.pagamento_semanal_dia ?? 6); weekLabel.append(weekly);
     const fields = settingsNode('div', 'settings-network-fields');
     const inputs = ['Dias 1–15: dia de pagamento', 'Dias 16–31: dia do mês seguinte'].map((caption, index) => {
       const label = settingsNode('label', 'settings-field', caption);
@@ -88,15 +100,22 @@ function renderPaymentCalendars() {
       label.append(input); fields.append(label); return input;
     });
     const status = settingsNode('p', 'section-help', item.pagamento_primeira_quinzena == null ? 'Prazo não informado. Diárias sem prazo não são consideradas atrasadas.' : `1–15 → dia ${item.pagamento_primeira_quinzena} deste mês · 16–31 → dia ${item.pagamento_segunda_quinzena} do próximo mês`);
+    const showMode = () => {
+      const isWeekly = mode.value === 'semanal'; fields.hidden = isWeekly; weekLabel.hidden = !isWeekly;
+      inputs.forEach(input => input.disabled = isWeekly); weekly.disabled = !isWeekly;
+      if (isWeekly) status.textContent = `Diárias de segunda a domingo: pagamento ${weekly.value === '6' ? 'até sábado' : 'na sexta-feira'} da semana seguinte. Atraso somente após esse prazo.`;
+      else status.textContent = item.pagamento_primeira_quinzena == null ? 'Prazo não informado. Diárias sem prazo não são consideradas atrasadas.' : `1–15 → dia ${item.pagamento_primeira_quinzena} deste mês · 16–31 → dia ${item.pagamento_segunda_quinzena} do próximo mês`;
+    };
+    mode.addEventListener('change', showMode); weekly.addEventListener('change', showMode); showMode();
     const save = settingsNode('button', 'button button-outline', 'Salvar calendário'); save.type = 'submit';
-    form.append(title, fields, status, save);
+    form.append(title, modeLabel, fields, weekLabel, status, save);
     form.addEventListener('submit', async event => {
       event.preventDefault();
-      const days = inputs.map(input => input.value === '' ? null : Number(input.value));
+      const days = inputs.map(input => mode.value === 'semanal' || input.value === '' ? null : Number(input.value));
       if (!(days.every(day => day === null)) && !days.every(day => Number.isInteger(day) && day >= 1 && day <= 31)) return settingsMessage('Preencha os dois dias, de 1 a 31, ou deixe ambos em branco.', true);
       save.disabled = true;
       try {
-        await request(`/api/tarifas/redes/${item.id}/calendario`, {method:'PUT', headers:{'Content-Type':'application/json'}, body:JSON.stringify({pagamento_primeira_quinzena:days[0], pagamento_segunda_quinzena:days[1]})});
+        await request(`/api/tarifas/redes/${item.id}/calendario`, {method:'PUT', headers:{'Content-Type':'application/json'}, body:JSON.stringify({pagamento_primeira_quinzena:days[0], pagamento_segunda_quinzena:days[1], pagamento_semanal_dia: mode.value === 'semanal' ? Number(weekly.value) : null})});
         await loadSettings(); await loadFinance(); await loadHome();
         settingsMessage(`Calendário de ${item.rede} atualizado para recebimentos e pagamentos.`);
       } catch (error) { settingsMessage(`Não foi possível salvar: ${error.message}`, true); }

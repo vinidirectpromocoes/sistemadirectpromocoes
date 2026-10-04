@@ -546,10 +546,24 @@ async function runPaymentCalendars() {
       await form.getByRole('button', {name:'Salvar calendário'}).waitFor(); assert.equal(await form.locator('input').nth(1).inputValue(),'18');
       await form.locator('input').nth(1).fill('15');await form.getByRole('button',{name:'Salvar calendário'}).click();
       await page.getByText('Calendário de Super do Povo atualizado para recebimentos e pagamentos.',{exact:true}).waitFor();
-      const unknown=page.getByRole('form',{name:'Calendário de Pinheiro',exact:true});
-      assert.equal(await unknown.locator('input').nth(0).inputValue(),'');assert.match(await unknown.innerText(),/Prazo não informado/);
+      const weekly=page.getByRole('form',{name:'Calendário de Pinheiro',exact:true});
+      assert.equal(await weekly.getByLabel('Frequência de pagamento').inputValue(),'semanal');
+      assert.equal(await weekly.getByLabel('Prazo na semana seguinte').inputValue(),'6');
+      assert.equal(await weekly.locator('input').nth(0).isVisible(),false);
+      assert.match(await weekly.innerText(),/segunda a domingo.*até sábado.*semana seguinte/);
+      assert.ok(await weekly.getByLabel('Prazo na semana seguinte').evaluate(e=>parseFloat(getComputedStyle(e).fontSize))>=16);
+      await weekly.getByLabel('Prazo na semana seguinte').selectOption('5');
+      await weekly.getByRole('button',{name:'Salvar calendário'}).click();
+      await page.getByText('Calendário de Pinheiro atualizado para recebimentos e pagamentos.',{exact:true}).waitFor();
+      await page.waitForLoadState('networkidle');await page.reload();
+      await weekly.getByRole('button',{name:'Salvar calendário'}).waitFor();
+      assert.equal(await weekly.getByLabel('Prazo na semana seguinte').inputValue(),'5');
+      await weekly.getByLabel('Prazo na semana seguinte').selectOption('6');
+      await weekly.getByRole('button',{name:'Salvar calendário'}).click();
+      await page.getByText('Calendário de Pinheiro atualizado para recebimentos e pagamentos.',{exact:true}).waitFor();
+      if(name==='WebKit'){await weekly.scrollIntoViewIfNeeded();await page.screenshot({path:'/tmp/direct-calendario-semanal.png'});}
       await page.waitForLoadState('networkidle'); assert.deepEqual(errors,[]);
-      console.log(`${name} 320px: calendários, persistência, tema, prazo desconhecido e foco sem zoom OK`);
+      console.log(`${name} 320px: calendários quinzenal/semanal, próxima semana, persistência, tema e foco sem zoom OK`);
       await context.close();
     } finally { await browser.close(); }
   }
@@ -756,6 +770,7 @@ async function runAssistantFlow(){
 try {
   await ready();
   if(process.env.DIRECT_FINANCE_ONLY==='1'){await runFinancialWorkflow();}
+  else if(process.env.DIRECT_CALENDAR_ONLY==='1'){await runPaymentCalendars();}
   else if(process.env.DIRECT_ASSISTANT_ONLY==='1'){await runAssistantFlow();}
   else if(process.env.DIRECT_REMAINING_ONLY==='1'){await runLinkedReading();await runOrderFilters();await runScaleLifecycle();await runRecentOrderAttendance();await runAssistantFlow();}
   else {

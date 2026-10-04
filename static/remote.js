@@ -414,8 +414,10 @@
       const rateId = parts[3] ? Number(parts[3]) : null;
       if (table === 'tarifas_redes' && method === 'PUT' && rateId && parts[4] === 'calendario') {
         const first = p.pagamento_primeira_quinzena, second = p.pagamento_segunda_quinzena;
+        const weekly = p.pagamento_semanal_dia ?? null;
+        if (weekly !== null && (![5,6].includes(weekly) || first !== null || second !== null)) throw new Error('Escolha sexta-feira ou sábado e deixe os dias quinzenais em branco.');
         if (!(first === null && second === null) && ![first, second].every(day => Number.isInteger(day) && day >= 1 && day <= 31)) throw new Error('Informe os dois dias, de 1 a 31, ou deixe ambos em branco.');
-        return unwrap(await sb.from(table).update({ pagamento_primeira_quinzena: first, pagamento_segunda_quinzena: second, atualizado_em: new Date().toISOString() }).eq('id', rateId).select().single());
+        return unwrap(await sb.from(table).update({ pagamento_primeira_quinzena: first, pagamento_segunda_quinzena: second, pagamento_semanal_dia: weekly, atualizado_em: new Date().toISOString() }).eq('id', rateId).select().single());
       }
       if (table === 'tarifas_redes' && method === 'PUT' && rateId) {
         return unwrap(await sb.from(table).update({ valor_recebido_centavos: money(p.valor_recebido), valor_padrao_centavos: money(p.valor_padrao), atualizado_em: new Date().toISOString() }).eq('id', rateId).select().single());
