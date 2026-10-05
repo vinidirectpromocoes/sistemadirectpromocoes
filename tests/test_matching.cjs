@@ -17,10 +17,12 @@ test('prioriza experiência e bairro e recusa deslocamento limitado', () => {
   assert.equal(matching.rank(worker, shift, order, { bairro: 'Cambeba' }, [order], {}).reason, 'Deslocamento limitado');
 });
 
-test('conflito de turno impede recomendação; falta libera a pessoa', () => {
+test('sobreposição e disponibilidade não impedem recomendação', () => {
   const another = { id: 2, turnos: [{ data: '2026-09-28', inicio: '10:00', fim: '18:00' }] };
   const scales = { 2: [{ diarista_id: 5, data: '2026-09-28', status: 'escalada' }] };
-  assert.equal(matching.rank(worker, shift, order, { bairro: 'Meireles' }, [order, another], scales).reason, 'Conflito de horário');
+  assert.equal(matching.rank(worker, shift, order, { bairro: 'Meireles' }, [order, another], scales).eligible, true);
   scales[2][0].status = 'falta';
   assert.equal(matching.rank(worker, shift, order, { bairro: 'Meireles' }, [order, another], scales).eligible, true);
 });
+
+test('cadastro básico sem horários pode ser selecionado em qualquer dia',()=>{assert.equal(matching.rank({...worker,disponibilidade:[]},shift,order,{bairro:'Meireles'},[],{}).eligible,true);});

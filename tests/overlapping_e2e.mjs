@@ -1,0 +1,35 @@
+import assert from 'node:assert/strict';
+import {spawn} from 'node:child_process';
+import {mkdtemp,rm} from 'node:fs/promises';
+import os from 'node:os';import path from 'node:path';import net from 'node:net';
+import {chromium,webkit} from 'playwright';
+const folder=await mkdtemp(path.join(os.tmpdir(),'direct-overlap-')),socket=net.createServer();
+await new Promise(r=>socket.listen(0,'127.0.0.1',r));const port=socket.address().port;await new Promise(r=>socket.close(r));
+const url='http://127.0.0.1:'+port,child=spawn(process.env.PYTHON||'python3',['server.py'],{env:{...process.env,DIARISTAS_DB_PATH:path.join(folder,'test.db'),DIARISTAS_PORT:String(port)},stdio:'ignore'});
+const api=async(method,route,body)=>{const r=await fetch(url+route,{method,headers:{'Content-Type':'application/json'},body:body?JSON.stringify(body):undefined}),d=await r.json();assert.ok(r.ok,JSON.stringify(d));return d;};
+try {
+ for(let i=0;i<80;i++){try{await api('GET','/api/lojas');break;}catch{}await new Promise(r=>setTimeout(r,100));}
+ for(const [engine,name] of [[chromium,'Chromium'],[webkit,'WebKit']]) for(const width of [1280,390,320]) {
+  const browser=await engine.launch(),context=await browser.newContext({viewport:{width,height:844},isMobile:width<500,hasTouch:width<500}),page=await context.newPage(),errors=[];
+  page.on('pageerror',e=>errors.push(e.message));await page.goto(url+'/#leitura');
+  for(const time of ['13:40 as 22:00','07:00 as 15:20']) {
+   const message=`Rede: Super do Povo\nLoja: Meireles\nFunção: Balcao de Frios\nHorário: ${time}\nData de inicio: 06/10/2026 a 12/10/2026\nQuantidade de dias: 7\nNome: Paulo Roberto Porfirio\nCPF: 64865592334`;
+   await page.locator('#reading-text').fill(message);await page.locator('#reading-submit').click();await page.locator('.reading-preview').waitFor();
+   await page.locator('#reading-confirm').click();await page.locator('#reading-result-items .reading-item.saved').waitFor();
+  }
+  const workers=await api('GET','/api/diaristas');assert.equal(workers.length,1);const worker=workers[0];assert.equal(worker.cpf,'64865592334');
+  let orders=await api('GET','/api/pedidos'),scales=await api('GET','/api/escalas');assert.equal(orders.length,2);assert.equal(scales.length,14);assert.ok(orders.every(o=>o.situacao==='confirmado'));assert.ok(scales.every(s=>s.diarista_id===worker.id));
+  const third=await api('POST','/api/pedidos',{supermercado:'Super do Povo',unidade:'Meireles',setor:'Balcao de Frios',quantidade_diaristas:1,turnos:orders[0].turnos});
+  await page.locator('#nav-pedidos').click();await page.evaluate(id=>openOrderDetail(id),third.id);
+  await page.getByLabel('Escolher diarista para 06/10/2026',{exact:true}).selectOption(String(worker.id));await page.getByRole('button',{name:'Todos os dias possíveis (7)',exact:true}).click();await page.waitForFunction(()=>document.querySelector('#order-detail-success')?.textContent.includes('7 dias'));
+  assert.equal((await api('GET',`/api/pedidos/${third.id}/escalas`)).length,7);await page.locator('#order-detail-close-bottom').click();
+  await page.waitForLoadState('networkidle');await page.reload();await page.evaluate(id=>openOrderDetail(id),third.id);await page.waitForFunction(()=>document.querySelectorAll('#order-detail-shifts [data-scale-id]').length===7);
+  assert.equal((await api('GET','/api/escalas')).length,21);assert.equal((await api('GET','/api/financeiro')).length,0);
+  assert.ok(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth+2));assert.deepEqual(errors,[]);
+  await browser.close();
+  for(const s of await api('GET','/api/escalas'))await api('DELETE',`/api/pedidos/${s.pedido_id}/escalas/${s.id}`);
+  for(const o of await api('GET','/api/pedidos'))await api('DELETE',`/api/pedidos/${o.id}`);
+  await api('DELETE',`/api/diaristas/${worker.id}`);
+  console.log(`${name} ${width}: exemplo Paulo, 2 pedidos/14 escalas sobrepostas, escala manual 7 dias, recarga e finanças sem presença OK`);
+ }
+} finally {child.kill();await rm(folder,{recursive:true,force:true});}

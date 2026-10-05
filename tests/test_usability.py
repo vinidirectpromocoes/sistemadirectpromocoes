@@ -31,11 +31,12 @@ class UsabilityTests(unittest.TestCase):
         self.assertEqual(self.call('POST','/api/substituicao-contatos',{'escala_id':scales[0]['id'],'diarista_id':new['id'],'resposta':'recusou'})[0],409)
         self.assertEqual(self.call('POST','/api/substituicao-contatos',{'escala_id':scales[0]['id'],'diarista_id':new['id'],'resposta':'recusou','expected_updated_at':response['atualizado_em'],'datas':['2039-01-01']})[0],400)
         with server.connect() as db:self.assertEqual(db.execute('select count(*) from diarias').fetchone()[0],0)
-        # Occupy the third date elsewhere; the first two replacements must also roll back.
-        _,other=self.call('POST','/api/pedidos',{**p,'turnos':[p['turnos'][2]]});self.call('POST',f"/api/pedidos/{other['id']}/escalas",{'data':dates[2],'diarista_id':new['id'],'disponibilidade_confirmada':True})
-        code,result=self.call('POST',route,{'diarista_id':new['id'],'todos_restantes':True,'disponibilidade_confirmada':True,'motivo':'Troca solicitada pela pessoa'});self.assertEqual(code,400,result)
+        # Cadastro bloqueado impede a troca inteira, sem alterar a escala original.
+        self.call('PATCH',f"/api/diaristas/{new['id']}/bloqueio",{'bloqueada':True})
+        code,result=self.call('POST',route,{'diarista_id':new['id'],'todos_restantes':True,'motivo':'Troca solicitada pela pessoa'});self.assertEqual(code,400,result)
         scales=self.call('GET',f"/api/pedidos/{o['id']}/escalas")[1];self.assertEqual(len(scales),3);self.assertTrue(all(s['status']=='escalada' for s in scales))
-        other_scale=self.call('GET',f"/api/pedidos/{other['id']}/escalas")[1][0];self.call('DELETE',f"/api/pedidos/{other['id']}/escalas/{other_scale['id']}");self.call('DELETE',f"/api/pedidos/{other['id']}")
+        self.call('PATCH',f"/api/diaristas/{new['id']}/bloqueio",{'bloqueada':False})
+        _,other=self.call('POST','/api/pedidos',{**p,'turnos':[p['turnos'][2]]});self.call('POST',f"/api/pedidos/{other['id']}/escalas",{'data':dates[2],'diarista_id':new['id']})
         code,result=self.call('POST',route,{'diarista_id':new['id'],'todos_restantes':True,'disponibilidade_confirmada':True,'motivo':'Troca solicitada pela pessoa'});self.assertEqual(code,200,result);self.assertEqual(len(result),3)
         scales=self.call('GET',f"/api/pedidos/{o['id']}/escalas")[1];self.assertEqual(sum(s['status']=='desistiu' for s in scales),3);self.assertTrue(all(s['substituida_por_escala_id'] for s in scales if s['diarista_id']==old['id']))
         with server.connect() as db:self.assertEqual(db.execute('select count(*) from diarias').fetchone()[0],0)

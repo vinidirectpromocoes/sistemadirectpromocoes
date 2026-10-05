@@ -654,17 +654,7 @@ def validate_worker_shift(db, worker, order, day, scoped_availability=False):
     shift = order_shift(order, day)
     if shift is None:
         raise ValueError("A data escolhida não consta no pedido.")
-    weekday = WEEKDAYS[date.fromisoformat(day).weekday()]
-    slots = json.loads(worker["disponibilidade"])
-    if not scoped_availability and not any(slot["dia"] == weekday and slot["inicio"] <= shift["inicio"] and slot["fim"] >= shift["fim"] for slot in slots):
-        raise ValueError("A diarista não está disponível nesse dia e horário.")
-    other_scales = db.execute("""SELECT e.data, p.turnos FROM pedido_escalas e
-        JOIN pedidos p ON p.id = e.pedido_id
-        WHERE e.diarista_id = ? AND e.data = ? AND e.status NOT IN ('falta','desistiu')""", (worker["id"], day))
-    for other in other_scales:
-        existing = order_shift(other, day)
-        if existing and shift["inicio"] < existing["fim"] and existing["inicio"] < shift["fim"]:
-            raise ValueError("A diarista já está escalada em outro pedido nesse horário.")
+    # A escolha de dias e horários é livre; cada pedido conserva sua própria escala.
 
 
 def order_scale_rows(db, order_id):

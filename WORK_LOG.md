@@ -26,3 +26,15 @@ A regressão no WebKit Linux detectou um campo de calendário herdando a fonte c
 Uma recarga com leituras locais ainda em andamento também expôs erros de origem descartada no WebKit. Leituras GET locais agora são canceladas em pagehide; gravações conservam seu ciclo. A regressão provoca uma recarga durante uma consulta atrasada e verifica ausência de exceções e funcionamento da leitura na página nova.
 
 O clique imediato em “Contrato”, antes da resposta das tarifas, acessava settingsData nulo. O formulário agora aguarda os setores, mostra falha de carregamento quando necessário e respeita uma mudança de aba durante a espera. A regressão atrasa deliberadamente a resposta das tarifas.
+
+## 2026-10-05 — Escalas livres entre pedidos
+
+Solicitação: permitir o mesmo diarista em vários pedidos, inclusive no mesmo dia e em horários sobrepostos.
+
+- Supabase e servidor local deixam de bloquear a escala por sobreposição ou pela disponibilidade geral cadastrada. Datas válidas do pedido, identidade, vagas e permissões continuam verificadas.
+- Escala manual mostra todos os cadastros não bloqueados e permite selecionar todos os dias com vaga; horário disponível serve para ordenar sugestões, sem impedir a escolha.
+- Leitura com nome/CPF reutiliza o cadastro e cria escalas independentes em cada pedido. Substituição em lote também aceita pessoa escalada em outro pedido.
+- Regressão: exemplo Paulo, Super do Povo/Meireles, 06–12/10/2026, 07:00–15:20 e 13:40–22:00, testado em Chromium/WebKit nas larguras 1280, 390 e 320. Dois pedidos/14 escalas; terceiro pedido manual/7 escalas; recarga preserva registros; escalar não gera pagamento.
+- 80 testes JS e 57 testes backend aprovados. Presenças dos dois turnos geram duas diárias; falta num turno remove somente sua diária; previsão mantém pedidos independentes.
+- SQL real com rollback: leitura conjunta, escala manual sem disponibilidade, presença/falta, permissões, substituição sobreposta, portal de vagas. Nenhum dado sintético fica na produção.
+- Teste de navegador de sobreposição integrado ao gate de publicação; CI completa obrigatória antes da publicação.

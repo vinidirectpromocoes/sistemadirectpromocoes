@@ -87,3 +87,10 @@ result=calculate([confirmedOrder],{20:[scale(1,'2026-09-30','presente')]},{},per
 assert.equal(result.confirmedMissingRevenue,1);
 assert.equal(result.confirmedMissingCost,1);
 console.log('Cards confirmados e períodos dia/semana: OK');
+
+// A mesma pessoa em turnos sobrepostos continua representando duas diárias independentes.
+const overlappingOrders=['07:00','13:40'].map((inicio,i)=>({...firstOrder,id:40+i,setor:'Balcao de Frios',turnos:Array.from({length:7},(_,n)=>({data:`2026-10-${String(n+6).padStart(2,'0')}`,inicio,fim:i?'22:00':'15:20'}))}));
+const overlappingScales=Object.fromEntries(overlappingOrders.map(o=>[o.id,o.turnos.map((t,i)=>({...scale(o.id*10+i,t.data,'escalada'),diarista_id:8}))]));
+result=calculate(overlappingOrders,overlappingScales,tariffs,'2026-10');assert.equal(result.expectedDays,14);assert.equal(result.expected.revenue,14*13400);assert.equal(result.expected.cost,14*9000);
+overlappingScales[40][0].status='presente';overlappingScales[40][0].diaria={valor_centavos:9000,valor_recebido_centavos:13400};overlappingScales[41][0].status='falta';
+result=calculate(overlappingOrders,overlappingScales,tariffs,'2026-10');assert.equal(result.expectedDays,13);assert.equal(result.confirmed.revenue,13400);assert.equal(result.confirmed.cost,9000);assert.equal(result.confirmed.margin,4400);assert.equal(overlappingScales[40][0].status,'presente');
