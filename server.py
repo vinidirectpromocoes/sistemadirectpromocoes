@@ -1508,11 +1508,31 @@ class Handler(BaseHTTPRequestHandler):
             return self.respond(HTTPStatus.OK, {"ok": True})
         order_match = re.fullmatch(r"/api/pedidos/(\d+)", urlparse(self.path).path)
         if order_match:
-            with connect() as db:
-                if db.execute("SELECT 1 FROM pedido_escalas WHERE pedido_id = ? LIMIT 1", (int(order_match.group(1)),)).fetchone():
-                    return self.respond(HTTPStatus.CONFLICT, {"erro": "Este pedido tem escalas registradas e deve ser preservado."})
-                cur = db.execute("DELETE FROM pedidos WHERE id = ?", (int(order_match.group(1)),))
-            return self.respond(HTTPStatus.OK if cur.rowcount else HTTPStatus.NOT_FOUND, {"ok": bool(cur.rowcount)})
+            try:
+                payload = self.read_json() if int(self.headers.get("Content-Length", "0")) else {}
+                order_id = int(order_match.group(1))
+                with connect() as db:
+                    db.execute("BEGIN IMMEDIATE")
+                    old = db.execute("SELECT * FROM pedidos WHERE id = ?", (order_id,)).fetchone()
+                    if not old:
+                        return self.respond(HTTPStatus.NOT_FOUND, {"erro": "Pedido não encontrado."})
+                    if payload.get("expected_updated_at") and payload["expected_updated_at"] != old["atualizado_em"]:
+                        return self.respond(HTTPStatus.CONFLICT, {"erro": "Este pedido foi alterado por outra pessoa. Atualize a lista e abra novamente antes de excluir."})
+                    history = db.execute("SELECT 1 FROM pedido_escalas WHERE pedido_id = ? AND status <> 'escalada' LIMIT 1", (order_id,)).fetchone()
+                    daily = db.execute("SELECT 1 FROM diarias d JOIN pedido_escalas e ON e.id=d.pedido_escala_id WHERE e.pedido_id=? LIMIT 1", (order_id,)).fetchone()
+                    invoice = db.execute("SELECT 1 FROM cobranca_itens WHERE pedido_id=? LIMIT 1", (order_id,)).fetchone()
+                    checks = db.execute("SELECT 1 FROM loja_validacoes v JOIN pedido_escalas e ON e.id=v.escala_id WHERE e.pedido_id=? LIMIT 1", (order_id,)).fetchone()
+                    if history or daily or invoice or checks:
+                        return self.respond(HTTPStatus.CONFLICT, {"erro": "Este pedido possui histórico de presença, falta, desistência, conferência ou financeiro. Cancele o pedido para preservar esses registros."})
+                    if db.execute("SELECT 1 FROM ocorrencias WHERE pedido_id=? OR escala_id IN (SELECT id FROM pedido_escalas WHERE pedido_id=?) LIMIT 1", (order_id, order_id)).fetchone():
+                        return self.respond(HTTPStatus.CONFLICT, {"erro": "Este pedido possui ocorrências registradas. Cancele o pedido para preservar o histórico."})
+                    removed = db.execute("DELETE FROM pedido_escalas WHERE pedido_id=?", (order_id,)).rowcount
+                    db.execute("DELETE FROM pedidos WHERE id=?", (order_id,))
+                return self.respond(HTTPStatus.OK, {"ok": True, "escalas_removidas": removed})
+            except (ValueError, TypeError, json.JSONDecodeError) as exc:
+                return self.respond(HTTPStatus.BAD_REQUEST, {"erro": str(exc)})
+            except sqlite3.IntegrityError:
+                return self.respond(HTTPStatus.CONFLICT, {"erro": "Este pedido possui registros vinculados. Cancele o pedido para preservar o histórico."})
         finance_match = re.fullmatch(r"/api/financeiro/(\d+)", urlparse(self.path).path)
         if finance_match:
             with connect() as db:

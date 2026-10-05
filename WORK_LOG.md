@@ -47,3 +47,13 @@ Solicitação: permitir o mesmo diarista em vários pedidos, inclusive no mesmo 
 - Ensaio SQL com usuário autenticado, dados sintéticos e rollback confirma edição, preservação financeira, bloqueio de alteração estrutural e ausência de acesso anônimo.
 - Gerador de CPF sintético do ensaio SQL corrigido nos pesos verificadores para evitar rejeições aleatórias na própria fixture.
 - Pedido solicitado do Super do Povo/Meireles, 06–12/10/2026 07:00–15:20, corrigido de “frios ( dois)” para “Balconista de frios”, com comparação transacional garantindo equipe e demais campos idênticos.
+
+## 2026-10-05 — Excluir pedido com escalas planejadas
+
+- Exclusão via RPC invoker/autenticada e backend local remove pedido e suas escalas planejadas em uma única transação. Preserva cadastro dos diaristas e outros pedidos; versão antiga é recusada e exclusão repetida não retorna sucesso falso.
+- Histórico de presença/falta/desistência, diária, cobrança, conferência da loja ou ocorrência exige cancelamento para preservar os registros. Não foram relaxados os guards de histórico nem o RLS.
+- Frontend usa a operação atômica, explica a remoção das escalas na confirmação, desabilita duplo clique, mostra erro na posição visível e atualiza lista, início e gestão.
+- 60 testes backend, 80 JS e seis cenários de navegador aprovados (Chromium/WebKit, 1280/390/320). Botão cancelar não exclui; confirmar exclui sete escalas; cadastro e outros 14 vínculos permanecem; previsão reduz faturamento/custo/lucro em 938/630/308 no cenário testado.
+- SQL autenticado real com rollback confirma versão, atomicidade, histórico e permissões de admin/operação, com negativas para financeiro/consulta/sem perfil/anon. Security Advisor não apontou o novo RPC; avisos já existentes permanecem.
+- A primeira execução de navegador acusou mensagens nativas de origem descartada no WebKit durante recarga. O roteiro agora aguarda a conclusão da exclusão e das consultas antes da recarga de persistência; verificações de exceções foram mantidas e todos os seis cenários passaram. Logs preservados em .design-qa.
+- Pedido indicado, Super do Povo/Meireles 06–12/10/2026 07:00–15:20, removido com sete escalas depois de backup. Comparação transacional confirmou cadastro, outros pedidos, escalas e financeiro intactos, incluindo 14 escalas de Paulo nos outros dois pedidos.

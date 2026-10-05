@@ -25,13 +25,19 @@ try {
   const beforeEdit=await api('GET',`/api/pedidos/${third.id}/escalas`);assert.equal(beforeEdit.length,7);
   await page.locator('#order-edit-button').click();await page.locator('#order-sector').fill('Balconista de frios');await page.locator('#order-save-button').click();await page.locator('#order-dialog').waitFor({state:'hidden'});
   const corrected=(await api('GET','/api/pedidos')).find(o=>o.id===third.id);assert.equal(corrected.setor,'Balconista de frios');assert.deepEqual(corrected.turnos,third.turnos);assert.deepEqual(await api('GET',`/api/pedidos/${third.id}/escalas`),beforeEdit);
-  await page.waitForLoadState('networkidle');await page.reload();await page.evaluate(id=>openOrderDetail(id),third.id);await page.waitForFunction(()=>document.querySelectorAll('#order-detail-shifts [data-scale-id]').length===7);
+  await page.waitForLoadState('networkidle');await page.waitForFunction(()=>activeRequests===0);await page.reload();await page.evaluate(id=>openOrderDetail(id),third.id);await page.waitForFunction(()=>document.querySelectorAll('#order-detail-shifts [data-scale-id]').length===7);
   assert.equal((await api('GET','/api/escalas')).length,21);assert.equal((await api('GET','/api/financeiro')).length,0);
+  const expected=async()=>page.evaluate(async()=>{const orders=await request('/api/pedidos'),scales=await request('/api/escalas'),tariffs=await request('/api/tarifas'),byOrder={};for(const s of scales)(byOrder[s.pedido_id]||=[]).push(s);return DirectForecast.calculate(orders,byOrder,tariffs,'').expected;});
+  const forecastBefore=await expected();page.once('dialog',dialog=>dialog.dismiss());await page.locator('#order-delete-button').click();assert.equal((await api('GET','/api/pedidos')).length,3);
+  page.once('dialog',dialog=>dialog.accept());await page.locator('#order-delete-button').click();await page.locator('#order-detail-dialog').waitFor({state:'hidden'});
+  assert.equal((await api('GET','/api/pedidos')).length,2);assert.equal((await api('GET','/api/escalas')).length,14);assert.equal((await api('GET','/api/diaristas')).length,1);
+  const forecastAfter=await expected();assert.equal(forecastBefore.revenue-forecastAfter.revenue,7*13400);assert.equal(forecastBefore.cost-forecastAfter.cost,7*9000);assert.equal(forecastBefore.net-forecastAfter.net,7*4400);
+  await page.waitForFunction(()=>!document.querySelector('#order-delete-button').disabled && activeRequests===0);await page.waitForLoadState('networkidle');await page.reload();await page.waitForLoadState('networkidle');assert.equal((await api('GET','/api/pedidos')).length,2);assert.equal((await api('GET','/api/escalas')).length,14);
   assert.ok(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth+2));assert.deepEqual(errors,[]);
   await browser.close();
   for(const s of await api('GET','/api/escalas'))await api('DELETE',`/api/pedidos/${s.pedido_id}/escalas/${s.id}`);
   for(const o of await api('GET','/api/pedidos'))await api('DELETE',`/api/pedidos/${o.id}`);
   await api('DELETE',`/api/diaristas/${worker.id}`);
-  console.log(`${name} ${width}: 2 pedidos/14 escalas sobrepostas; edição real de setor preserva 7 escalas/datas, recarga e finanças OK`);
+  console.log(`${name} ${width}: edição preserva 7 escalas; cancelar/excluir pelo botão, cadastro e outro pedido preservados; previsão -938/-630/-308 e recarga OK`);
  }
 } finally {child.kill();await rm(folder,{recursive:true,force:true});}

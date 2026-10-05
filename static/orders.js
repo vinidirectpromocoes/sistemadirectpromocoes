@@ -635,12 +635,16 @@ async function openOrderDetail(id) {
 
 async function deleteOrder() {
   const item = orderRecords.find(row => row.id === orderDetailId);
-  if (!item || !window.confirm(`Excluir o pedido de ${item.supermercado}? Esta ação não pode ser desfeita.`)) return;
+  if (!item || !window.confirm(`Excluir o pedido de ${item.supermercado}${item.unidade ? ' · ' + item.unidade : ''}? As escalas deste pedido também serão removidas. O cadastro dos diaristas será mantido. Esta ação não pode ser desfeita.`)) return;
+  const button = $('#order-delete-button'); button.disabled = true;
   try {
-    await request(`/api/pedidos/${item.id}`, { method: 'DELETE' });
+    await request(`/api/pedidos/${item.id}`, { method: 'DELETE', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ expected_updated_at: item.atualizado_em || null }) });
     $('#order-detail-dialog').close(); orderDetailId = null;
     await loadOrders(); showOrderFeedback('Pedido excluído.');
-  } catch (err) { $('#order-detail-error').textContent = err.message; $('#order-detail-error').hidden = false; }
+    window.DirectManagementUI?.refresh();
+    if (typeof loadHome === 'function') loadHome().catch(() => {});
+  } catch (err) { orderDetailError(err.message); }
+  finally { button.disabled = false; }
 }
 
 function orderDialogBackdrop(event) {

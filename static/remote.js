@@ -421,7 +421,7 @@
         return orderView(unwrap(response));
       }
       if (method === 'PUT') return orderView(await updateVersioned('pedidos', id, orderPayload(p), p));
-      if (method === 'DELETE') { unwrap(await sb.from('pedidos').delete().eq('id', id)); return { ok: true }; }
+      if (method === 'DELETE') return unwrap(await sb.rpc('direct_delete_order', { p_id: id, p_expected_updated_at: p.expected_updated_at || null }));
     }
     if (entity === 'solicitacoes-lojas' || entity === 'conferencias-lojas') {
       if (!['admin','operacao'].includes(currentRole)) throw Error('Sem permissão para solicitações de lojas.');
