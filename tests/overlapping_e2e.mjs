@@ -19,10 +19,12 @@ try {
   }
   const workers=await api('GET','/api/diaristas');assert.equal(workers.length,1);const worker=workers[0];assert.equal(worker.cpf,'64865592334');
   let orders=await api('GET','/api/pedidos'),scales=await api('GET','/api/escalas');assert.equal(orders.length,2);assert.equal(scales.length,14);assert.ok(orders.every(o=>o.situacao==='confirmado'));assert.ok(scales.every(s=>s.diarista_id===worker.id));
-  const third=await api('POST','/api/pedidos',{supermercado:'Super do Povo',unidade:'Meireles',setor:'Balcao de Frios',quantidade_diaristas:1,turnos:orders[0].turnos});
+  const third=await api('POST','/api/pedidos',{supermercado:'Super do Povo',unidade:'Meireles',setor:'frios ( dois)',quantidade_diaristas:1,turnos:orders[0].turnos});
   await page.locator('#nav-pedidos').click();await page.evaluate(id=>openOrderDetail(id),third.id);
   await page.getByLabel('Escolher diarista para 06/10/2026',{exact:true}).selectOption(String(worker.id));await page.getByRole('button',{name:'Todos os dias possíveis (7)',exact:true}).click();await page.waitForFunction(()=>document.querySelector('#order-detail-success')?.textContent.includes('7 dias'));
-  assert.equal((await api('GET',`/api/pedidos/${third.id}/escalas`)).length,7);await page.locator('#order-detail-close-bottom').click();
+  const beforeEdit=await api('GET',`/api/pedidos/${third.id}/escalas`);assert.equal(beforeEdit.length,7);
+  await page.locator('#order-edit-button').click();await page.locator('#order-sector').fill('Balconista de frios');await page.locator('#order-save-button').click();await page.locator('#order-dialog').waitFor({state:'hidden'});
+  const corrected=(await api('GET','/api/pedidos')).find(o=>o.id===third.id);assert.equal(corrected.setor,'Balconista de frios');assert.deepEqual(corrected.turnos,third.turnos);assert.deepEqual(await api('GET',`/api/pedidos/${third.id}/escalas`),beforeEdit);
   await page.waitForLoadState('networkidle');await page.reload();await page.evaluate(id=>openOrderDetail(id),third.id);await page.waitForFunction(()=>document.querySelectorAll('#order-detail-shifts [data-scale-id]').length===7);
   assert.equal((await api('GET','/api/escalas')).length,21);assert.equal((await api('GET','/api/financeiro')).length,0);
   assert.ok(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth+2));assert.deepEqual(errors,[]);
@@ -30,6 +32,6 @@ try {
   for(const s of await api('GET','/api/escalas'))await api('DELETE',`/api/pedidos/${s.pedido_id}/escalas/${s.id}`);
   for(const o of await api('GET','/api/pedidos'))await api('DELETE',`/api/pedidos/${o.id}`);
   await api('DELETE',`/api/diaristas/${worker.id}`);
-  console.log(`${name} ${width}: exemplo Paulo, 2 pedidos/14 escalas sobrepostas, escala manual 7 dias, recarga e finanças sem presença OK`);
+  console.log(`${name} ${width}: 2 pedidos/14 escalas sobrepostas; edição real de setor preserva 7 escalas/datas, recarga e finanças OK`);
  }
 } finally {child.kill();await rm(folder,{recursive:true,force:true});}

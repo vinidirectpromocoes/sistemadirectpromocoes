@@ -9,7 +9,7 @@ perform set_config('request.jwt.claims',jsonb_build_object('sub',uid,'email',ema
 -- Identidade sintética sem colidir com nenhum cadastro real.
 loop
  stem:=floor(100000000+random()*899999999)::bigint::text;v_cpf:=stem;
- for n in 9..10 loop select (sum(substring(v_cpf,i,1)::int*(n+1-i))*10)%11 into digit from generate_series(1,n)i;v_cpf:=v_cpf||case when digit=10 then '0' else digit::text end;end loop;
+ for n in 9..10 loop select (sum(substring(v_cpf,i,1)::int*(n+2-i))*10)%11 into digit from generate_series(1,n)i;v_cpf:=v_cpf||case when digit=10 then '0' else digit::text end;end loop;
  exit when not exists(select 1 from public.diaristas where diaristas.cpf=v_cpf);
 end loop;
 select jsonb_agg(jsonb_build_object('data',day+i,'inicio','07:00','fim','15:20') order by i),jsonb_agg(jsonb_build_object('data',day+i,'inicio','13:40','fim','22:00') order by i) into turn1,turn2 from generate_series(0,6)i;
@@ -29,6 +29,15 @@ update public.pedido_escalas set status='presente' where id in(e1,e2);
 if (select count(*) from public.diarias where pedido_escala_id in(e1,e2))<>2 then raise exception 'Presenças de dois pedidos foram agrupadas incorretamente.';end if;
 select valor_recebido_centavos,valor_centavos into amount,expense from public.diarias where pedido_escala_id=e1;
 if amount is null or expense is null then raise exception 'Presença não congelou os valores.';end if;
+-- Corrigir setor preserva as escalas e os registros financeiros congelados.
+update public.pedidos set setor='Balconista de frios' where id=first_order;
+if (select count(*) from public.pedido_escalas where pedido_id=first_order)<>7 or not exists(select 1 from public.diarias where pedido_escala_id=e1 and valor_recebido_centavos=amount and valor_centavos=expense) then raise exception 'Correção de setor alterou equipe ou valores.';end if;
+begin
+ update public.pedidos set quantidade_diaristas=2 where id=first_order;
+ raise exception 'Quantidade com escala foi alterada indevidamente.';
+exception when others then
+ if sqlerrm not like 'Este pedido já possui escalas.%' then raise;end if;
+end;
 update public.pedido_escalas set status='falta',falta_motivo='Não compareceu ao segundo turno' where id=e2;
 if (select status from public.pedido_escalas where id=e1)<>'presente' or (select count(*) from public.diarias where pedido_escala_id in(e1,e2))<>1 then raise exception 'Falta alterou a diária do outro pedido.';end if;
 update public.pedido_escalas set status='presente' where id=e2;

@@ -1256,9 +1256,10 @@ class Handler(BaseHTTPRequestHandler):
                 with connect() as db:
                     old = db.execute("SELECT * FROM pedidos WHERE id = ?", (order_id,)).fetchone()
                     if old and db.execute("SELECT 1 FROM pedido_escalas WHERE pedido_id = ? LIMIT 1", (order_id,)).fetchone():
-                        fixed = ("supermercado", "unidade", "setor", "quantidade_diaristas", "turnos")
+                        # O setor pode ser corrigido sem recriar a equipe ou valores históricos.
+                        fixed = ("supermercado", "unidade", "quantidade_diaristas", "turnos")
                         if any(old[key] != data[key] for key in fixed):
-                            raise ValueError("Este pedido já possui escalas. Preserve a equipe e as datas registradas.")
+                            raise ValueError("Este pedido já possui escalas. Você pode corrigir o setor; preserve a rede, a loja, a quantidade e as datas e horários registrados.")
                     fields = ", ".join(f"{key} = ?" for key in data)
                     cur = db.execute(f"UPDATE pedidos SET {fields}, atualizado_em = ? WHERE id = ? AND (? IS NULL OR atualizado_em = ?)", (*data.values(), datetime.now(timezone.utc).isoformat(), order_id, payload.get("expected_updated_at"), payload.get("expected_updated_at")))
                     if not cur.rowcount:

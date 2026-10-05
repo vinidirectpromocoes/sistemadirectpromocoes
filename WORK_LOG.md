@@ -38,3 +38,12 @@ Solicitação: permitir o mesmo diarista em vários pedidos, inclusive no mesmo 
 - 80 testes JS e 57 testes backend aprovados. Presenças dos dois turnos geram duas diárias; falta num turno remove somente sua diária; previsão mantém pedidos independentes.
 - SQL real com rollback: leitura conjunta, escala manual sem disponibilidade, presença/falta, permissões, substituição sobreposta, portal de vagas. Nenhum dado sintético fica na produção.
 - Teste de navegador de sobreposição integrado ao gate de publicação; CI completa obrigatória antes da publicação.
+
+## 2026-10-05 — Correção do setor com equipe escalada
+
+- Guarda no Supabase e backend local permite editar apenas o setor entre os campos antes imutáveis, preservando rede, loja, quantidade, datas/horários e exclusão protegida.
+- A correção não recria escalas nem recalcula os valores congelados de diárias já realizadas/pagas; novas presenças usam o setor corrigido. Controle de versão e permissões mantidos.
+- 58 testes backend e 80 JS aprovados. Teste de edição real no formulário em Chromium/WebKit, larguras 1280/390/320, mantém sete escalas e persiste após recarga.
+- Ensaio SQL com usuário autenticado, dados sintéticos e rollback confirma edição, preservação financeira, bloqueio de alteração estrutural e ausência de acesso anônimo.
+- Gerador de CPF sintético do ensaio SQL corrigido nos pesos verificadores para evitar rejeições aleatórias na própria fixture.
+- Pedido solicitado do Super do Povo/Meireles, 06–12/10/2026 07:00–15:20, corrigido de “frios ( dois)” para “Balconista de frios”, com comparação transacional garantindo equipe e demais campos idênticos.
