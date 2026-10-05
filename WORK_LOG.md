@@ -1,5 +1,15 @@
 # Melhorias aprovadas — outubro de 2026
 
+## 2026-10-05 — Vagas compactas e conferência de cadastro
+
+- Cards resumem rede/loja, setor, período, horário, endereço e valor. Dias específicos, horários e valores variáveis ficam em detalhes expansíveis; botão “Quero essa vaga”.
+- Nome completo e CPF são conferidos no banco nos links compartilhados e individuais. Cadastro autorizado mostra indicador verde; cadastro não encontrado recebe orientação. Editar os campos invalida a autorização anterior.
+- Confirmação revalida cadastro, bloqueio, empresa e capacidade e grava todos os dias futuros numa transação, com bloqueio do pedido e proteção contra duplicidade. Não expõe ficha nem CPF na resposta pública; limite de consultas por link/IP.
+- Consultas a cada 15 segundos preservam cards sem mudanças, foco, rolagem e formulário. Indicador “Ao vivo”, “Reconectando…” ou “Sem conexão”; falhas transitórias preservam a última lista.
+- Migração já aplicada no Supabase no chat anterior. Retomada confirmou RPCs e repetiu roteiro SQL sintético com rollback, sem deixar dados de teste.
+- 80 testes de regras aprovados; portal Chromium/WebKit em 1280/390/320 aprovado. Teste administrativo repetido nas seis combinações com sucesso após interrupção transitória de conexão no ensaio anterior.
+- CI completo obrigatório antes de publicar; emulação móvel não equivale a ensaio em Android físico.
+
 ## Ordem de execução
 Lote 1: financeiro, carregamento, backup, concorrência. Publicar e verificar antes do lote 2.
 Lote 2: busca global, fila de pendências, substituição guiada, interface consistente.
