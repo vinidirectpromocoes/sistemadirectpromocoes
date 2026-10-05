@@ -61,6 +61,13 @@ function showFormError(message) {
 let activeRequests = 0;
 let loadingTimer;
 const requestCache = new Map();
+const localReadControllers = new Set();
+let pageDeparting = false;
+window.addEventListener('pagehide', () => {
+  pageDeparting = true;
+  for (const controller of localReadControllers) controller.abort();
+});
+window.addEventListener('pageshow', () => { pageDeparting = false; });
 let requestEpoch = 0;
 function clearRequestCache() { requestEpoch++; requestCache.clear(); }
 window.addEventListener('direct:data-changed', clearRequestCache);
@@ -84,6 +91,12 @@ async function request(url, options = {}) {
   return performRequest(url, options);
 }
 async function performRequest(url, options = {}) {
+  const isRead = (options.method || 'GET').toUpperCase() === 'GET';
+  if (isRead && pageDeparting) throw new DOMException('Página sendo recarregada.', 'AbortError');
+  // Cancel unfinished local reads before WebKit detaches the page's origin.
+  // Writes retain their lifecycle so a navigation cannot cancel a registration.
+  const controller = isRead && !window.directRemote && !options.signal ? new AbortController() : null;
+  if (controller) localReadControllers.add(controller);
   activeRequests += 1;
   if (activeRequests === 1) {
     loadingTimer = window.setTimeout(() => {
@@ -97,12 +110,13 @@ async function performRequest(url, options = {}) {
       if ((options.method || 'GET').toUpperCase() !== 'GET') window.dispatchEvent(new CustomEvent('direct:data-changed', { detail: { url } }));
       return data;
     }
-    const response = await fetch(url, options);
+    const response = await fetch(url, controller ? { ...options, signal: controller.signal } : options);
     const data = await response.json();
     if (!response.ok) throw new Error(data.erro || 'Não foi possível concluir a operação.');
     if ((options.method || 'GET').toUpperCase() !== 'GET') window.dispatchEvent(new CustomEvent('direct:data-changed', { detail: { url } }));
     return data;
   } finally {
+    if (controller) localReadControllers.delete(controller);
     activeRequests -= 1;
     if (activeRequests === 0) {
       window.clearTimeout(loadingTimer);

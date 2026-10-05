@@ -231,12 +231,22 @@
     if (!navigator.onLine) throw new Error('Sem conexão. Consulte a agenda salva e revise os rascunhos quando voltar.');
     const method = (options.method || 'GET').toUpperCase();
     const p = options.body ? JSON.parse(options.body) : {};
-    const parts = url.split('/').filter(Boolean);
+    const parsed = new URL(url,location.origin);
+    const parts = parsed.pathname.split('/').filter(Boolean);
     const entity = parts[1];
     const id = parts[2] ? Number(parts[2]) : null;
     const child = parts[3];
     if (parts[0] !== 'api') throw new Error('Rota inválida.');
 
+    if (entity === 'busca' && method==='GET') return unwrap(await sb.rpc('direct_search',{p_query:parsed.searchParams.get('q')||''}));
+    if (entity === 'pendencias-acoes') {
+      if(method==='GET')return rows('pendencia_acoes');
+      if(method==='PUT')return unwrap(await sb.rpc('direct_pending_save',{p}));
+    }
+    if(entity==='substituicao-contatos'){
+      if(method==='GET')return rows('substituicao_contatos');
+      if(method==='POST')return unwrap(await sb.rpc('direct_replacement_response',{p}));
+    }
     if (entity === 'diaristas') {
       if (child === 'diarias') {
         const dailyId = parts[4] ? Number(parts[4]) : null;
@@ -378,7 +388,7 @@
     if (entity === 'pedidos') {
       if (child === 'escalas') {
         const scaleId = parts[4] ? Number(parts[4]) : null;
-        if(parts[5]==='substituir' && method==='POST') return unwrap(await sb.rpc('direct_replace_order_worker',{p_pedido_id:id,p_escala_id:scaleId,p_diarista_id:Number(p.diarista_id),p_motivo:p.motivo||'',p_disponibilidade_confirmada:p.disponibilidade_confirmada===true}));
+        if(parts[5]==='substituir' && method==='POST') return unwrap(await sb.rpc(p.todos_restantes===true?'direct_replace_order_remaining':'direct_replace_order_worker',{p_pedido_id:id,p_escala_id:scaleId,p_diarista_id:Number(p.diarista_id),p_motivo:p.motivo||'',p_disponibilidade_confirmada:p.disponibilidade_confirmada===true}));
         if (method === 'GET') {
           const assignments = unwrap(await sb.from('pedido_escalas').select('*, diaristas(nome)').eq('pedido_id', id).order('data').order('id'));
           if (!assignments.length) return [];

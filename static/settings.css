@@ -11,7 +11,9 @@
 .settings-network-card h3 { margin: 0; font-size: 18px; }
 .settings-network-fields { display: grid; gap: 12px; }
 .settings-field { display: block; font-size: 12px; line-height: 1.3; }
-.settings-field input, .settings-field select { width: 100%; }
+/* Labels are compact; editable values must not inherit their 12px font.
+   Keep this floor outside media queries, including Safari during layout changes. */
+.settings-field input, .settings-field select { width: 100%; font-size: 16px; }
 .settings-field[hidden], .settings-network-fields[hidden] { display: none; }
 .settings-margin { display: flex; justify-content: space-between; align-items: center; gap: 10px; padding: 11px 12px; border-radius: 10px; background: #eef5ff; color: #2b507f; font-size: 12px; }
 .settings-margin strong { color: #0d4b9c; font-size: 16px; white-space: nowrap; }

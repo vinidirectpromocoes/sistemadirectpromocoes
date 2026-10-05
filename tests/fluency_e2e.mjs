@@ -14,6 +14,12 @@ try{
   await a.evaluate(w=>openForm(w),worker);await b.evaluate(w=>openForm(w),worker);await b.locator('#nome').fill('Segundo editor mantém digitado');await a.locator('#nome').fill('Primeiro editor salvo');await a.locator('#save-button').click();await a.locator('#form-dialog').waitFor({state:'hidden'});
   await b.locator('#save-button').click();await b.locator('#form-error').getByText(/alterado por outra pessoa/).waitFor();assert.equal(await b.locator('#nome').inputValue(),'Segundo editor mantém digitado');assert.equal((await api('GET','/api/diaristas')).find(w=>w.id===worker.id).nome,'Primeiro editor salvo');
   await a.locator('#nav-leitura').click();await a.waitForFunction(()=>Boolean(window.DirectReading));assert.ok(loaded.includes('/reading.js'));await a.locator('#nav-diaristas').click();await a.locator('#nav-leitura').click();assert.equal(loaded.filter(n=>n==='/reading.js').length,1,'Módulo carregado apenas uma vez');
-  assert.ok(await a.evaluate(()=>document.documentElement.scrollWidth<=innerWidth+2));assert.deepEqual(errors,[]);await api('DELETE','/api/diaristas/'+worker.id);await browser.close();console.log(name+' '+width+': lazy load, consultas compartilhadas, duas edições sem perda de dados, mobile OK');
+  // Reload while a read is outstanding: WebKit must not raise detached-origin errors.
+  await a.route('**/api/lojas',async route=>{await new Promise(r=>setTimeout(r,300));try{await route.continue();}catch{/* Navigation discarded this read. */}});
+  await a.evaluate(()=>{clearRequestCache();window.readDuringReload=request('/api/lojas').catch(e=>e.name);});
+  await a.reload();await a.waitForFunction(()=>Boolean(window.DirectReading));await a.waitForLoadState('networkidle');
+  await a.unroute('**/api/lojas');
+  assert.equal((await a.evaluate(()=>request('/api/lojas'))).length,44,'Leituras continuam funcionando após recarga');
+  assert.ok(await a.evaluate(()=>document.documentElement.scrollWidth<=innerWidth+2));assert.deepEqual(errors,[]);await api('DELETE','/api/diaristas/'+worker.id);await browser.close();console.log(name+' '+width+': lazy load, consultas compartilhadas, duas edições sem perda de dados, recarga com leitura pendente, mobile OK');
  }
 }finally{child.kill('SIGTERM');await rm(directory,{recursive:true,force:true});}

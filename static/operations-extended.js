@@ -30,15 +30,15 @@
  const diagnostic=section('configuracoes-page','Conferência neste aparelho','Execute no celular real. O teste registra navegador, tela, campos, conexão e largura; a conferência visual complementa o diagnóstico.','device-section');
  diagnostic.append(button('▶ Executar diagnóstico',()=>diagnose()));diagnostic.insertAdjacentHTML('beforeend','<pre id="device-result" class="device-result"></pre><button id="device-download" type="button" class="button button-outline" hidden>↓ Baixar diagnóstico</button>');
  const dialog=node('dialog','','extended-dialog');dialog.id='extended-dialog';dialog.innerHTML='<form id="extended-form"><header class="extended-dialog-head"><h2 id="extended-title"></h2><button type="button" id="extended-close" class="icon-button" aria-label="Fechar">×</button></header><div id="extended-fields" class="extended-fields"></div><p id="extended-error" class="form-error" role="alert" hidden></p><footer class="dialog-footer"><button type="button" id="extended-cancel" class="button button-quiet">Cancelar</button><button type="submit" class="button button-primary" id="extended-save">Salvar</button></footer></form>';document.body.append(dialog);
- let submit=null;
+ let submit=null,formGeneration=0,busyGeneration=null;
  function field(name,label,value='',type='text',options=null,required=false){
   const wrap=node('label',label);const input=document.createElement(options?'select':type==='textarea'?'textarea':'input');input.name=name;input.id='ext-'+name;
   if(!options&&type!=='textarea')input.type=type;if(options)for(const [val,text]of options)input.append(new Option(text,val));
   if(type==='textarea'){input.rows=3;input.maxLength=1000;}else if(type==='text'||type==='tel'){input.maxLength=120;}
   if(type==='number'){input.min='0';input.max='365';input.step='1';}input.value=value??'';input.required=required;wrap.append(input);$('extended-fields').append(wrap);return input;
  }
- function open(title,build,save){$('extended-form').reset();$('extended-fields').replaceChildren();$('extended-error').hidden=true;$('extended-title').textContent=title;submit=save;build();dialog.showModal();}
- $('extended-form').addEventListener('submit',async e=>{e.preventDefault();$('extended-save').disabled=true;try{const values=Object.fromEntries(new FormData(e.currentTarget));await submit(values);dialog.close();await refresh(true);if(orderDetailId)await refreshOrderScales();await loadFinanceIfVisible();}catch(err){$('extended-error').textContent=err.message;$('extended-error').hidden=false;}finally{$('extended-save').disabled=false;}});
+ function open(title,build,save){++formGeneration;$('extended-save').disabled=false;$('extended-save').setAttribute('aria-busy','false');$('extended-form').reset();$('extended-fields').replaceChildren();$('extended-error').hidden=true;$('extended-title').textContent=title;submit=save;build();dialog.showModal();}
+ $('extended-form').addEventListener('submit',async e=>{e.preventDefault();const generation=formGeneration,save=submit;if(busyGeneration===generation)return;busyGeneration=generation;$('extended-save').disabled=true;$('extended-save').setAttribute('aria-busy','true');try{const values=Object.fromEntries(new FormData(e.currentTarget));await save(values);if(generation!==formGeneration)return;dialog.close();await refresh(true);if(orderDetailId)await refreshOrderScales();await loadFinanceIfVisible();}catch(err){if(generation===formGeneration){$('extended-error').textContent=err.message;$('extended-error').hidden=false;}else window.DirectUI?.notify(err.message,true);}finally{if(generation===formGeneration){$('extended-save').disabled=false;$('extended-save').setAttribute('aria-busy','false');}if(busyGeneration===generation)busyGeneration=null;}});
  $('extended-close').onclick=$('extended-cancel').onclick=()=>dialog.close();dialog.addEventListener('click',e=>{const r=dialog.getBoundingClientRect();if(e.target===dialog&&(e.clientX<r.left||e.clientX>r.right||e.clientY<r.top||e.clientY>r.bottom))dialog.close();});
  async function loadFinanceIfVisible(){if(location.hash==='#financeiro')await loadFinance();}
  function orderButton(id){return button('↗ Abrir pedido',async()=>{location.hash='#pedidos';await loadOrders();await openOrderDetail(id);});}
@@ -104,10 +104,15 @@
  }
  const amount=v=>v==null?'':(v/100).toFixed(2);
  function cents(v){if(!v.trim())return null;if(!/^\d+(?:[.,]\d{1,2})?$/.test(v))throw Error('Informe valores positivos com até duas casas decimais.');const n=Math.round(Number(v.replace(',','.'))*100);if(n<1||n>100000000)throw Error('Valor fora do limite permitido.');return n;}
- function openContract(c=null){open(c?'Nova versão do contrato #'+c.id:'Cadastrar contrato',()=>{
+ async function openContract(c=null){
+  if(!canFinance())throw Error('Sem permissão para contratos.');
+  if(!settingsData)await loadSettings();
+  if(!settingsData)throw Error('Não foi possível carregar os setores. Atualize as configurações e tente novamente.');
+  if(location.hash!=='#configuracoes')return;
+  open(c?'Nova versão do contrato #'+c.id:'Cadastrar contrato',()=>{
   const network=field('rede','Rede',c?.rede||data.stores[0]?.rede||'','text',[...new Set(data.stores.map(x=>x.rede))].sort().map(v=>[v,v]),true);
   const store=field('loja','Loja (opcional)',c?.loja||'','text',[]);const fill=()=>{store.replaceChildren(new Option('Toda a rede',''),...data.stores.filter(x=>x.rede===network.value).map(x=>new Option(x.nome,x.nome)));store.value=c?.loja||'';};network.onchange=fill;fill();
-  const sectors=[...new Set([...(typeof settingsData!=='undefined'?settingsData.setores:[]).map(x=>x.setor),...data.orders.map(x=>x.setor),c?.setor].filter(Boolean))].sort();field('setor','Setor',c?.setor||'','text',[['','Todos os setores'],...sectors.map(x=>[x,x])]);field('inicio','Início da vigência',homeToday(),'date',null,true);field('fim','Fim da vigência (opcional)','','date');
+  const sectors=[...new Set([...settingsData.setores.map(x=>x.setor),...data.orders.map(x=>x.setor),c?.setor].filter(Boolean))].sort();field('setor','Setor',c?.setor||'','text',[['','Todos os setores'],...sectors.map(x=>[x,x])]);field('inicio','Início da vigência',homeToday(),'date',null,true);field('fim','Fim da vigência (opcional)','','date');
   for(const [key,label]of [['valor_recebido','Recebido por diária (R$)'],['valor_pago','Pago por diária (R$)']]){const input=field(key,label,amount(c?.[key+'_centavos']));input.inputMode='decimal';}
   field('prazo_dias','Prazo de cobrança em dias',c?.prazo_dias??30,'number',null,true);field('responsavel','Responsável',c?.responsavel||'');field('contato','Contato',c?.contato||'');field('regras','Condições, cancelamentos e orientações',c?.regras||'','textarea');
   if(c){network.disabled=true;store.disabled=true;$('ext-setor').disabled=true;$('extended-fields').append(node('p','A nova versão encerra a anterior na véspera do novo início, quando as vigências se cruzarem.','section-help'));}

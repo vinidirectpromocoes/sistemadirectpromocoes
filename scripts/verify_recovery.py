@@ -16,7 +16,7 @@ def verify(path, password):
         b64=lambda v:base64.b64encode(v).decode();archive=Path(directory)/'operational.json'
         archive.write_text(json.dumps({'format':'direct-encrypted-v1','salt':b64(salt),'iv':b64(iv),'data':b64(encrypted)}))
         counts=restore_operational(archive,password,Path(directory)/'isolated.db')
-        if counts!=operational['snapshot']['counts']:raise ValueError('Restauração divergente')
+        if counts!={t:operational['snapshot']['counts'].get(t,0) for t in counts}:raise ValueError('Restauração divergente')
     return checked
 if __name__=='__main__':
     parser=argparse.ArgumentParser();parser.add_argument('file',type=Path);args=parser.parse_args()

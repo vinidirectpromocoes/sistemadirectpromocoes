@@ -589,7 +589,7 @@ async function showPage() {
   }
   document.title = `${{ vagas: 'Vagas disponíveis', convites: 'Cadastros por link', inicio: 'Início', crm: 'Pendências', diaristas: 'Diaristas', pedidos: 'Pedidos', leitura: 'Leitura IA', redes: 'Redes e lojas', financeiro: 'Financeiro', configuracoes: 'Configurações' }[page]} | Direct Promoções`;
   window.scrollTo(0, 0);
-  try { await window.DirectModules.ensure(page); } catch (error) { showFeedback(error.message, true); return; }
+  try { await window.DirectModules.ensure(page); } catch (error) { window.DirectUI?.notify(error.message, true); return; }
   if (location.hash !== routeHash) return;
   if (page === 'inicio' || page === 'crm') loadHome();
   if (page === 'diaristas') load();

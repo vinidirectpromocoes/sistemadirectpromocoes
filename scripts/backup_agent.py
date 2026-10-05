@@ -36,10 +36,10 @@ def validate_bundle(content):
     with zipfile.ZipFile(io.BytesIO(content)) as archive:
         if archive.testzip():raise ValueError('Arquivo danificado')
         data=json.loads(archive.read('database.json'))
-        if data['format']!='direct-recovery-v1' or data['data']['format']!='direct-data-v7':raise ValueError('Formato inválido')
-        from restore_backup import ALL_TABLES, relationship_errors
-        operational=data['data'];tables=operational['tables']
-        if set(tables)!=set(ALL_TABLES) or any(not isinstance(tables[t],list) for t in ALL_TABLES):raise ValueError('Tabelas incompletas')
+        if data['format']!='direct-recovery-v1' or data['data']['format'] not in ('direct-data-v7','direct-data-v8'):raise ValueError('Formato inválido')
+        from restore_backup import ALL_TABLES, V7_TABLES, relationship_errors
+        operational=data['data'];tables=operational['tables'];required=ALL_TABLES if operational['format']=='direct-data-v8' else V7_TABLES
+        if set(tables)!=set(required) or any(not isinstance(tables[t],list) for t in required):raise ValueError('Tabelas incompletas')
         if relationship_errors(tables):raise ValueError('Vínculos incompletos')
         if not operational['snapshot']['consistent'] or any(len(rows)!=operational['snapshot']['counts'][name] for name,rows in tables.items()):raise ValueError('Contagens inválidas')
         auth_ids={u['id'] for u in data['auth']['users']}

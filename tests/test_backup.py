@@ -18,7 +18,7 @@ class BackupRestoreTests(unittest.TestCase):
 
     def archive(self, path, data, version="direct-data-v1"):
         payload = {"format": version, "exportedAt": "2026-09-29T12:00:00Z", "tables": data}
-        if version in ("direct-data-v5", "direct-data-v6", "direct-data-v7"):
+        if version in ("direct-data-v5", "direct-data-v6", "direct-data-v7", "direct-data-v8"):
             payload["snapshot"] = {"consistent": True, "counts": {table: len(rows) for table, rows in data.items()}}
         salt, iv = os.urandom(16), os.urandom(12)
         key = __import__("hashlib").pbkdf2_hmac("sha256", self.password.encode(), salt, 200000, 32)
@@ -83,7 +83,7 @@ class BackupRestoreTests(unittest.TestCase):
                 root = Path(directory); archive = root / "backup.json"; output = root / "restored.db"
                 self.archive(archive, data, "direct-data-v6")
                 counts = restore_operational(archive, self.password, output)
-                self.assertEqual(len(counts), 28)
+                self.assertEqual(len(counts), len(ALL_TABLES))
                 self.assertEqual(counts["pedido_modelos"], 1)
                 with sqlite3.connect(output) as db:
                     self.assertEqual(json.loads(db.execute("select dados from pedido_modelos").fetchone()[0])["turnos"][0]["inicio"], "07:00")
@@ -107,7 +107,7 @@ class BackupRestoreTests(unittest.TestCase):
                 root = Path(directory); archive = root / 'backup.json'; output = root / 'restored.db'
                 self.archive(archive, data, 'direct-data-v7')
                 counts = restore_operational(archive, self.password, output)
-                self.assertEqual(len(counts), 28)
+                self.assertEqual(len(counts), len(ALL_TABLES))
                 with sqlite3.connect(output) as db:
                     self.assertEqual(db.execute('select pedido_id from loja_solicitacoes').fetchone()[0], 1)
                     self.assertEqual(db.execute('select escala_id,estado from loja_validacoes').fetchone(), (1, 'pendente'))
@@ -115,6 +115,12 @@ class BackupRestoreTests(unittest.TestCase):
                     self.assertEqual(private['token'], 'e' * 64)
                     self.assertEqual(private['expira_em'], '2027-01-02T00:00:00Z')
                     self.assertEqual(db.execute('pragma foreign_key_check').fetchall(), [])
+                data['pendencia_acoes']=[{'id':1,'chave':'pedido:1','area':'operacao','responsavel':'Equipe','proxima_acao':'Conferir resposta','atualizado_em':'2026-10-04'}]
+                data['substituicao_contatos']=[{'id':1,'escala_id':1,'diarista_id':1,'resposta':'confirmou','datas':['2026-10-04'],'atualizado_em':'2026-10-04'}]
+                v8=root/'v8.json';self.archive(v8,data,'direct-data-v8');restore_operational(v8,self.password,root/'v8.db')
+                with sqlite3.connect(root/'v8.db') as db:
+                    self.assertEqual(db.execute('select responsavel,proxima_acao from pendencia_acoes').fetchone(),('Equipe','Conferir resposta'))
+                    self.assertEqual(json.loads(db.execute('select datas from substituicao_contatos').fetchone()[0]),['2026-10-04'])
                 broken = root / 'broken.json'; data['loja_validacoes'][0]['escala_id'] = 999
                 self.archive(broken, data, 'direct-data-v7')
                 with self.assertRaisesRegex(ValueError, 'referências quebradas'):

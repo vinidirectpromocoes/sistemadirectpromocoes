@@ -61,7 +61,7 @@ function renderStores() {
     section.append(heading);
     const list = storeElement('div', 'store-list');
     entries.forEach(item => {
-      const card = storeElement('article', 'store-item');
+      const card = storeElement('article', 'store-item');card.dataset.storeId=item.id;
       const info = storeElement('div', 'store-info');
       const title = storeElement('div', 'store-title');
       title.append(storeElement('strong', '', item.nome));
