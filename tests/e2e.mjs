@@ -738,7 +738,8 @@ async function runRecentOrderAttendance() {
       await page.waitForFunction(expected=>Number(document.querySelector('#confirmed-revenue').textContent.replace(/\D/g,''))===expected,before[0]+13400);
       const after=await amounts();assert.deepEqual(after.map((value,i)=>value-before[i]),[13400,9000,4400],'Presença atualiza faturamento, diária e lucro no dashboard');
       assert.match(await page.locator('#confirmed-extra-note').innerText(),/Média por diária:/);
-      await page.waitForLoadState('networkidle');await page.reload();await page.waitForFunction(()=>financeForecastInput!==null);await page.locator('#forecast-period').selectOption('day');await page.locator('#forecast-date').fill(firstDay);assert.deepEqual(await amounts(),after,'Financeiro persiste após recarga');
+      await page.waitForFunction(()=>activeRequests===0 && !orderDetailBusy);await page.waitForLoadState('networkidle');await page.reload();await page.waitForFunction(()=>financeForecastInput!==null);await page.locator('#forecast-period').selectOption('day');await page.locator('#forecast-date').fill(firstDay);assert.deepEqual(await amounts(),after,'Financeiro persiste após recarga');
+      await page.waitForFunction(()=>activeRequests===0);await page.waitForLoadState('networkidle');
       assert.ok(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth+2));assert.deepEqual(errors,[]);
       await api('PATCH',`/api/pedidos/${scales[0].pedido_id}/escalas/${scales[0].id}`,{status:'escalada'});
       for(const scale of scales)await api('DELETE',`/api/pedidos/${scale.pedido_id}/escalas/${scale.id}`);
