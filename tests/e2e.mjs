@@ -485,7 +485,8 @@ async function runAssignmentPersistence() {
         assert.equal((await api('GET',`/api/pedidos/${order.id}/escalas`)).length,1);
         if (simulateRefreshFailure) {
           // Aguarda os controles auxiliares para não abortar fetches no WebKit/Linux ao recarregar.
-          await page.evaluate(async()=>{await loadHome();await window.DirectOperations.refresh();});
+          await page.evaluate(async()=>{await loadHome();await window.DirectOperations.refresh();await window.DirectManagementUI.refresh();});
+          await page.waitForFunction(()=>activeRequests===0 && !orderDetailBusy);
           await page.waitForLoadState('networkidle');
           await page.reload(); await page.locator('#orders-rows tr').filter({hasText:'Repositor de FLV'}).filter({hasText:firstDateLabel}).getByRole('button',{name:'Ver pedido de Super do Povo',exact:true}).click();
           await cards.first().locator('.order-worker-row').waitFor();
@@ -495,7 +496,8 @@ async function runAssignmentPersistence() {
         await page.getByText('Diarista escalada em 6 dias deste pedido.',{exact:true}).waitFor();
         assert.equal((await api('GET',`/api/pedidos/${order.id}/escalas`)).length,7);
         // Aguarda os controles auxiliares para não abortar fetches no WebKit/Linux ao recarregar.
-          await page.evaluate(async()=>{await loadHome();await window.DirectOperations.refresh();});
+          await page.evaluate(async()=>{await loadHome();await window.DirectOperations.refresh();await window.DirectManagementUI.refresh();});
+          await page.waitForFunction(()=>activeRequests===0 && !orderDetailBusy);
           await page.waitForLoadState('networkidle');
           await page.reload(); await page.locator('#orders-rows tr').filter({hasText:'Repositor de FLV'}).filter({hasText:firstDateLabel}).getByRole('button',{name:'Ver pedido de Super do Povo',exact:true}).click();
         await page.locator('#order-detail-shifts .order-worker-row').nth(6).waitFor();
@@ -811,6 +813,7 @@ async function runMessagesFlow() {
 try {
   await ready();
   if(process.env.DIRECT_EXTENDED_ONLY==='1'){await runFinancialWorkflow();await runExtendedWorkflow();}
+  else if(process.env.DIRECT_ASSIGNMENT_ONLY==='1'){await runAssignmentPersistence();}
   else if(process.env.DIRECT_RECENT_ONLY==='1'){await runRecentOrderAttendance();}
   else if(process.env.DIRECT_MESSAGES_ONLY==='1'){await runMessagesFlow();await runRoleNavigation();}
   else if(process.env.DIRECT_FINANCE_ONLY==='1'){await runFinancialWorkflow();}
