@@ -22,8 +22,6 @@
       button.title = `Ativar tema ${next}`;
       button.setAttribute('aria-pressed', String(current === 'dark'));
     }
-    const label = document.querySelector('.theme-toggle-label');
-    if (label) label.textContent = `Tema ${next}`;
   }
 
   apply(current);
