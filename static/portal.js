@@ -27,6 +27,9 @@
   function setupRegistration(){
     const form=$('registration-form');choices('sector-options','setores',context.setores.map(s=>[s,s]));
     choices('day-options','dias',[['segunda','Segunda'],['terca','Terça'],['quarta','Quarta'],['quinta','Quinta'],['sexta','Sexta'],['sabado','Sábado'],['domingo','Domingo']]);
+    const anyDay=$('registration-any-day'),dayInputs=[...form.querySelectorAll('input[name="dias"]')];
+    anyDay.addEventListener('change',()=>{for(const input of dayInputs)input.checked=anyDay.checked;});
+    for(const input of dayInputs)input.addEventListener('change',()=>{anyDay.checked=dayInputs.every(day=>day.checked);});
     choices('transport-options','transportes',['Ônibus','Bike','Moto','Carro','Metrô','Uber'].map(s=>[s,s]));
     for(const name of context.redes){const opt=node('option',name);opt.value=name;form.elements.rede_trabalho.append(opt);}
     form.elements.data_nascimento.max=new Date().toLocaleDateString('en-CA');
