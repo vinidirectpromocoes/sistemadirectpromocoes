@@ -7,6 +7,7 @@
 - Regressão administrativa verifica cadastro mantido, campos limpos, geração atrasada descartada e próximo convite. Chromium/WebKit em 1280, 390 e 320 pixels.
 - Encaminhamento HTTP secundário dos arquivos do teste substituído por leitura direta dos mesmos arquivos reais na origem HTTPS simulada, eliminando a conexão que apresentava ECONNRESET no WebKit. Verificações de erros permanecem ativas.
 - Sem alteração de banco. CI completo obrigatório antes da publicação.
+- A primeira execução do CI encontrou uma espera ausente no teste de busca global de loja (WebKit 320): a aba já estava visível, mas o filtro ainda não havia recebido “Meireles”. O teste agora aguarda esse valor antes da mesma verificação e espera o endereço do pedido carregar antes de testar o convite de substituição. Ensaio com atraso artificial de 750 ms na consulta de lojas aprovado nas seis combinações de Chromium/WebKit e 1280/390/320. As verificações de filtros, endereço e exceções permanecem ativas.
 
 ## 2026-10-05 — Vagas compactas e conferência de cadastro
 
