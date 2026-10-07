@@ -1,5 +1,13 @@
 # Melhorias aprovadas — outubro de 2026
 
+## 2026-10-07 — Limpar convite ao atualizar cadastros por link
+
+- Clique em Atualizar limpa CPF, links de cadastro/vagas, validade exibida e mensagem de cópia/WhatsApp. Atualiza a lista de cadastros recebidos e retorna à primeira página.
+- Respostas atrasadas de geração/cópia não restauram o convite limpo. A próxima geração continua disponível; atualização automática e paginação mantêm o convite em edição.
+- Regressão administrativa verifica cadastro mantido, campos limpos, geração atrasada descartada e próximo convite. Chromium/WebKit em 1280, 390 e 320 pixels.
+- Encaminhamento HTTP secundário dos arquivos do teste substituído por leitura direta dos mesmos arquivos reais na origem HTTPS simulada, eliminando a conexão que apresentava ECONNRESET no WebKit. Verificações de erros permanecem ativas.
+- Sem alteração de banco. CI completo obrigatório antes da publicação.
+
 ## 2026-10-05 — Vagas compactas e conferência de cadastro
 
 - Cards resumem rede/loja, setor, período, horário, endereço e valor. Dias específicos, horários e valores variáveis ficam em detalhes expansíveis; botão “Quero essa vaga”.
