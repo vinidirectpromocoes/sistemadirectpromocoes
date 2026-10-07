@@ -222,7 +222,7 @@
     const cpf = item.dados.cpf;
     const draftKey = `rascunho:${parser.textKey(item.texto)}`;
     const duplicate = item.tipo === 'diarista' ? cpf && existing.workers.has(cpf) : item.tipo === 'pedido' ? existing.orders.has(item.chave) : false;
-    if (duplicate) return { state: 'duplicate', description: 'Registro já existe; nenhum dado foi sobrescrito.' };
+    if (duplicate) return { state: 'duplicate', description: item.tipo === 'diarista' ? 'Diarista já cadastrado. Cadastro preservado, sem duplicação.' : 'Registro já existe; nenhum dado foi sobrescrito.' };
     if (item.faltando.length) {
       if (existing.drafts.has(draftKey)) return { state: 'duplicate', description: 'Esta pendência já está salva.' };
       try {
@@ -248,6 +248,15 @@
       }
       return { state: 'saved', id: saved.id, entity: item.tipo === 'pedido' ? 'pedidos' : 'diaristas', description: item.tipo === 'pedido' ? `${item.dados.turnos.length} dia(s) · ${item.dados.setor} · ${item.dados.quantidade_diaristas} diarista(s) por dia.` : `CPF ${cpf} · ${item.dados.setores.join(', ')}.` };
     } catch (error) {
+      if (item.tipo === 'diarista') {
+        try {
+          const workers=await request('/api/diaristas');
+          if(workers.some(w=>String(w.cpf).replace(/\D/g,'')===cpf)){
+            existing.workers.add(cpf);assistant.identifyRegistration(item,workers);
+            return {state:'duplicate',description:'Diarista já cadastrado. Cadastro preservado, sem duplicação.'};
+          }
+        } catch { /* Se a consulta falhar, preserve a leitura para revisão. */ }
+      }
       if (!existing.drafts.has(draftKey)) {
         try {
           await request('/api/leituras-pendentes', { method: 'POST', headers: { 'Content-Type': 'application/json' },
@@ -274,8 +283,12 @@
     const card=resultCard(item,'pending',item.faltando.length?`Preciso que você confirme: ${item.faltando.join(' ')}`:'Entendi estas informações. Confira e confirme abaixo.');
     card.classList.add('reading-preview');card.dataset.reviewIndex=index;
     card.querySelector('.reading-state').textContent=item.faltando.length?'Completar':'Aguardando confirmação';
+    if(item.tipo==='diarista'&&item.cadastro?.status==='existente'){
+      card.querySelector('.reading-state').textContent='Diarista já cadastrado';
+      card.querySelector('p').textContent='Cadastro encontrado pelo CPF. Ao confirmar, o cadastro será preservado, sem criar outro nem alterar os dados.';
+    }
     card.querySelector('details')?.remove();card.insertBefore(fields(item),card.querySelector('p'));
-    if(item.tipo==='pedido'&&item.dados.diarista_escalado&&!review.data.workers.some(w=>w.cpf===item.dados.diarista_escalado.cpf)){
+    if(item.tipo==='pedido'&&item.cadastro?.status==='novo'){
       const note=document.createElement('p');note.textContent='Essa pessoa ainda não tem cadastro. Ao confirmar, será criada apenas com nome e CPF e escalada nos dias deste pedido.';card.append(note);
     }
     const actions=document.createElement('div');actions.className='reading-item-actions';
@@ -316,9 +329,10 @@
     applying=true;pick('#reading-submit').disabled=true;pick('#reading-cancel').disabled=true;pick('#reading-text').disabled=true;updateReview();
     const current=review;let saved=0,failed=0;
     try{
-      const data=await getData();const existing={workers:new Set(data.workers.map(w=>w.cpf)),orders:new Set(data.orders.map(orderKey)),drafts:new Set(data.drafts.filter(r=>r.status==='pendente').map(r=>r.chave)),draftRecords:data.drafts,orderRows:data.orders,reviewPendingId:current.pendingId};
+      const data=await getData();const existing={workers:new Set(data.workers.map(w=>String(w.cpf).replace(/\D/g,''))),orders:new Set(data.orders.map(orderKey)),drafts:new Set(data.drafts.filter(r=>r.status==='pendente').map(r=>r.chave)),draftRecords:data.drafts,orderRows:data.orders,reviewPendingId:current.pendingId};
       for(let index=0;index<current.items.length;index++){
         const item=current.items[index];if(item.applied||item.faltando.length||['indefinido','consulta'].includes(item.tipo))continue;
+        assistant.identifyRegistration(item,data.workers);
         let outcome;
         try{if(item.tipo==='atualizacao'){
             const currentWorker=data.workers.find(w=>w.id===item.dados.diarista_id);

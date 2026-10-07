@@ -762,11 +762,36 @@ async function runAssistantFlow(){
       const message=`Rede: Hipermarket\n*Região:* LOJA VILA UNIÃO\n*Função:* Repositor de mercearia\n*Horário:* 06:00 às 14:20\n*Data de início:* ${today.split('-').reverse().join('/')}\n*Quantidade de dias:* 2 dias\n\n*${person}*\nCPF: ${cpf}`;
       await page.locator('#reading-text').fill(message);await page.locator('#reading-submit').click();await page.locator('.reading-preview').waitFor().catch(async error=>{console.log('Diagnóstico assistente:',await page.locator('#reading-feedback').textContent(),errors);throw error;});
       assert.match(await page.locator('#reading-result-items').innerText(),/Vila União/);assert.equal(writes.length,0,'Interpretar não grava nem pendência');assert.equal((await api('GET','/api/diaristas')).filter(w=>w.cpf===cpf).length,0);
+      assert.match(await page.locator('.reading-preview').innerText(),/Diarista ainda não cadastrado/);
       await page.locator('#reading-text').fill('Corrigir horário para 07:00 às 15:20');await page.locator('#reading-submit').click();await page.waitForFunction(()=>document.querySelector('.reading-preview')?.textContent.includes('07:00 às 15:20'));assert.equal(writes.length,0);
       await page.locator('#reading-cancel').click();assert.equal(writes.length,0,'Cancelar não altera dados');
       await page.locator('#reading-text').fill(message);await page.locator('#reading-submit').click();await page.locator('.reading-preview').waitFor();await page.locator('#reading-confirm').click();await page.locator('.reading-item.saved').waitFor();
       const worker=(await api('GET','/api/diaristas')).find(w=>w.cpf===cpf),scales=(await api('GET','/api/escalas')).filter(s=>s.diarista_id===worker.id);assert.equal(scales.length,2);assert.equal((await api('GET','/api/pedidos')).find(o=>o.id===scales[0].pedido_id).situacao,'confirmado');
       const send=async text=>{await page.locator('#reading-text').fill(text);await page.locator('#reading-submit').click();await page.locator('.reading-preview').waitFor();};
+      const registrationWrites=writes.length,formattedCpf=cpf.replace(/(\d{3})(\d{3})(\d{3})(\d{2})/,'$1.$2.$3-$4');
+      await send(`Nome: Assistente Teste\nCPF: ${formattedCpf}`);
+      assert.match(await page.locator('.reading-preview').innerText(),/Diarista já cadastrado/);
+      assert.match(await page.locator('.reading-preview').innerText(),new RegExp(person));
+      assert.doesNotMatch(await page.locator('.reading-preview').innerText(),/Cadastro parcial:/);
+      assert.equal(writes.length,registrationWrites,'Consultar identidade não grava');
+      await page.locator('#reading-confirm').click();await page.locator('.reading-item.duplicate').waitFor();
+      assert.equal(writes.length,registrationWrites,'Confirmar cadastro existente não grava nem sobrescreve');
+      assert.deepEqual((await api('GET','/api/diaristas')).find(w=>w.cpf===cpf),worker);
+      const raceCpf=cpfFor(++serial);await send(`Nome: Cadastro recebido por link\nCPF: ${raceCpf}`);
+      assert.match(await page.locator('.reading-preview').innerText(),/Diarista ainda não cadastrado/);
+      const received=await api('POST','/api/diaristas',{nome:'Cadastro recebido por link completo',cpf:raceCpf,telefone:'85999998888',bairro:'Centro'});
+      await page.locator('#reading-confirm').click();await page.locator('.reading-item.duplicate').waitFor();
+      const matches=(await api('GET','/api/diaristas')).filter(w=>w.cpf===raceCpf);assert.equal(matches.length,1);assert.deepEqual(matches[0],received);
+      assert.equal(writes.length,registrationWrites,'Cadastro recebido após leitura é consultado novamente antes de confirmar');
+      await api('DELETE',`/api/diaristas/${received.id}`);
+      if(name==='Chromium'&&width===1280){
+        const concurrentCpf=cpfFor(++serial);let concurrent;
+        await send(`Nome: Cadastro concorrente\nCPF: ${concurrentCpf}`);
+        const intercept=async route=>{if(route.request().method()==='POST')concurrent=await api('POST','/api/diaristas',{nome:'Cadastro concorrente completo',cpf:concurrentCpf,bairro:'Centro'});await route.continue();};
+        await page.route('**/api/diaristas',intercept);await page.locator('#reading-confirm').click();await page.locator('.reading-item.duplicate').waitFor();await page.unroute('**/api/diaristas',intercept);
+        assert.deepEqual((await api('GET','/api/diaristas')).filter(w=>w.cpf===concurrentCpf),[concurrent]);
+        assert.equal(writes.length,registrationWrites+1,'Conflito de CPF não cria cadastro duplicado nem pendência');await api('DELETE',`/api/diaristas/${concurrent.id}`);
+      }
       const countBefore=writes.length;await send(`Marcar presença\nCPF: ${cpf}\nData: hoje\nPedido: ${scales[0].pedido_id}`);assert.equal(writes.length,countBefore);await page.locator('#reading-text').fill('está certo');await page.locator('#reading-submit').click();await page.locator('.reading-item.saved').waitFor();assert.equal((await api('GET','/api/escalas')).find(s=>s.id===scales[0].id).status,'presente');assert.equal((await api('GET',`/api/diaristas/${worker.id}/diarias`)).length,1);
       await send(`Marcar falta\nCPF: ${cpf}\nData: hoje\nPedido: ${scales[0].pedido_id}`);assert.equal(await page.locator('#reading-confirm').isEnabled(),false,'Falta sem motivo pede complemento');
       await page.locator('.reading-preview').getByRole('button',{name:'✎ Corrigir',exact:true}).click();await page.locator('#reading-text').fill(`Marcar falta\nCPF: ${cpf}\nData: hoje\nPedido: ${scales[0].pedido_id}\nMotivo: Correção controlada de teste`);await page.locator('#reading-submit').click();await page.locator('#reading-confirm').click();await page.locator('.reading-item.saved').waitFor();assert.equal((await api('GET',`/api/diaristas/${worker.id}/diarias`)).length,0,'Falta remove pagamento e faturamento de presença');
