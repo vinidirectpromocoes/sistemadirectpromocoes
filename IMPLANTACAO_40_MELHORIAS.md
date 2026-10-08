@@ -51,13 +51,14 @@ As melhorias foram construídas em módulos compatíveis com a operação existe
 
 ## Verificação
 
-- Backend: formulários tipados, valores, referências, versões, repetição de envio, aprovação, conversão, fechamento, saldos, CPF existente e restauração criptografada.
+- Backend: **83 testes aprovados**; formulários tipados, valores, referências, versões, repetição de envio, aprovação, conversão, fechamento, saldos, CPF existente e restauração criptografada.
+- Regras de negócio: **115 testes aprovados**, incluindo valores, leitura, versões, importação e confirmação. Total: **198 testes de backend e regras**.
 - Banco isolado: histórico das 66 migrações anteriores, novas funções e políticas reais, 35 tipos de formulário, Admin/Operação/Financeiro/Consulta, restrição por cliente, acesso anônimo, aprovação financeira, recebimento parcial, estoque, propostas, fotos e credencial do agente de backup.
 - Volume: 5.000 tarefas fictícias; página limitada a 50 registros, abaixo de cinco segundos no ambiente de ensaio. Não representa capacidade máxima da nuvem.
 - Navegador: Chromium e WebKit em 1280, 390 e 320 pixels; detalhes dos 35 tipos, gravação dos formulários editáveis, revisão, cancelamento, importação, escolha de colunas, temas, reabertura e treinamento.
 - Fluxos integrados: foto realmente comprimida e baixada, conferência até lote de pagamento, campanha até preparação de relatório, proposta até pedido, relatório externo aprovado, reservas, histórico, ciência, cenários e tipos de solicitação.
 - Regressão: pedidos e escalas, finanças, leitura/dialogue, links por rede, cadastro por convite, vagas, fila operacional, paginação e recarga.
-- Recuperação: backup com registro novo e foto real foi descriptografado, verificado e restaurado em SQLite separado. A rotina diária também será atualizada e conferida após a publicação.
+- Recuperação: backup com registro novo e foto real foi descriptografado, verificado e restaurado em SQLite separado. A rotina diária foi atualizada para o código final; sua execução automática e restauração operacional também foram verificadas.
 
 ## Limites explícitos
 
@@ -75,4 +76,18 @@ A restauração ensaiada é operacional em SQLite isolado. A cópia inclui ident
 
 ## Publicação
 
-A confirmação final do código publicado, verificações do banco e cópia pós-publicação será registrada aqui após os testes e a implantação. Até esse registro, este documento não confirma publicação.
+**Publicação concluída em 8 de outubro de 2026.** Abra [Minha empresa](https://sistemadirectpromocoes-zeta.vercel.app/#empresa). Os pedidos públicos continuam em [Direct Pedidos](https://directpedidos.vercel.app). O [guia da equipe](https://sistemadirectpromocoes-zeta.vercel.app/empresa-ajuda.html) também está disponível dentro da nova área.
+
+- Código aprovado: `e17a57e594d8061861cba968e300317e1a216a0d`; árvore completa `590847912c03c89f6d898574c4e3a75c7fd36526`. [Verificação contínua 118](https://github.com/vinidirectpromocoes/sistemadirectpromocoes/actions/runs/37843787687): backend/banco, Empresa, Operação e Assistente/portais **todos aprovados**. Todos os conjuntos de navegação anteriores foram mantidos.
+- [Alteração 35](https://github.com/vinidirectpromocoes/sistemadirectpromocoes/pull/35) incorporada em `main`, commit `9e39e1681870996b469f7e2b9475c15bae3c0010`, com árvore idêntica à versão testada.
+- Versão inicialmente liberada: `dpl_9Adk7jcRmWPDirEQKTdqSdpyBfFa`. Ambos os endereços públicos apontaram para essa versão. **74 arquivos de cada endereço tiveram SHA-256 idêntico ao código testado**; HTTPS e política de segurança conferidos.
+- Na interface pública real, Chromium e WebKit em 1280, 390 e 320 pixels passaram por login, guia, link fixo existente da rede, escolha de loja, três tipos de serviço, consulta/atualização de pedidos e rejeição de relatório inválido. Nenhum pedido de teste foi enviado à empresa.
+- A interface e o adaptador remoto da prévia foram exercitados com dados fictícios nos dois navegadores: 35 tipos abertos, formulários editáveis gravados, campos originais preservados e ausência de erro JavaScript/rolagem horizontal em 390 pixels. Esse ensaio usa um SDK simulado; as gravações e permissões reais do banco em nuvem foram verificadas separadamente em transações com **ROLLBACK**. Não foi usada uma sessão real de funcionário para gravar todos os formulários publicados.
+- Supabase: migração `20261008185515_enterprise_operational_platform.sql` aplicada e função `backup-evidencias` ativa. Teste real dos 35 tipos e restrição por cliente/perfil aprovado. HTTP sem credenciais negou painel e evidências; relatório com código inválido também foi negado. O armazenamento de fotos é privado.
+- Base conferida antes/depois: **23 diaristas, 8 pedidos, 19 diárias, 45 lojas**, custo histórico **R$ 1.710,00** e receita histórica **R$ 2.546,00**; **zero CPF duplicado** e nenhum registro fictício novo remanescente. Dez registros iniciais dos novos módulos correspondem às seis redes e quatro categorias.
+- Cópia antes da migração: `direct-20261008T202239Z-4223aa1f-bd40-4613-b020-25938ae1d589.directbackup`, SHA-256 `1647cdb0a2652abf4aa4e07162f00f7c5f9f7bf6a099b005344f01ace796c400`.
+- Cópia automática final: `direct-20261008T211220Z-41f8d980-95f9-422e-beb5-81b7b87b4c48.directbackup`, SHA-256 `3068b6ac52100fa91e6eb4b48b337559c5b75263f3a7337486c71aac5a81d5b7`. **35 tabelas, 547 registros, 1 usuário Auth e 273 arquivos**; descriptografada, hashes/vínculos conferidos e restaurada em SQLite isolado. A base real tinha zero fotos novas; a recuperação de bytes de foto foi ensaiada com imagem real e registros fictícios no ambiente isolado.
+
+As cópias ficam em `~/Library/Application Support/Direct/Backups` e têm espelho verificado no iCloud. Credenciais permanecem no Chaves do macOS. A execução automática foi confirmada como `ok`/`verified` no banco.
+
+A atualização deste relatório após a liberação é documental; a versão do aplicativo foi congelada e verificada antes da publicação.
