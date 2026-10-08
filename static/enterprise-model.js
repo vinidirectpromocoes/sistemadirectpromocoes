@@ -14,6 +14,7 @@
   if(!Number.isSafeInteger(value)||Math.abs(value)>1000000000||!allowNegative&&value<0)throw Error('Valor fora do limite permitido.');
   return value;
  }
+ function localDateTime(value){if(!value)return '';const date=new Date(value);if(Number.isNaN(date.getTime()))throw Error('Data e horário inválidos.');return new Intl.DateTimeFormat('sv-SE',{timeZone:'America/Fortaleza',year:'numeric',month:'2-digit',day:'2-digit',hour:'2-digit',minute:'2-digit',hourCycle:'h23'}).format(date).replace(' ','T');}
  function isoDay(value){let s=String(value??'').trim();if(/^\d{8}/.test(s))s=s.slice(0,4)+'-'+s.slice(4,6)+'-'+s.slice(6,8);else if(/^\d{2}\/\d{2}\/\d{4}$/.test(s))s=s.split('/').reverse().join('-');if(!/^\d{4}-\d{2}-\d{2}$/.test(s)||Number.isNaN(Date.parse(s+'T12:00:00Z'))||new Date(s+'T12:00:00Z').toISOString().slice(0,10)!==s)throw Error('Data inválida no arquivo.');return s;}
  function csv(text){
   text=String(text).replace(/^\uFEFF/,'');const first=text.split(/\r?\n/)[0],sep=first.includes(';')?';':first.includes('\t')?'\t':',';let rows=[],row=[],cell='',quoted=false;
@@ -55,5 +56,5 @@
   if(!items.length)items.push(['Diárias solicitadas no período',String(panel.demanda)],['Presenças registradas',String(panel.presencas)],['Presenças a conferir',String(panel.presencas_pendentes)]);
   return {message:`Consulta de ${panel.inicio} a ${panel.fim}. ${panel.registros_considerados} escala(s) consideradas. Valores ausentes continuam pendentes de conferência.`,items,sources:panel.fontes,updatedAt:panel.gerado_em};
  }
- return {schema,norm,cents,isoDay,csv,statement,canRead,canWrite,sampleBalance,budget,aging,simulate,assistant};
+ return {schema,norm,cents,localDateTime,isoDay,csv,statement,canRead,canWrite,sampleBalance,budget,aging,simulate,assistant};
 });
