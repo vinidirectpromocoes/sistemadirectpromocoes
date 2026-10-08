@@ -39,8 +39,8 @@
     document.querySelector('#logout-button').hidden = false;
     document.querySelector('#storage-status').textContent = 'Dados sincronizados';
     for (const [name, allowed] of Object.entries({
-      financeiro: ['admin', 'financeiro'], configuracoes: ['admin', 'financeiro'],
-      vagas: ['admin', 'operacao'], convites: ['admin', 'operacao'], leitura: ['admin', 'operacao'], diaristas: ['admin', 'operacao', 'financeiro'],
+      'pedidos-links': ['admin','operacao'], financeiro: ['admin', 'financeiro'], configuracoes: ['admin', 'financeiro'],
+      vagas: ['admin', 'operacao'], convites: ['admin', 'operacao'], leitura: ['admin', 'operacao', 'financeiro', 'consulta'], diaristas: ['admin', 'operacao', 'financeiro'],
     })) document.querySelector(`#nav-${name}`).hidden = !allowed.includes(role);
     document.querySelector('#new-button').hidden = !['admin', 'operacao'].includes(role);
     document.querySelector('#new-order-button').hidden = !['admin', 'operacao'].includes(role);
@@ -52,8 +52,8 @@
       'edit-button': ['admin', 'operacao'], 'block-button': ['admin', 'operacao'],
       'order-edit-button': ['admin', 'operacao'], 'order-delete-button': ['admin', 'operacao'],
     })) document.getElementById(id).hidden = !roles.includes(role);
-    if (['financeiro', 'configuracoes', 'leitura', 'convites', 'vagas'].includes(location.hash.slice(1)) &&
-        document.querySelector(`#nav-${location.hash.slice(1)}`)?.hidden) location.hash = '#inicio';
+    if (['financeiro', 'configuracoes', 'leitura', 'convites', 'vagas', 'pedidos-links'].includes(location.hash.slice(1).split('?')[0]) &&
+        document.querySelector(`#nav-${location.hash.slice(1).split('?')[0]}`)?.hidden) location.hash = '#inicio';
   }
   async function authorize(reload = false) {
     const { data: { session }, error } = await sb.auth.getSession();
@@ -253,11 +253,17 @@
         if (method === 'GET') return (await rows('diarias')).filter(item => item.diarista_id === id).sort((a,b) => b.data.localeCompare(a.data) || b.id - a.id);
         if (method === 'POST') return unwrap(await sb.from('diarias').insert({ ...dailyPayload(p), diarista_id: id }).select().single());
         if (method === 'PATCH' && parts[5] === 'pagamento') {
-          return unwrap(await sb.from('diarias').update({
+          let query=sb.from('diarias').update({
             data_pagamento: p.data_pagamento || null, valor_centavos: money(p.valor),
             vencimento_pagamento: p.vencimento_pagamento || null, forma_pagamento: p.forma_pagamento || '',
             motivo_ajuste: p.motivo_ajuste || ''
-          }).eq('id', dailyId).eq('diarista_id', id).select().single());
+          }).eq('id', dailyId).eq('diarista_id', id);
+          if(p.expected_payment){for(const key of ['data_pagamento','valor_centavos','vencimento_pagamento','forma_pagamento','pagamento_lote_id']){
+            if(!Object.hasOwn(p.expected_payment,key))throw Error('Confira novamente os dados do pagamento.');
+            query=p.expected_payment[key]===null?query.is(key,null):query.eq(key,p.expected_payment[key]);
+          }}
+          const saved=unwrap(await query.select().maybeSingle());
+          if(!saved)throw Error('O pagamento mudou depois da leitura. Confira novamente antes de aplicar.');return saved;
         }
         if (method === 'DELETE') {
           const current = unwrap(await sb.from('diarias').select('data_pagamento').eq('id', dailyId).eq('diarista_id', id).single());
@@ -266,7 +272,7 @@
           return { ok: true };
         }
       }
-      if (child === 'bloqueio' && method === 'PATCH') return unwrap(await sb.from('diaristas').update({ bloqueada: p.bloqueada, atualizado_em: new Date().toISOString() }).eq('id', id).select().single());
+      if (child === 'bloqueio' && method === 'PATCH') return updateVersioned('diaristas',id,{bloqueada:p.bloqueada},p);
       if (method === 'GET') return (await rows('diaristas')).sort((a,b) => a.nome.localeCompare(b.nome, 'pt-BR'));
       if (method === 'POST') return unwrap(await sb.from('diaristas').insert(diaristaPayload(p)).select().single());
       if (method === 'PUT') return await updateVersioned('diaristas', id, diaristaPayload(p), p);
@@ -274,7 +280,8 @@
         const history = await sb.from('diarias').select('id', { count: 'exact', head: true }).eq('diarista_id', id);
         if (history.error) throw new Error(history.error.message);
         if (history.count) throw new Error('Este cadastro tem diárias registradas. Bloqueie a diarista para preservar o histórico.');
-        unwrap(await sb.from('diaristas').delete().eq('id', id)); return { ok: true };
+        let query=sb.from('diaristas').delete().eq('id',id);if(p.expected_updated_at)query=query.eq('atualizado_em',p.expected_updated_at);
+        const removed=unwrap(await query.select('id').maybeSingle());if(!removed)throw Error('O cadastro mudou ou já foi removido. Atualize antes de excluir.');return {ok:true};
       }
     }
     if (entity === 'financeiro') {
@@ -359,7 +366,7 @@
         const values=p.acao==='confirmacao'?{confirmacao:p.confirmacao}:
           p.acao==='validacao'?{chegada_em:p.chegada_em||null,saida_em:p.saida_em||null,loja_validacao:p.loja_validacao,loja_responsavel:p.loja_responsavel,loja_observacao:p.loja_observacao||''}:null;
         if (!values) throw new Error('Ação inválida.');
-        return unwrap(await sb.from('pedido_escalas').update({...values,atualizado_em:new Date().toISOString()}).eq('id',target).select().single());
+        return updateVersioned('pedido_escalas',target,values,p);
       }
     }
     if (entity === 'custos-extras') {
@@ -388,7 +395,7 @@
     if (entity === 'pedidos') {
       if (child === 'escalas') {
         const scaleId = parts[4] ? Number(parts[4]) : null;
-        if(parts[5]==='substituir' && method==='POST') return unwrap(await sb.rpc(p.todos_restantes===true?'direct_replace_order_remaining':'direct_replace_order_worker',{p_pedido_id:id,p_escala_id:scaleId,p_diarista_id:Number(p.diarista_id),p_motivo:p.motivo||'',p_disponibilidade_confirmada:p.disponibilidade_confirmada===true}));
+        if(parts[5]==='substituir' && method==='POST') return unwrap(await sb.rpc(p.expected_updated_at?'direct_read_replace_worker':p.todos_restantes===true?'direct_replace_order_remaining':'direct_replace_order_worker',{p_pedido_id:id,p_escala_id:scaleId,p_diarista_id:Number(p.diarista_id),p_motivo:p.motivo||'',p_disponibilidade_confirmada:p.disponibilidade_confirmada===true,...(p.expected_updated_at?{p_expected_updated_at:p.expected_updated_at}:{})}));
         if (method === 'GET') {
           const assignments = unwrap(await sb.from('pedido_escalas').select('*, diaristas(nome)').eq('pedido_id', id).order('data').order('id'));
           if (!assignments.length) return [];
@@ -400,13 +407,20 @@
         if (method === 'POST') {
           if (Array.isArray(p.datas)) {
             if (!p.datas.length || p.datas.length > 90 || new Set(p.datas).size !== p.datas.length) throw new Error('Confira as datas escolhidas para a escala.');
-            return unwrap(await sb.from('pedido_escalas').insert(p.datas.map(data => ({ pedido_id: id, diarista_id: Number(p.diarista_id), data }))).select());
+            return unwrap(await sb.from('pedido_escalas').insert(p.datas.map(data => ({ pedido_id: id, diarista_id: Number(p.diarista_id), data,disponibilidade_pedido_confirmada:p.disponibilidade_confirmada===true }))).select());
           }
           return unwrap(await sb.from('pedido_escalas').insert({ pedido_id: id, diarista_id: Number(p.diarista_id), data: p.data }).select().single());
         }
-        if (method === 'PATCH') return unwrap(await sb.from('pedido_escalas').update({ status: p.status,
-          ...(p.status === 'falta' ? { falta_motivo: p.motivo } : p.status==='desistiu'?{desistencia_motivo:p.motivo}:{}) }).eq('pedido_id', id).eq('id', scaleId).select().single());
-        if (method === 'DELETE') { unwrap(await sb.from('pedido_escalas').delete().eq('pedido_id', id).eq('id', scaleId)); return { ok: true }; }
+        if (method === 'PATCH') {
+          let query=sb.from('pedido_escalas').update({status:p.status,...(p.status==='falta'?{falta_motivo:p.motivo}:p.status==='desistiu'?{desistencia_motivo:p.motivo}:{})}).eq('pedido_id',id).eq('id',scaleId);
+          if(p.expected_updated_at)query=query.eq('atualizado_em',p.expected_updated_at);
+          const saved=unwrap(await query.select().maybeSingle());if(!saved)throw Error('A escala mudou depois da leitura. Confira novamente.');return saved;
+        }
+        if (method === 'DELETE') {
+          let query=sb.from('pedido_escalas').delete().eq('pedido_id',id).eq('id',scaleId);
+          if(p.expected_updated_at)query=query.eq('atualizado_em',p.expected_updated_at);
+          const removed=unwrap(await query.select('id').maybeSingle());if(!removed)throw Error('A escala mudou ou já foi removida. Confira novamente.');return {ok:true};
+        }
       }
       if (method === 'GET') return (await rows('pedidos')).sort((a,b) => b.id - a.id).map(orderView);
       if (method === 'POST') {
@@ -421,7 +435,7 @@
         return orderView(unwrap(response));
       }
       if (method === 'PUT') return orderView(await updateVersioned('pedidos', id, orderPayload(p), p));
-      if (method === 'DELETE') { unwrap(await sb.from('pedidos').delete().eq('id', id)); return { ok: true }; }
+      if (method === 'DELETE') return unwrap(await sb.rpc('direct_delete_order', { p_id: id, p_expected_updated_at: p.expected_updated_at || null }));
     }
     if (entity === 'solicitacoes-lojas' || entity === 'conferencias-lojas') {
       if (!['admin','operacao'].includes(currentRole)) throw Error('Sem permissão para solicitações de lojas.');
@@ -430,6 +444,11 @@
         return (await rows('loja_validacoes','*,pedido_escalas(pedido_id,data,diaristas(nome))')).map(v=>({...v,escala:{pedido_id:v.pedido_escalas?.pedido_id,data:v.pedido_escalas?.data,diarista_nome:v.pedido_escalas?.diaristas?.nome||''}}));
       }
       if (method === 'PATCH') return unwrap(await sb.rpc(entity==='solicitacoes-lojas'?'direct_store_review_request':'direct_store_review_check',{p_id:id,p_aceitar:entity==='solicitacoes-lojas'?false:p.aceitar,...(entity==='solicitacoes-lojas'?{p_dados:null}:{}),p_motivo:p.motivo||''}));
+    }
+    if (entity === 'redes-links') {
+      if (!['admin','operacao'].includes(currentRole)) throw Error('Sem permissão para links das redes.');
+      if (method === 'GET') return unwrap(await sb.rpc('direct_network_links'));
+      if (method === 'POST') return unwrap(await sb.rpc('direct_network_link',{p_rede:p.rede,p_acao:p.acao||'consultar'}));
     }
     if (entity === 'modelos-pedidos') {
       if (method === 'GET') return await rows('pedido_modelos');

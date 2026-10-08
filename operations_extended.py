@@ -143,6 +143,7 @@ def handle(h, method, s):
                     else:
                         old=db.execute('SELECT * FROM pedido_escalas WHERE id=?',(rid,)).fetchone()
                         if not old: raise ValueError('Escala não encontrada.')
+                        if p.get('expected_updated_at') and p['expected_updated_at']!=old['atualizado_em']: raise ValueError('A escala mudou depois da leitura. Confira novamente.')
                         if p.get('acao')=='confirmacao':
                             state=p.get('confirmacao')
                             if state not in ['aguardando','confirmou','recusou'] or old['status']!='escalada': raise ValueError('Confirmação disponível apenas para escala aguardando presença.')

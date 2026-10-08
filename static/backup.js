@@ -33,7 +33,7 @@
     try {
       const pass = password();
       output.textContent = 'Preparando cópia consistente no banco...';
-      const { data: payload, error } = await window.directRemote.client.rpc('direct_backup_snapshot_v8');
+      const { data: payload, error } = await window.directRemote.client.rpc('direct_backup_snapshot_v9');
       if (error) throw new Error(error.message);
       const verified = window.DirectBackup.validate(payload);
       const salt = crypto.getRandomValues(new Uint8Array(16));

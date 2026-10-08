@@ -1,6 +1,6 @@
 /* Optional modules load once, in dependency order. Failures can be retried. */
 (()=>{
- const modules=new Map(),groups={leitura:['reading-parser','reading-assistant','reading'],configuracoes:['backup-model','backup','portal-admin'],convites:['portal-admin'],vagas:['vacancies-admin']};
+ const modules=new Map(),groups={'pedidos-links':['network-links'],leitura:['reading-parser','reading-assistant','reading-dialogue','reading'],configuracoes:['backup-model','backup','portal-admin'],convites:['portal-admin'],vagas:['vacancies-admin']};
  function script(name){if(modules.has(name))return modules.get(name);const pending=new Promise((resolve,reject)=>{const s=document.createElement('script');s.src='/'+name+'.js';s.onload=resolve;s.onerror=()=>{modules.delete(name);s.remove();reject(Error('Não foi possível carregar esta função. Confira a conexão e tente novamente.'));};document.head.append(s);});modules.set(name,pending);return pending;}
  const pages=new Map();
  window.DirectPager={slice(key,items,target,render,size=25){

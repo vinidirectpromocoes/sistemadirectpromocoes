@@ -28,7 +28,9 @@ V7_PUBLIC = ("pedido_modelos", "loja_solicitacoes", "loja_validacoes")
 V7_PRIVATE = EXTRA_TABLES + ("loja_links",)
 V7_TABLES = TABLES + V7_PUBLIC + V7_PRIVATE
 V8_PUBLIC = ("pendencia_acoes", "substituicao_contatos")
-ALL_TABLES = V7_TABLES + V8_PUBLIC
+V8_TABLES = V7_TABLES + V8_PUBLIC
+V9_PRIVATE = V7_PRIVATE + ("rede_links",)
+ALL_TABLES = V8_TABLES + ("rede_links",)
 LEGACY_TABLES = TABLES[:11]
 
 
@@ -42,15 +44,15 @@ def decrypt_archive(archive, password):
         raise ValueError("Parâmetros de criptografia inválidos")
     key = __import__("hashlib").pbkdf2_hmac("sha256", password.encode(), salt, 200000, 32)
     payload = json.loads(AESGCM(key).decrypt(iv, ciphertext, None))
-    if payload.get("format") not in ("direct-data-v1", "direct-data-v2", "direct-data-v3", "direct-data-v4", "direct-data-v5", "direct-data-v6", "direct-data-v7", "direct-data-v8") or not isinstance(payload.get("tables"), dict):
+    if payload.get("format") not in ("direct-data-v1", "direct-data-v2", "direct-data-v3", "direct-data-v4", "direct-data-v5", "direct-data-v6", "direct-data-v7", "direct-data-v8", "direct-data-v9") or not isinstance(payload.get("tables"), dict):
         raise ValueError("Conteúdo da cópia não reconhecido")
-    required = ALL_TABLES if payload["format"] == "direct-data-v8" else V7_TABLES if payload["format"] == "direct-data-v7" else V6_TABLES if payload["format"] == "direct-data-v6" else V5_TABLES if payload["format"] == "direct-data-v5" else TABLES if payload["format"] == "direct-data-v4" else TABLES[:16] if payload["format"] == "direct-data-v3" else TABLES[:15] if payload["format"] == "direct-data-v2" else LEGACY_TABLES
+    required = ALL_TABLES if payload["format"] == "direct-data-v9" else V8_TABLES if payload["format"] == "direct-data-v8" else V7_TABLES if payload["format"] == "direct-data-v7" else V6_TABLES if payload["format"] == "direct-data-v6" else V5_TABLES if payload["format"] == "direct-data-v5" else TABLES if payload["format"] == "direct-data-v4" else TABLES[:16] if payload["format"] == "direct-data-v3" else TABLES[:15] if payload["format"] == "direct-data-v2" else LEGACY_TABLES
     for table in required:
         if not isinstance(payload["tables"].get(table), list):
             raise ValueError(f"Tabela ausente: {table}")
         if not all(isinstance(row, dict) for row in payload["tables"][table]):
             raise ValueError(f"Registros inválidos: {table}")
-    if payload["format"] in ("direct-data-v5", "direct-data-v6", "direct-data-v7", "direct-data-v8"):
+    if payload["format"] in ("direct-data-v5", "direct-data-v6", "direct-data-v7", "direct-data-v8", "direct-data-v9"):
         snapshot = payload.get("snapshot", {})
         if snapshot.get("consistent") is not True or any(snapshot.get("counts", {}).get(t) != len(payload["tables"][t]) for t in required):
             raise ValueError("Contagens ou consistência inválidas")
@@ -182,7 +184,7 @@ def restore_operational(archive_path, password, output_path):
                     db.execute(f"INSERT INTO direct_auditoria ({names}) VALUES ({markers})", tuple(values.values()))
             with db:
                 db.execute("CREATE TABLE backup_private_rows (source_table TEXT NOT NULL, ordinal INTEGER NOT NULL, record_json TEXT NOT NULL, PRIMARY KEY(source_table,ordinal))")
-                for table in V7_PRIVATE:
+                for table in V9_PRIVATE:
                     db.executemany("INSERT INTO backup_private_rows VALUES (?,?,?)", ((table,index,json.dumps(row,ensure_ascii=False)) for index,row in enumerate(data[table])))
             db.execute("PRAGMA foreign_keys = ON")
             invalid = db.execute("PRAGMA foreign_key_check").fetchall()
@@ -191,7 +193,7 @@ def restore_operational(archive_path, password, output_path):
             if db.execute("PRAGMA integrity_check").fetchone()[0] != "ok":
                 raise ValueError("Falha de integridade da base restaurada")
             actual = {table: db.execute(f"SELECT count(*) FROM {table}").fetchone()[0] for table in TABLES + V7_PUBLIC + V8_PUBLIC}
-            actual.update({table: db.execute("SELECT count(*) FROM backup_private_rows WHERE source_table=?", (table,)).fetchone()[0] for table in V7_PRIVATE})
+            actual.update({table: db.execute("SELECT count(*) FROM backup_private_rows WHERE source_table=?", (table,)).fetchone()[0] for table in V9_PRIVATE})
             expected = {table: len(data[table]) for table in ALL_TABLES}
             if actual != expected:
                 raise ValueError("Contagem divergente após restauração operacional")

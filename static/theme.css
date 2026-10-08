@@ -21,7 +21,8 @@
 .sidebar-control:hover { background: #ffffff2b; color: #fff; }
 .sidebar-control:focus-visible, .login-theme-toggle:focus-visible { outline: 3px solid #a7c8ff; outline-offset: 2px; }
 .sidebar-control svg, .login-theme-toggle svg { display: block; width: 18px; height: 18px; flex: none; }
-.theme-toggle { flex: 1; min-width: 0; justify-content: flex-start; gap: 6px; padding: 7px 8px; font-size: 12px; font-weight: 700; white-space: nowrap; }
+.sidebar-controls .sidebar-control { flex: none; width: 40px; height: 40px; min-width: 0; min-height: 40px; padding: 0; box-sizing: border-box; }
+.theme-toggle { justify-content: center; }
 .logout-button { flex: none; width: 40px; margin: 0; padding: 0; text-decoration: none; }
 .login-card { position: relative; }
 .login-theme-toggle {
@@ -41,7 +42,6 @@ html[data-theme="dark"] .theme-icon-moon { display: none; }
   .sidebar-foot { display: flex; padding: 10px 0 0; border: 0; }
   .sidebar-status { display: none; }
   .sidebar-controls { justify-content: flex-end; }
-  .theme-toggle { flex: 0 1 auto; }
 }
 @media (max-width: 520px) {
   .login-theme-toggle { top: 16px; right: 16px; }

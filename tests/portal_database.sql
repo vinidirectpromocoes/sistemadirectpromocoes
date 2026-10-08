@@ -37,8 +37,9 @@ begin
  if (public.direct_portal_take_order(oid,i1->>'vagas_token','52998224725')->>'dias')::int<>0 then raise exception 'Repetição duplicou escala';end if;
  if public.direct_portal_orders(i1->>'vagas_token') @> jsonb_build_array(jsonb_build_object('id',oid)) then raise exception 'Pedido preenchido ainda disponível';end if;
  insert into public.pedidos(supermercado,unidade,setor,quantidade_diaristas,turnos) values('Portal teste','Outra sintética','FLV',1,jsonb_build_array(jsonb_build_object('data',d+1,'inicio','07:00','fim','15:20'),jsonb_build_object('data',d,'inicio','08:00','fim','16:20'))) returning id into other_oid;
- begin perform public.direct_portal_take_order(other_oid,i1->>'vagas_token','52998224725');raise exception 'FALHOU: conflito permitido';exception when others then if sqlerrm like 'FALHOU:%' then raise;end if;if sqlerrm not like '%outro pedido%' then raise;end if;end;
- if exists(select 1 from public.pedido_escalas where pedido_id=other_oid) then raise exception 'Gravou apenas parte da escala';end if;
+ result:=public.direct_portal_take_order(other_oid,i1->>'vagas_token','52998224725');
+ if (result->>'dias')::int<>2 or (select count(*) from public.pedido_escalas where pedido_id=other_oid)<>2 then raise exception 'Escalas sobrepostas não foram salvas integralmente';end if;
+ delete from public.pedido_escalas where pedido_id=other_oid;
  update public.pedidos set turnos=jsonb_build_array(jsonb_build_object('data',d+1,'inicio','07:00','fim','15:20'),jsonb_build_object('data',d+2,'inicio','07:00','fim','15:20')) where id=other_oid;
  update public.diaristas set trabalhando=true,rede_trabalho='Portal teste',local_trabalho='Unidade sintética' where id=w1;
  begin perform public.direct_portal_take_order(other_oid,i1->>'vagas_token','52998224725');raise exception 'FALHOU: mesma empresa';exception when others then if sqlerrm like 'FALHOU:%' then raise;end if;if sqlerrm not like '%mesma empresa%' then raise;end if;end;

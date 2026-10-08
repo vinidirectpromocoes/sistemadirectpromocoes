@@ -28,5 +28,11 @@
         }
       ]
     }
+  ],
+  "rewrites": [
+    {
+      "source": "/r/:codigo",
+      "destination": "/rede.html"
+    }
   ]
 }

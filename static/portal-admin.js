@@ -1,9 +1,17 @@
 (() => {
   const $ = id => document.getElementById(id);
-  let offset = 0, total = 0, generation = 0, listRequest = 0;
+  let offset = 0, total = 0, generation = 0, listRequest = 0, inviteRequest = 0;
   const allowed = () => ['admin', 'operacao'].includes(window.directRemote?.role);
   const active = () => location.hash === '#convites';
   const msg = text => { $('portal-admin-feedback').textContent = text; };
+  function clearInvite() {
+    inviteRequest++;
+    $('portal-invite-cpf').value = '';
+    $('portal-invite-links').hidden = true;
+    $('portal-invite-expiry').textContent = '';
+    for (const kind of ['cadastro', 'vagas']) $('portal-' + kind + '-url').value = '';
+    msg('');
+  }
   async function rpc(name, args) {
     if (!allowed()) throw Error('Entre com um perfil de administrador ou operação.');
     const { data, error } = await window.directRemote.client.rpc(name, args);
@@ -14,25 +22,26 @@
     b.addEventListener('click', async () => {
       const url = $('portal-' + b.dataset.copyPortal + '-url');
       if (!allowed() || !url.value) return;
-      try { await navigator.clipboard.writeText(url.value); msg('Link copiado. Pode enviar pelo WhatsApp.'); }
-      catch { url.focus(); url.select(); msg('Selecione e copie o link acima.'); }
+      const version = inviteRequest;
+      try { await navigator.clipboard.writeText(url.value); if (version === inviteRequest) msg('Link copiado. Pode enviar pelo WhatsApp.'); }
+      catch { if (version === inviteRequest) { url.focus(); url.select(); msg('Selecione e copie o link acima.'); } }
     });
   }
   $('portal-invite-form').addEventListener('submit', async e => {
-    e.preventDefault(); const b = e.submitter, version = generation; b.disabled = true;
+    e.preventDefault(); const b = e.submitter, version = generation, inviteVersion = ++inviteRequest; b.disabled = true;
     // O novo convite substitui os links exibidos, evitando enviar o convite anterior por engano.
     $('portal-invite-links').hidden = true;
     for (const kind of ['cadastro', 'vagas']) $('portal-' + kind + '-url').value = '';
     try {
       const cpf = $('portal-invite-cpf').value.replace(/\D/g, '');
       const data = await rpc('direct_portal_create_invite', { p_cpf: cpf || null, p_dias: Number($('portal-invite-days').value) });
-      if (version !== generation || !allowed()) return;
+      if (version !== generation || inviteVersion !== inviteRequest || !allowed()) return;
       for (const kind of ['cadastro', 'vagas']) $('portal-' + kind + '-url').value = new URL('/' + kind + '.html#convite=' + data[kind + '_token'], location.origin).href;
       $('portal-invite-expiry').textContent = 'Convite para uma pessoa. Válido até ' + new Date(data.expira_em).toLocaleDateString('pt-BR') + '.';
       $('portal-invite-links').hidden = false;
       msg('Copie o link de cadastro e envie no privado. Gere outro convite para a próxima pessoa.');
-    } catch (error) { if (version === generation) msg(error.message); }
-    finally { b.disabled = false; }
+    } catch (error) { if (version === generation && inviteVersion === inviteRequest) msg(error.message); }
+    finally { if (inviteVersion === inviteRequest) b.disabled = false; }
   });
   $('portal-contact-form').addEventListener('submit', async e => {
     e.preventDefault(); const b = e.submitter, version = generation; b.disabled = true;
@@ -120,7 +129,7 @@
       $('portal-whatsapp').value = data.whatsapp; $('portal-group').value = data.grupo_url;
     } catch (error) { if (version === generation) $('portal-contact-feedback').textContent = error.message; }
   }
-  $('portal-refresh').addEventListener('click', () => { offset = 0; loadRegistrations(); });
+  $('portal-refresh').addEventListener('click', () => { clearInvite(); offset = 0; loadRegistrations(); });
   $('portal-registration-prev').addEventListener('click', () => { offset = Math.max(0, offset - 20); loadRegistrations(); });
   $('portal-registration-next').addEventListener('click', () => { if (offset + 20 < total) { offset += 20; loadRegistrations(); } });
   function refresh() { if (active() && allowed()) loadRegistrations(); }
@@ -133,9 +142,8 @@
     generation++; listRequest++; offset = total = 0;
     $('portal-registration-list').replaceChildren(); $('portal-registration-count').textContent = '0';
     $('portal-registration-pagination').hidden = true; $('portal-registration-status').textContent = '';
-    $('portal-invite-links').hidden = true; $('portal-settings').hidden = true;
+    clearInvite(); $('portal-settings').hidden = true;
     $('portal-contact-form').reset(); $('portal-invite-form').reset(); msg(''); $('portal-contact-feedback').textContent = '';
-    for (const kind of ['cadastro', 'vagas']) $('portal-' + kind + '-url').value = '';
   });
   if (active()) loadRegistrations();
   if (window.directRemote?.role) loadContacts();

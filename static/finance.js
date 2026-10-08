@@ -573,13 +573,13 @@ async function openFinanceAudit() {
 
 async function showPage() {
   const routeHash = location.hash;
-  let page = ['inicio', 'crm', 'diaristas', 'financeiro', 'pedidos', 'leitura', 'redes', 'configuracoes', 'convites', 'vagas'].includes(window.location.hash.slice(1)) ? window.location.hash.slice(1) : 'inicio';
+  let page = ['inicio', 'crm', 'diaristas', 'financeiro', 'pedidos', 'leitura', 'redes', 'configuracoes', 'convites', 'vagas', 'pedidos-links'].includes(window.location.hash.slice(1).split('?')[0]) ? window.location.hash.slice(1).split('?')[0] : 'inicio';
   const role = window.directRemote?.role;
-  if (role && ({ financeiro: ['admin', 'financeiro'], configuracoes: ['admin', 'financeiro'], vagas: ['admin', 'operacao'], convites: ['admin', 'operacao'], leitura: ['admin', 'operacao'], diaristas: ['admin', 'financeiro', 'operacao'] }[page] || ['admin', 'financeiro', 'operacao', 'consulta']).includes(role) === false) {
+  if (role && ({ 'pedidos-links':['admin','operacao'], financeiro: ['admin', 'financeiro'], configuracoes: ['admin', 'financeiro'], vagas: ['admin', 'operacao'], convites: ['admin', 'operacao'], leitura: ['admin', 'operacao', 'financeiro', 'consulta'], diaristas: ['admin', 'financeiro', 'operacao'] }[page] || ['admin', 'financeiro', 'operacao', 'consulta']).includes(role) === false) {
     page = 'inicio';
     if (location.hash !== '#inicio') location.hash = '#inicio';
   }
-  for (const name of ['inicio', 'crm', 'diaristas', 'pedidos', 'leitura', 'redes', 'financeiro', 'configuracoes', 'convites', 'vagas']) {
+  for (const name of ['inicio', 'crm', 'diaristas', 'pedidos', 'leitura', 'redes', 'financeiro', 'configuracoes', 'convites', 'vagas', 'pedidos-links']) {
     const active = name === page;
     $(`#${name}-page`).hidden = !active;
     const link = $(`#nav-${name}`);
@@ -587,7 +587,7 @@ async function showPage() {
     if (active) link.setAttribute('aria-current', 'page');
     else link.removeAttribute('aria-current');
   }
-  document.title = `${{ vagas: 'Vagas disponíveis', convites: 'Cadastros por link', inicio: 'Início', crm: 'Pendências', diaristas: 'Diaristas', pedidos: 'Pedidos', leitura: 'Leitura IA', redes: 'Redes e lojas', financeiro: 'Financeiro', configuracoes: 'Configurações' }[page]} | Direct Promoções`;
+  document.title = `${{ 'pedidos-links': 'Pedidos por link', vagas: 'Vagas disponíveis', convites: 'Cadastros por link', inicio: 'Início', crm: 'Pendências', diaristas: 'Diaristas', pedidos: 'Pedidos', leitura: 'Leitura IA', redes: 'Redes e lojas', financeiro: 'Financeiro', configuracoes: 'Configurações' }[page]} | Direct Promoções`;
   window.scrollTo(0, 0);
   try { await window.DirectModules.ensure(page); } catch (error) { window.DirectUI?.notify(error.message, true); return; }
   if (location.hash !== routeHash) return;
@@ -595,6 +595,7 @@ async function showPage() {
   if (page === 'diaristas') load();
   if (page === 'financeiro') loadFinance();
   if (page === 'pedidos' && typeof loadOrders === 'function') loadOrders();
+  if (page === 'pedidos-links') window.DirectNetworkLinks?.load();
   if (page === 'redes' && typeof loadStores === 'function') loadStores();
   if (page === 'configuracoes' && typeof loadSettings === 'function') loadSettings().catch(() => {});
 }

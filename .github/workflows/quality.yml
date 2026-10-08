@@ -31,12 +31,15 @@ jobs:
         run: pnpm test:unit
       - name: Navegação, perfis e telas móveis
         run: |
+          node tests/overlapping_e2e.mjs
           node tests/usability_e2e.mjs
           node tests/pagination_e2e.mjs
           node tests/fluency_e2e.mjs
           node tests/automation_e2e.mjs
           node tests/management_e2e.mjs
+          node tests/network_links_e2e.mjs
           pnpm test:e2e
+          node tests/dialogue_e2e.mjs
           node tests/portal_e2e.mjs
           node tests/portal_admin_e2e.mjs
           node tests/vacancies_e2e.mjs
