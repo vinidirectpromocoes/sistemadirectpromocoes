@@ -207,7 +207,7 @@ async function runReadingFlow() {
       await page.goto(`${url}#leitura`, { waitUntil: 'domcontentloaded' });
       await page.locator('#reading-file').setInputFiles({ name: `teste-${confidence}.png`, mimeType: 'image/png', buffer: tinyPng });
       await page.locator('#reading-submit').click();
-      await page.locator('#reading-result-items .reading-item').waitFor();
+      await page.locator('#reading-result-items .reading-item').waitFor().catch(async e=>{console.error('READING DIAGNOSTIC',confidence,await page.locator('#reading-feedback').innerText(),await page.locator('#reading-result-items').innerText());throw e;});
       const state = confidence < 75 ? 'pending' : 'saved';
       await page.locator('#reading-result-items .reading-preview').waitFor();
       if(state==='saved') await page.locator('#reading-confirm').click();
@@ -838,7 +838,8 @@ async function runMessagesFlow() {
 
 try {
   await ready();
-  if(process.env.DIRECT_EXTENDED_ONLY==='1'){await runFinancialWorkflow();await runExtendedWorkflow();}
+  if(process.env.DIRECT_READING_ONLY==='1'){await runReadingFlow();}
+  else if(process.env.DIRECT_EXTENDED_ONLY==='1'){await runFinancialWorkflow();await runExtendedWorkflow();}
   else if(process.env.DIRECT_ASSIGNMENT_ONLY==='1'){await runAssignmentPersistence();}
   else if(process.env.DIRECT_RECENT_ONLY==='1'){await runRecentOrderAttendance();}
   else if(process.env.DIRECT_ROLES_ONLY==='1'){await runRoleNavigation();}

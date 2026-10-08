@@ -582,6 +582,8 @@ async function showPage() {
   for (const name of ['inicio', 'crm', 'diaristas', 'pedidos', 'leitura', 'redes', 'financeiro', 'configuracoes', 'convites', 'vagas', 'pedidos-links', 'empresa']) {
     const active = name === page;
     $(`#${name}-page`).hidden = !active;
+    $(`#${name}-page`).inert = active;
+    if(active)$(`#${name}-page`).setAttribute('aria-busy','true');
     const link = $(`#nav-${name}`);
     link.classList.toggle('nav-active', active);
     if (active) link.setAttribute('aria-current', 'page');
@@ -591,6 +593,7 @@ async function showPage() {
   window.scrollTo(0, 0);
   try { await window.DirectModules.ensure(page); } catch (error) { window.DirectUI?.notify(error.message, true); return; }
   if (location.hash !== routeHash) return;
+  $(`#${page}-page`).inert=false;$(`#${page}-page`).removeAttribute('aria-busy');
   if (page === 'empresa') window.DirectEnterprise?.load();
   if (page === 'inicio' || page === 'crm') loadHome();
   if (page === 'diaristas') load();
