@@ -238,6 +238,7 @@
     const child = parts[3];
     if (parts[0] !== 'api') throw new Error('Rota inválida.');
 
+    if (entity === 'empresa') return unwrap(await sb.rpc('direct_empresa_'+parts[2].replaceAll('-','_'),{p:method==='GET'?Object.fromEntries(parsed.searchParams):p}));
     if (entity === 'busca' && method==='GET') return unwrap(await sb.rpc('direct_search',{p_query:parsed.searchParams.get('q')||''}));
     if (entity === 'pendencias-acoes') {
       if(method==='GET')return rows('pendencia_acoes');

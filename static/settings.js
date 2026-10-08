@@ -64,7 +64,7 @@ function renderNetworkRates() {
       if (!income || !payout) return settingsMessage('Informe valores válidos maiores que zero, com até duas casas decimais.', true);
       save.disabled = true;
       try {
-        await request(`/api/tarifas/redes/${item.id}`, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ valor_recebido: settingsInput(income), valor_padrao: settingsInput(payout) }) });
+        await request(item.id?`/api/tarifas/redes/${item.id}`:'/api/empresa/configurar-rede',{method:item.id?'PUT':'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(item.id?{valor_recebido:settingsInput(income),valor_padrao:settingsInput(payout)}:{rede_id:item.empresa_id,valor_recebido_centavos:income,valor_padrao_centavos:payout})});
         await loadSettings();
         settingsMessage(`Valores de ${item.rede} atualizados.`);
       } catch (error) { settingsMessage(`Não foi possível salvar: ${error.message}`, true); }
@@ -76,7 +76,7 @@ function renderNetworkRates() {
 
 function renderPaymentCalendars() {
   const grid = document.querySelector('#settings-calendar-grid'); grid.replaceChildren();
-  for (const item of settingsData.redes) {
+  for (const item of settingsData.redes.filter(r=>r.id)) {
     const form = settingsNode('form', 'settings-network-card');
     form.setAttribute('aria-label', `Calendário de ${item.rede}`);
     const title = settingsNode('h3', '', item.rede);
@@ -176,7 +176,7 @@ function renderSectorRates() {
 function renderExtraCosts() {
   const grid = document.querySelector('#settings-extra-grid');
   grid.replaceChildren();
-  for (const network of settingsData.redes) {
+  for (const network of settingsData.redes.filter(r=>r.id)) {
     const saved = (settingsData.extras || []).find(item => item.rede === network.rede) || {};
     const form = settingsNode('form', 'settings-network-card');
     form.append(settingsNode('h3', '', network.rede));
@@ -214,7 +214,7 @@ async function loadSettings() {
   settingsLoading = (async () => {
     try {
       const [rates, extras] = await Promise.all([request('/api/tarifas'), request('/api/custos-extras')]);
-      settingsData = { ...rates, extras };
+      settingsData = { ...rates, extras };try{const catalog=await request('/api/empresa/opcoes?tipo=rede');for(const r of catalog)if(!settingsData.redes.some(n=>n.rede===r.titulo))settingsData.redes.push({rede:r.titulo,empresa_id:r.id,valor_recebido_centavos:null,valor_padrao_centavos:null});}catch{}
       renderNetworkRates(); renderPaymentCalendars(); renderSectorRates(); renderExtraCosts();
       document.querySelector('#staff-settings').hidden = window.directRemote?.role !== 'admin';
       if (window.directRemote?.role === 'admin') await loadStaff();

@@ -95,7 +95,7 @@ function renderStores() {
 }
 
 async function loadStores() {
-  try { storeRecords = await request('/api/lojas'); renderStores(); }
+  try { storeRecords = await request('/api/lojas'); let catalog=[];try{catalog=(await request('/api/empresa/lista?tipo=rede&tamanho=50')).items.filter(r=>r.status==='ativo').map(r=>r.titulo);}catch{}const names=[...new Set([...STORE_NETWORKS,...catalog,...storeRecords.map(r=>r.rede)])];STORE_NETWORKS.splice(0,STORE_NETWORKS.length,...names);for(const [id,empty]of [['stores-network-filter','Todas as redes'],['store-network',null]]){const select=document.getElementById(id),previous=select.value;select.replaceChildren(...(empty?[new Option(empty,'')]:[]),...names.map(n=>new Option(n,n)));select.value=previous|| (empty?'':names[0]);}renderStores(); }
   catch (error) { storeFeedback(`Não foi possível carregar as lojas: ${error.message}`, true); }
 }
 

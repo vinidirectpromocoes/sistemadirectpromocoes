@@ -214,7 +214,7 @@ class BackupRestoreTests(unittest.TestCase):
                     contract_id=db.execute("INSERT INTO contratos(rede,loja,setor,inicio,valor_recebido_centavos,valor_pago_centavos,criado_em) VALUES('Super do Povo','Meireles','Operador de caixa','2026-09-01',13400,9000,'2026-09-29')").lastrowid
                     db.execute("UPDATE diarias SET contrato_id=? WHERE id=?",(contract_id,daily_id))
                     db.execute("INSERT INTO ocorrencias(pedido_id,escala_id,tipo,descricao,autor,criado_em) VALUES(?,?,'elogio','Atendimento bem avaliado','Teste','2026-09-29')",(order_id,scale_id))
-                    db.execute("CREATE TABLE direct_staff (email TEXT PRIMARY KEY, role TEXT, active INTEGER)")
+                    db.execute("CREATE TABLE IF NOT EXISTS direct_staff (email TEXT PRIMARY KEY, role TEXT, active INTEGER)")
                     data = {table: [dict(row) for row in db.execute(f"SELECT * FROM {table}")] for table in TABLES}
                 archive, target = root / "source.json", root / "recovered.db"
                 self.archive(archive, data, "direct-data-v4")

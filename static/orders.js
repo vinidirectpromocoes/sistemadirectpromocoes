@@ -584,6 +584,7 @@ async function openOrderDetail(id) {
   $('#order-detail-error').hidden = true;
   $('#order-detail-success').hidden = true;
   $('#order-detail-title').textContent = item.supermercado;
+  let reserves=document.getElementById('order-enterprise-reserves');if(!reserves){reserves=document.createElement('button');reserves.id='order-enterprise-reserves';reserves.type='button';reserves.className='button button-outline';document.querySelector('#order-detail-dialog .dialog-footer').prepend(reserves);}reserves.textContent='Reservas e qualificações';reserves.hidden=window.directRemote&&!['admin','operacao'].includes(directRemote.role);reserves.onclick=async()=>{try{$('#order-detail-dialog').close();await DirectModules.ensure('empresa');await DirectEnterprise.reserves(id);}catch(e){showOrderFeedback(e.message,true);}};
   $('#order-detail-fields').replaceChildren(
     detailSection('Solicitação', [
       ['Supermercado', item.supermercado], ['Unidade ou local', item.unidade || '—'],

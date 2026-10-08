@@ -7,7 +7,9 @@ from cryptography.hazmat.primitives.ciphers.aead import AESGCM
 
 def verify(path, password):
     content=decrypt(path.read_bytes(),password);checked=validate_bundle(content)
-    with zipfile.ZipFile(io.BytesIO(content)) as bundle:operational=json.loads(bundle.read('database.json'))['data']
+    with zipfile.ZipFile(io.BytesIO(content)) as bundle:
+        operational=json.loads(bundle.read('database.json'))['data']
+        operational['attachments']={r['caminho']:base64.b64encode(bundle.read('evidencias/'+r['caminho'])).decode() for r in operational['tables'].get('empresa_anexos',[])}
     # Compatibility bridge; all intermediate files remain private and are removed after the drill.
     os.umask(0o077)
     with tempfile.TemporaryDirectory(prefix='direct-recovery-drill-') as directory:

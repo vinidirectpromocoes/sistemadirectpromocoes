@@ -7,6 +7,7 @@ import os
 import re
 import sqlite3
 import usability
+import enterprise
 import scale_lifecycle
 import store_portal
 from datetime import date, datetime, timezone
@@ -320,6 +321,7 @@ def init_db():
         extended.ensure_schema(db)
         usability.ensure_schema(db)
         store_portal.ensure_schema(db)
+        enterprise.ensure_schema(db)
         if not db.execute("SELECT 1 FROM direct_config_meta WHERE chave='calendario_pagamentos_v1'").fetchone():
             for network, (first, second) in calendar.INITIAL_CALENDARS.items():
                 db.execute("UPDATE tarifas_redes SET pagamento_primeira_quinzena=?, pagamento_segunda_quinzena=? WHERE rede=?", (first, second, network))
@@ -686,11 +688,18 @@ def validate_network_tariff(payload):
     }
 
 
+def known_network(name):
+    if name in REDES: return True
+    if not isinstance(name, str): return False
+    with connect() as db:
+        return bool(db.execute("SELECT 1 FROM lojas WHERE rede=? UNION ALL SELECT 1 FROM empresa_registros WHERE tipo='rede' AND status='ativo' AND titulo=? LIMIT 1",(name,name)).fetchone())
+
+
 def validate_sector_tariff(payload):
     if not isinstance(payload, dict):
         raise ValueError("Dados do setor inválidos.")
     rede = payload.get("rede")
-    if rede not in (None, *REDES):
+    if rede is not None and not known_network(rede):
         raise ValueError("Selecione uma rede cadastrada.")
     return {
         "rede": rede,
@@ -703,7 +712,7 @@ def validate_store(payload):
     if not isinstance(payload, dict):
         raise ValueError("Dados da loja inválidos.")
     rede = payload.get("rede")
-    if rede not in REDES:
+    if not known_network(rede):
         raise ValueError("Selecione uma rede cadastrada.")
     situacao = payload.get("situacao", "revisar")
     if situacao not in {"confirmado", "revisar"}:
@@ -770,6 +779,10 @@ def apply_local_attendance(db, order_id, scale_id, payload):
             if contract:
                 paid_rate = contract['valor_pago_centavos'] if contract['valor_pago_centavos'] is not None else paid_rate
                 received_rate = contract['valor_recebido_centavos'] if contract['valor_recebido_centavos'] is not None else received_rate
+            import enterprise_actions
+            proposal=enterprise_actions.contracted(db,order_id)
+            if proposal:
+                paid_rate=proposal['custo_unitario_centavos'];received_rate=proposal['valor_unitario_centavos']
             due = calendar.payment_due(scale['data'], network_rate['pagamento_primeira_quinzena'], network_rate['pagamento_segunda_quinzena'], network_rate['pagamento_semanal_dia']) if network_rate else None
             db.execute("""INSERT INTO diarias (diarista_id, data, local, setor, observacoes, pedido_escala_id,
                 valor_centavos, valor_recebido_centavos, vencimento_pagamento, criado_em, contrato_id, vencimento_recebimento, vencimento_origem)
@@ -807,7 +820,7 @@ class Handler(BaseHTTPRequestHandler):
         self.send_header("Content-Length", str(len(data)))
         self.send_header("Cache-Control", "no-store")
         self.send_header("X-Content-Type-Options", "nosniff")
-        self.send_header("Content-Security-Policy", "default-src 'self'; script-src 'self' https://cdn.jsdelivr.net 'wasm-unsafe-eval'; worker-src 'self' blob: https://cdn.jsdelivr.net; style-src 'self'; img-src 'self' data: blob:; connect-src 'self' https://cdn.jsdelivr.net https://tessdata.projectnaptha.com; object-src 'none'; frame-ancestors 'none'")
+        self.send_header("Content-Security-Policy", "default-src 'self'; script-src 'self' https://cdn.jsdelivr.net 'wasm-unsafe-eval'; worker-src 'self' blob: https://cdn.jsdelivr.net; style-src 'self'; img-src 'self' data: blob:; connect-src 'self' https://huggingface.co https://*.huggingface.co https://*.hf.co https://raw.githubusercontent.com https://cdn.jsdelivr.net https://tessdata.projectnaptha.com; object-src 'none'; frame-ancestors 'none'")
         self.end_headers()
         self.wfile.write(data)
 
@@ -835,6 +848,7 @@ class Handler(BaseHTTPRequestHandler):
         if not self._allowed_origin():
             return self.respond(HTTPStatus.FORBIDDEN, {"erro": "Acesso não permitido."})
         path = urlparse(self.path).path
+        if enterprise.handle(self, "GET", sys.modules[__name__]): return
         if usability.handle(self, "GET", sys.modules[__name__]): return
         if extended.handle(self, "GET", sys.modules[__name__]): return
         if store_portal.handle(self, "GET", sys.modules[__name__]): return
@@ -908,7 +922,7 @@ class Handler(BaseHTTPRequestHandler):
             path = "/rede.html"
         if path == "/":
             path = "/index.html"
-        assets = {"/rede.html":"text/html; charset=utf-8","/network-links.js":"text/javascript; charset=utf-8","/usability.css":"text/css; charset=utf-8","/management-model.js":"text/javascript; charset=utf-8", "/management.js":"text/javascript; charset=utf-8", "/management.css":"text/css; charset=utf-8", "/loja.html":"text/html; charset=utf-8", "/store-portal.js":"text/javascript; charset=utf-8", "/automation-model.js":"text/javascript; charset=utf-8", "/automation.js":"text/javascript; charset=utf-8", "/automation.css":"text/css; charset=utf-8", "/index.html": "text/html; charset=utf-8", "/style.css": "text/css; charset=utf-8", "/brand.css": "text/css; charset=utf-8", "/theme.css": "text/css; charset=utf-8", "/mobile.css": "text/css; charset=utf-8", "/reading.css": "text/css; charset=utf-8", "/motion.css": "text/css; charset=utf-8", "/operations.css": "text/css; charset=utf-8", "/workflow.css": "text/css; charset=utf-8", "/route-loader.js": "text/javascript; charset=utf-8", "/session-sync.js": "text/javascript; charset=utf-8",
+        assets = {"/empresa-ajuda.html":"text/html; charset=utf-8","/enterprise-language.js":"text/javascript; charset=utf-8","/enterprise-features.js":"text/javascript; charset=utf-8","/enterprise-local.js":"text/javascript; charset=utf-8","/enterprise-local-worker.js":"text/javascript; charset=utf-8","/relatorio.html":"text/html; charset=utf-8","/relatorio.js":"text/javascript; charset=utf-8","/enterprise-contract.js":"text/javascript; charset=utf-8", "/enterprise-model.js":"text/javascript; charset=utf-8", "/enterprise.js":"text/javascript; charset=utf-8", "/enterprise.css":"text/css; charset=utf-8", "/enterprise-schema.json":"application/json", "/rede.html":"text/html; charset=utf-8","/network-links.js":"text/javascript; charset=utf-8","/usability.css":"text/css; charset=utf-8","/management-model.js":"text/javascript; charset=utf-8", "/management.js":"text/javascript; charset=utf-8", "/management.css":"text/css; charset=utf-8", "/loja.html":"text/html; charset=utf-8", "/store-portal.js":"text/javascript; charset=utf-8", "/automation-model.js":"text/javascript; charset=utf-8", "/automation.js":"text/javascript; charset=utf-8", "/automation.css":"text/css; charset=utf-8", "/index.html": "text/html; charset=utf-8", "/style.css": "text/css; charset=utf-8", "/brand.css": "text/css; charset=utf-8", "/theme.css": "text/css; charset=utf-8", "/mobile.css": "text/css; charset=utf-8", "/reading.css": "text/css; charset=utf-8", "/motion.css": "text/css; charset=utf-8", "/operations.css": "text/css; charset=utf-8", "/workflow.css": "text/css; charset=utf-8", "/route-loader.js": "text/javascript; charset=utf-8", "/session-sync.js": "text/javascript; charset=utf-8",
             "/app.js": "text/javascript; charset=utf-8", "/theme.js": "text/javascript; charset=utf-8", "/finance.js": "text/javascript; charset=utf-8", "/forecast.js": "text/javascript; charset=utf-8", "/operations.js": "text/javascript; charset=utf-8", "/workflow.js": "text/javascript; charset=utf-8", "/matching.js": "text/javascript; charset=utf-8", "/backup.js": "text/javascript; charset=utf-8", "/orders.js": "text/javascript; charset=utf-8", "/stores.js": "text/javascript; charset=utf-8", "/settings.js": "text/javascript; charset=utf-8", "/reading.js": "text/javascript; charset=utf-8", "/reading-parser.js": "text/javascript; charset=utf-8", "/remote.js": "text/javascript; charset=utf-8", "/payment-calendar.js": "text/javascript; charset=utf-8", "/vendor/supabase-2.117.2.js": "text/javascript; charset=utf-8", "/stores.css": "text/css; charset=utf-8", "/settings.css": "text/css; charset=utf-8", "/login.css": "text/css; charset=utf-8", "/favicon.svg": "image/svg+xml", "/logo-direct-promocoes.jpg": "image/jpeg", "/logo-direct-promocoes-transparente.png": "image/png"}
         for asset in ['messages-model.js','messages.js','backup-model.js']:
             assets['/'+asset]='text/javascript; charset=utf-8'
@@ -943,6 +957,7 @@ class Handler(BaseHTTPRequestHandler):
                 return self.respond(HTTPStatus.OK,result)
             except (ValueError,TypeError,json.JSONDecodeError,sqlite3.IntegrityError) as error:
                 return self.respond(HTTPStatus.BAD_REQUEST,{'erro':str(error)})
+        if enterprise.handle(self, "POST", sys.modules[__name__]): return
         if usability.handle(self, "POST", sys.modules[__name__]): return
         if extended.handle(self, "POST", sys.modules[__name__]): return
         if store_portal.handle(self, "POST", sys.modules[__name__]): return
@@ -1171,6 +1186,7 @@ class Handler(BaseHTTPRequestHandler):
     def do_PUT(self):
         if not self._allowed_origin():
             return self.respond(HTTPStatus.FORBIDDEN, {"erro": "Acesso não permitido."})
+        if enterprise.handle(self, "PUT", sys.modules[__name__]): return
         if usability.handle(self, "PUT", sys.modules[__name__]): return
         if extended.handle(self, "PUT", sys.modules[__name__]): return
         if urlparse(self.path).path == "/api/custos-extras":
@@ -1403,6 +1419,10 @@ class Handler(BaseHTTPRequestHandler):
                             if contract:
                                 paid_rate = contract['valor_pago_centavos'] if contract['valor_pago_centavos'] is not None else paid_rate
                                 received_rate = contract['valor_recebido_centavos'] if contract['valor_recebido_centavos'] is not None else received_rate
+                            import enterprise_actions
+                            proposal=enterprise_actions.contracted(db,scale_route[0])
+                            if proposal:
+                                paid_rate=proposal['custo_unitario_centavos'];received_rate=proposal['valor_unitario_centavos']
                             due = calendar.payment_due(scale['data'], network_rate['pagamento_primeira_quinzena'], network_rate['pagamento_segunda_quinzena'], network_rate['pagamento_semanal_dia']) if network_rate else None
                             db.execute("""INSERT INTO diarias (diarista_id, data, local, setor, observacoes, pedido_escala_id,
                                 valor_centavos, valor_recebido_centavos, vencimento_pagamento, criado_em, contrato_id, vencimento_recebimento, vencimento_origem)

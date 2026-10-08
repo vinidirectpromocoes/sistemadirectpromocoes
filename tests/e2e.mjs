@@ -95,7 +95,7 @@ async function runRoleNavigation() {
       });
       await context.route('**/vendor/supabase-2.117.2.js', route => route.fulfill({
         contentType: 'text/javascript', body: `window.supabase={createClient:()=>({
-          rpc:async(name)=>({data:name==='direct_backup_snapshot_v9'?{format:'direct-data-v9',exportedAt:new Date().toISOString(),tables:Object.fromEntries(window.DirectBackup.versions['direct-data-v9'].map(t=>[t,[]])),snapshot:{consistent:true,counts:Object.fromEntries(window.DirectBackup.versions['direct-data-v9'].map(t=>[t,0]))}}:name==='direct_network_links'||name==='direct_portal_vacancies'?[]:name==='direct_portal_registrations'?{total:0,items:[]}:{whatsapp:'',grupo_url:''},error:null}),
+          rpc:async(name)=>({data:name==='direct_backup_snapshot_v10'?{format:'direct-data-v10',exportedAt:new Date().toISOString(),tables:Object.fromEntries(window.DirectBackup.versions['direct-data-v10'].map(t=>[t,[]])),snapshot:{consistent:true,counts:Object.fromEntries(window.DirectBackup.versions['direct-data-v10'].map(t=>[t,0]))}}:name==='direct_network_links'||name==='direct_portal_vacancies'?[]:name==='direct_portal_registrations'?{total:0,items:[]}:{whatsapp:'',grupo_url:''},error:null}),
           auth:{getSession:async()=>({data:{session:{user:{email:'qa@example.invalid'}}},error:null}),onAuthStateChange:()=>{},signOut:async()=>({error:null})},
           from:(table)=>{const q={select:()=>q,eq:()=>q,order:()=>q,limit:()=>q,range:async()=>({data:[],error:null,count:0}),
             maybeSingle:async()=>({data:table==='direct_admins'?${role === 'admin' ? "{email:'qa@example.invalid'}" : 'null'}:

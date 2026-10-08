@@ -434,7 +434,9 @@
       const data=await getData(/pagamento|paguei|a pagar|a receber|receber/i.test(typed)||files.length>0),sources=[],items=[];if(typed)sources.push({name:'Sua mensagem',text:typed});
       for(const file of files){try{lastOcrConfidence=100;sources.push({name:file.name,text:await fileText(file),confidence:lastOcrConfidence});}catch(error){items.push({tipo:'indefinido',dados:{},texto:'',fonte:file.name,faltando:[error.message],avisos:[]});}}
       for(const source of sources){
-        const parts=assistant.plan(source.text,data);if(!parts.length)parts.push({tipo:'indefinido',dados:{},texto:source.text,faltando:['Nenhum texto reconhecido. Envie uma foto mais nítida.'],avisos:[]});
+        let vocabulary=[];try{const approved=await request('/api/empresa/lista?tipo=frase&status=aprovada&tamanho=50');vocabulary=approved.items||[];}catch(error){if(!/not found|não encontrad|unknown|rota inválida|rota nao|consulta nao/i.test(error.message))feedback('Vocabulário adicional indisponível; conferindo com as regras existentes.');}
+        const interpreted=window.DirectEnterpriseLanguage?.apply(source.text,vocabulary)||source.text;
+        const parts=assistant.plan(interpreted,data);if(interpreted!==source.text)for(const item of parts)item.avisos=[...(item.avisos||[]),'Vocabulário aprovado aplicado. Mensagem original: '+source.text.slice(0,500)];if(!parts.length)parts.push({tipo:'indefinido',dados:{},texto:source.text,faltando:['Nenhum texto reconhecido. Envie uma foto mais nítida.'],avisos:[]});
         for(const item of parts){item.fonte=source.name;item.confianca=source.confidence??null;
           if(source.confidence<75){item.avisos=[...(item.avisos||[]),`Leitura de ${source.name}: confiança ${Math.round(source.confidence)}%. ${source.confidence<45?'Fotografe novamente com boa luz e sem reflexos.':'Confira nomes, CPF, datas e horários.'}`];item.faltando.push('Confira a leitura pouco legível e corrija o texto antes de confirmar.');}
           if(!['pedido','diarista','indefinido'].includes(item.tipo))item.commandOnly=true;

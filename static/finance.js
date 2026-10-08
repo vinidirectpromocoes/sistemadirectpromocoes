@@ -573,13 +573,13 @@ async function openFinanceAudit() {
 
 async function showPage() {
   const routeHash = location.hash;
-  let page = ['inicio', 'crm', 'diaristas', 'financeiro', 'pedidos', 'leitura', 'redes', 'configuracoes', 'convites', 'vagas', 'pedidos-links'].includes(window.location.hash.slice(1).split('?')[0]) ? window.location.hash.slice(1).split('?')[0] : 'inicio';
+  let page = ['inicio', 'crm', 'diaristas', 'financeiro', 'pedidos', 'leitura', 'redes', 'configuracoes', 'convites', 'vagas', 'pedidos-links', 'empresa'].includes(window.location.hash.slice(1).split('?')[0]) ? window.location.hash.slice(1).split('?')[0] : 'inicio';
   const role = window.directRemote?.role;
   if (role && ({ 'pedidos-links':['admin','operacao'], financeiro: ['admin', 'financeiro'], configuracoes: ['admin', 'financeiro'], vagas: ['admin', 'operacao'], convites: ['admin', 'operacao'], leitura: ['admin', 'operacao', 'financeiro', 'consulta'], diaristas: ['admin', 'financeiro', 'operacao'] }[page] || ['admin', 'financeiro', 'operacao', 'consulta']).includes(role) === false) {
     page = 'inicio';
     if (location.hash !== '#inicio') location.hash = '#inicio';
   }
-  for (const name of ['inicio', 'crm', 'diaristas', 'pedidos', 'leitura', 'redes', 'financeiro', 'configuracoes', 'convites', 'vagas', 'pedidos-links']) {
+  for (const name of ['inicio', 'crm', 'diaristas', 'pedidos', 'leitura', 'redes', 'financeiro', 'configuracoes', 'convites', 'vagas', 'pedidos-links', 'empresa']) {
     const active = name === page;
     $(`#${name}-page`).hidden = !active;
     const link = $(`#nav-${name}`);
@@ -587,10 +587,11 @@ async function showPage() {
     if (active) link.setAttribute('aria-current', 'page');
     else link.removeAttribute('aria-current');
   }
-  document.title = `${{ 'pedidos-links': 'Pedidos por link', vagas: 'Vagas disponíveis', convites: 'Cadastros por link', inicio: 'Início', crm: 'Pendências', diaristas: 'Diaristas', pedidos: 'Pedidos', leitura: 'Leitura IA', redes: 'Redes e lojas', financeiro: 'Financeiro', configuracoes: 'Configurações' }[page]} | Direct Promoções`;
+  document.title = `${{ empresa: 'Minha empresa', 'pedidos-links': 'Pedidos por link', vagas: 'Vagas disponíveis', convites: 'Cadastros por link', inicio: 'Início', crm: 'Pendências', diaristas: 'Diaristas', pedidos: 'Pedidos', leitura: 'Leitura IA', redes: 'Redes e lojas', financeiro: 'Financeiro', configuracoes: 'Configurações' }[page]} | Direct Promoções`;
   window.scrollTo(0, 0);
   try { await window.DirectModules.ensure(page); } catch (error) { window.DirectUI?.notify(error.message, true); return; }
   if (location.hash !== routeHash) return;
+  if (page === 'empresa') window.DirectEnterprise?.load();
   if (page === 'inicio' || page === 'crm') loadHome();
   if (page === 'diaristas') load();
   if (page === 'financeiro') loadFinance();

@@ -36,9 +36,9 @@ def validate_bundle(content):
     with zipfile.ZipFile(io.BytesIO(content)) as archive:
         if archive.testzip():raise ValueError('Arquivo danificado')
         data=json.loads(archive.read('database.json'))
-        if data['format']!='direct-recovery-v1' or data['data']['format'] not in ('direct-data-v7','direct-data-v8','direct-data-v9'):raise ValueError('Formato inválido')
-        from restore_backup import ALL_TABLES, V8_TABLES, V7_TABLES, relationship_errors
-        operational=data['data'];tables=operational['tables'];required=ALL_TABLES if operational['format']=='direct-data-v9' else V8_TABLES if operational['format']=='direct-data-v8' else V7_TABLES
+        if data['format']!='direct-recovery-v1' or data['data']['format'] not in ('direct-data-v7','direct-data-v8','direct-data-v9','direct-data-v10'):raise ValueError('Formato inválido')
+        from restore_backup import ALL_TABLES, V9_TABLES, V8_TABLES, V7_TABLES, relationship_errors
+        operational=data['data'];tables=operational['tables'];required=ALL_TABLES if operational['format']=='direct-data-v10' else V9_TABLES if operational['format']=='direct-data-v9' else V8_TABLES if operational['format']=='direct-data-v8' else V7_TABLES
         if set(tables)!=set(required) or any(not isinstance(tables[t],list) for t in required):raise ValueError('Tabelas incompletas')
         if relationship_errors(tables):raise ValueError('Vínculos incompletos')
         if not operational['snapshot']['consistent'] or any(len(rows)!=operational['snapshot']['counts'][name] for name,rows in tables.items()):raise ValueError('Contagens inválidas')
@@ -47,10 +47,13 @@ def validate_bundle(content):
         manifest=json.loads(archive.read('manifest.json'))
         for name,digest in manifest['files'].items():
             if hashlib.sha256(archive.read(name)).hexdigest()!=digest:raise ValueError('Código divergente')
+        for row in tables.get('empresa_anexos',[]):
+            content=archive.read('evidencias/'+row['caminho'])
+            if len(content)!=row['bytes'] or hashlib.sha256(content).hexdigest()!=row['sha256']:raise ValueError('Evidência divergente')
         if not any(n.startswith('source/supabase/migrations/') for n in manifest['files']):raise ValueError('Migrações ausentes')
-        return {'tables':len(tables),'records':sum(map(len,tables.values())),'auth_users':len(auth_ids),'files':len(manifest['files'])}
+        return {'attachments':len(tables.get('empresa_anexos',[])),'tables':len(tables),'records':sum(map(len,tables.values())),'auth_users':len(auth_ids),'files':len(manifest['files'])}
 
-def bundle(data, source):
+def bundle(data, source, attachments=None):
     stream=io.BytesIO();files={}
     copied_manifest=source/'.direct-source-manifest.json'
     metadata=json.loads(copied_manifest.read_text()) if copied_manifest.exists() else None
@@ -61,6 +64,8 @@ def bundle(data, source):
         candidates.update(str(f.relative_to(source)) for f in (source/folder).rglob('*') if f.is_file())
     with zipfile.ZipFile(stream,'w',zipfile.ZIP_DEFLATED) as archive:
         archive.writestr('database.json',json.dumps(data,ensure_ascii=False))
+        for name,content in (attachments or {}).items():
+            target='evidencias/'+name;archive.writestr(target,content);files[target]=hashlib.sha256(content).hexdigest()
         for name in sorted(candidates):
             if not name or name.startswith(('.env','.design-qa','supabase/.temp','node_modules','.git/')):continue
             file=source/name
@@ -69,12 +74,29 @@ def bundle(data, source):
         archive.writestr('manifest.json',json.dumps({'format':'direct-recovery-manifest-v1','createdAt':datetime.now(timezone.utc).isoformat(),'sourceCommit':metadata['commit'] if metadata else subprocess.check_output(['git','rev-parse','HEAD'],cwd=source,text=True).strip(),'workingTreeChanged':metadata['changed'] if metadata else bool(subprocess.check_output(['git','status','--porcelain','--untracked-files=no'],cwd=source)),'files':files,'excluded':['active sessions','backup credential','environment secrets','external provider infrastructure'],'recovery':'See source/docs/RECUPERACAO.md. Access identities are encrypted; do not publish the decrypted bundle.'}))
     result=stream.getvalue();validate_bundle(result);return result
 
+def fetch_attachments(data,token,run_id):
+    rows=data['data']['tables'].get('empresa_anexos',[]);files={}
+    for offset in range(0,len(rows),100):
+        chunk=rows[offset:offset+100]
+        req=urllib.request.Request('https://jxthqgtzybcyediyciqc.supabase.co/functions/v1/backup-evidencias',json.dumps({'token':token,'run':run_id,'ids':[r['id'] for r in chunk]}).encode(),headers={'apikey':PUBLIC_KEY,'Content-Type':'application/json'},method='POST')
+        with urllib.request.urlopen(req,timeout=90) as response:items=json.loads(response.read())['items']
+        indexed={x['id']:x for x in items}
+        for row in chunk:
+            item=indexed[row['id']]
+            if item['caminho']!=row['caminho']:raise ValueError('Manifesto de evidências divergente')
+            with urllib.request.urlopen(item['url'],timeout=90) as response:content=response.read(1048577)
+            if len(content)!=row['bytes'] or hashlib.sha256(content).hexdigest()!=row['sha256']:raise ValueError('Evidência divergente')
+            files[row['caminho']]=content
+    return files
+
+
 def run(source, target, mirror=None):
     os.umask(0o077);target.mkdir(parents=True,exist_ok=True);os.chmod(target,0o700)
     token,password=keychain('agent'),keychain('encryption');run_id=str(uuid.uuid4());started=False
     try:
         data=rpc('direct_backup_bundle',{'p_token':token,'p_run':run_id});started=True
-        content=bundle(data,source);encrypted=encrypt(content,password)
+        attachments=fetch_attachments(data,token,run_id)
+        content=bundle(data,source,attachments);encrypted=encrypt(content,password)
         checked=validate_bundle(decrypt(encrypted,password))
         name='direct-'+datetime.now(timezone.utc).strftime('%Y%m%dT%H%M%SZ')+'-'+run_id+'.directbackup'
         final=target/name
