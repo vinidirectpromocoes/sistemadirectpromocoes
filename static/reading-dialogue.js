@@ -186,14 +186,16 @@
     return entries;
   }
   function merge(text,label,value){
-    const labels={cpf:['cpf'],nome:['nome','nome completo'],data:['data','dia'],pedido:['pedido','pedido id'],loja:['loja','unidade','regiao'],'data do pagamento':['data pagamento','data do pagamento','pagamento'],forma:['forma','forma pagamento','forma de pagamento']}[norm(label)]||[norm(label)];
+    const groups=[['nome','nome completo','diarista','pessoa'],['novo nome','novo nome completo'],['data','dia','data de inicio','data da diaria'],['pedido','pedido id'],['loja','unidade','regiao'],['rede','supermercado'],['setor','funcao'],['setores','experiencia'],['telefone','whatsapp'],['rua','logradouro'],['data pagamento','data do pagamento','pagamento'],['forma','forma pagamento','forma de pagamento'],['diaria','diaria id'],['situacao','status'],['observacao','observacoes']];
+    const store=/^(?:cadastrar|adicionar|incluir|registrar|alterar|atualizar|corrigir) loja\b/.test(norm(text.split('\n')[0]));
+    const labels=store&&['nome','loja'].includes(norm(label))?['nome','loja']:groups.find(g=>g.includes(norm(label)))||[norm(label)];
     const rows=text.split('\n'),index=rows.findIndex(r=>{const m=/^\s*([^:]+):/.exec(r);return m&&labels.includes(norm(m[1]));});
     if(index>=0)rows[index]=`${label}: ${value}`;else rows.push(`${label}: ${value}`);return rows.join('\n');
   }
   function reply(text,item){
     if(!item||item.applied)return null;
     const corrected=base.correction(text,item.texto);if(corrected)return corrected;
-    const rows=parser.prepareText(text).split('\n').filter(Boolean),labels=['cpf','nome','nome completo','data','dia','pedido','rede','loja','substituto','cpf substituto','motivo','telefone','whatsapp','novo nome','novo nome completo','bairro','cep','rua','logradouro','numero','complemento','cidade','setores','transporte','valor','data pagamento','data do pagamento','pagamento','forma','forma pagamento','forma de pagamento','horario','quantidade','situacao','status','endereco','diaria','observacoes','observacao','orientacoes','disponibilidade'];
+    const rows=parser.prepareText(text).split('\n').filter(Boolean),labels=['cpf','nome','nome completo','diarista','pessoa','data','dia','data de inicio','data da diaria','pedido','pedido id','rede','supermercado','loja','unidade','regiao','substituto','cpf substituto','motivo','telefone','whatsapp','novo nome','novo nome completo','bairro','cep','rua','logradouro','numero','complemento','cidade','setores','experiencia','setor','funcao','transporte','observacoes locomocao','local trabalho','rede trabalho','valor','data pagamento','data do pagamento','pagamento','forma','forma pagamento','forma de pagamento','horario','quantidade','quantidade de dias','quantidade de diaristas','quantidade diaristas','pessoas por dia','situacao','status','endereco','diaria','diaria id','observacoes','observacao','orientacoes','responsavel','telefone contato','entrada','apresentacao','uniforme','disponibilidade'];
     if(rows.length&&rows.every(r=>{const m=/^([^:]+):/.exec(r);return m&&labels.includes(norm(m[1]));})){let result=item.texto;for(const r of rows){const m=/^([^:]+):\s*(.*)$/.exec(r);result=merge(result,m[1],m[2]);}return result;}
     const q=item.perguntas?.find(q=>q.field);if(!q)return null;
     if(/^(?:oi|ajuda|consultar|mostrar|ver|cadastrar|cadastre|marcar|registrar|alterar|atualizar|substituir|trocar|escalar|remover|excluir|cancelar|paguei|bloquear|desbloquear)\b/.test(norm(text)))return null;
