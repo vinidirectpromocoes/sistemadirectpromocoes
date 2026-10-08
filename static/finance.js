@@ -572,7 +572,7 @@ async function openFinanceAudit() {
 }
 
 const pageLoadingControls=new WeakMap();
-function releasePageControls(main){for(const [control,disabled]of pageLoadingControls.get(main)||[])control.disabled=disabled;pageLoadingControls.delete(main);main.inert=false;main.removeAttribute('aria-busy');}
+function releasePageControls(main){const guard=pageLoadingControls.get(main);if(guard?.parentNode===main)guard.replaceWith(...guard.childNodes);pageLoadingControls.delete(main);main.inert=false;main.removeAttribute('aria-busy');}
 async function showPage() {
   const routeHash = location.hash;
   let page = ['inicio', 'crm', 'diaristas', 'financeiro', 'pedidos', 'leitura', 'redes', 'configuracoes', 'convites', 'vagas', 'pedidos-links', 'empresa'].includes(window.location.hash.slice(1).split('?')[0]) ? window.location.hash.slice(1).split('?')[0] : 'inicio';
@@ -585,7 +585,7 @@ async function showPage() {
     const active = name === page;
     $(`#${name}-page`).hidden = !active;
     $(`#${name}-page`).inert = active;
-    if(active){const main=$(`#${name}-page`);main.setAttribute('aria-busy','true');if(!pageLoadingControls.has(main)){const controls=[...main.querySelectorAll('button,input,select,textarea')].map(c=>[c,c.disabled]);pageLoadingControls.set(main,controls);for(const [c]of controls)c.disabled=true;}}
+    if(active){const main=$(`#${name}-page`);main.setAttribute('aria-busy','true');if(!pageLoadingControls.has(main)){const guard=document.createElement('fieldset');guard.disabled=true;guard.className='page-loading-controls';guard.append(...main.childNodes);main.append(guard);pageLoadingControls.set(main,guard);}}
     const link = $(`#nav-${name}`);
     link.classList.toggle('nav-active', active);
     if (active) link.setAttribute('aria-current', 'page');
