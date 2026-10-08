@@ -148,7 +148,7 @@ async function runRoleNavigation() {
         assert.equal(result.status, 0, `Cópia do navegador não restaurou: ${result.stderr}`);
         const operational = path.join(work, 'browser-operational.db');
         const drill = spawnSync(process.env.PYTHON || 'python3', ['-c',
-          'import sys; sys.path.insert(0,"scripts"); from restore_backup import restore_operational; counts=restore_operational(sys.argv[1],sys.argv[2],sys.argv[3]); assert len(counts) == 31',
+          'import sys; sys.path.insert(0,"scripts"); from restore_backup import restore_operational; counts=restore_operational(sys.argv[1],sys.argv[2],sys.argv[3]); assert len(counts) == 35',
           archive, 'senha-de-teste-12345', operational], { cwd: root, encoding: 'utf8' });
         assert.equal(drill.status, 0, `Cópia operacional não restaurou: ${drill.stderr}`);
         console.log('Backup no navegador → verificação → SQLite operacional isolado OK');
