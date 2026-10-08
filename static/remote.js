@@ -39,7 +39,7 @@
     document.querySelector('#logout-button').hidden = false;
     document.querySelector('#storage-status').textContent = 'Dados sincronizados';
     for (const [name, allowed] of Object.entries({
-      financeiro: ['admin', 'financeiro'], configuracoes: ['admin', 'financeiro'],
+      'pedidos-links': ['admin','operacao'], financeiro: ['admin', 'financeiro'], configuracoes: ['admin', 'financeiro'],
       vagas: ['admin', 'operacao'], convites: ['admin', 'operacao'], leitura: ['admin', 'operacao', 'financeiro', 'consulta'], diaristas: ['admin', 'operacao', 'financeiro'],
     })) document.querySelector(`#nav-${name}`).hidden = !allowed.includes(role);
     document.querySelector('#new-button').hidden = !['admin', 'operacao'].includes(role);
@@ -52,7 +52,7 @@
       'edit-button': ['admin', 'operacao'], 'block-button': ['admin', 'operacao'],
       'order-edit-button': ['admin', 'operacao'], 'order-delete-button': ['admin', 'operacao'],
     })) document.getElementById(id).hidden = !roles.includes(role);
-    if (['financeiro', 'configuracoes', 'leitura', 'convites', 'vagas'].includes(location.hash.slice(1)) &&
+    if (['financeiro', 'configuracoes', 'leitura', 'convites', 'vagas', 'pedidos-links'].includes(location.hash.slice(1)) &&
         document.querySelector(`#nav-${location.hash.slice(1)}`)?.hidden) location.hash = '#inicio';
   }
   async function authorize(reload = false) {
@@ -444,6 +444,11 @@
         return (await rows('loja_validacoes','*,pedido_escalas(pedido_id,data,diaristas(nome))')).map(v=>({...v,escala:{pedido_id:v.pedido_escalas?.pedido_id,data:v.pedido_escalas?.data,diarista_nome:v.pedido_escalas?.diaristas?.nome||''}}));
       }
       if (method === 'PATCH') return unwrap(await sb.rpc(entity==='solicitacoes-lojas'?'direct_store_review_request':'direct_store_review_check',{p_id:id,p_aceitar:entity==='solicitacoes-lojas'?false:p.aceitar,...(entity==='solicitacoes-lojas'?{p_dados:null}:{}),p_motivo:p.motivo||''}));
+    }
+    if (entity === 'redes-links') {
+      if (!['admin','operacao'].includes(currentRole)) throw Error('Sem permissão para links das redes.');
+      if (method === 'GET') return unwrap(await sb.rpc('direct_network_links'));
+      if (method === 'POST') return unwrap(await sb.rpc('direct_network_link',{p_rede:p.rede,p_acao:p.acao||'consultar'}));
     }
     if (entity === 'modelos-pedidos') {
       if (method === 'GET') return await rows('pedido_modelos');

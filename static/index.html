@@ -79,6 +79,7 @@
           <span class="nav-group-label" aria-hidden="true">Rotina</span>
           <a href="#leitura" id="nav-leitura" aria-label="Leitura IA" data-mobile-label="Leitura"><span class="nav-icon" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M5 3h9l5 5v13H5V3Z"/><path d="M14 3v5h5M8 13h8M8 17h5"/><path d="m17 14 1 2 2 1-2 1-1 2-1-2-2-1 2-1 1-2Z"/></svg></span>Leitura IA</a>
           <a href="#pedidos" id="nav-pedidos" aria-label="Pedidos" data-mobile-label="Pedidos"><span class="nav-icon" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="5" y="4" width="14" height="17" rx="2"/><path d="M9 4.5V3h6v1.5M9 10h6M9 14h6M9 18h4"/></svg></span>Pedidos</a>
+          <a href="#pedidos-links" id="nav-pedidos-links" aria-label="Pedidos por link" data-mobile-label="Pedidos link"><span class="nav-icon" aria-hidden="true">↗</span>Pedidos por link</a>
           <a href="#vagas" id="nav-vagas" aria-label="Vagas disponíveis" data-mobile-label="Vagas"><span class="nav-icon" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="7" width="18" height="14" rx="2"/><path d="M8 7V3h8v4M3 12h18M10 12v3h4v-3"/></svg></span>Vagas disponíveis</a>
           <a href="#crm" id="nav-crm" aria-label="Pendências" data-mobile-label="Pend."><span class="nav-icon" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="16" rx="2"/><path d="M9 4v16M15 4v16M5 8h2M11 8h2M17 8h2M5 12h2M11 12h2M17 12h2"/></svg></span>Pendências</a>
         </div>
@@ -289,6 +290,11 @@
         <div id="orders-no-results" class="empty-state compact" hidden><h3>Nenhum pedido encontrado</h3><p>Altere a busca, as datas ou use Limpar para remover os filtros.</p></div>
         <div id="orders-table-wrap" class="table-scroll" hidden><table class="orders-table"><thead><tr><th>SUPERMERCADO</th><th>SETOR</th><th>DIAS E HORÁRIOS</th><th>DEMANDA</th><th>SITUAÇÃO</th><th><span class="sr-only">Ver pedido</span></th></tr></thead><tbody id="orders-rows"></tbody></table></div>
       </section>
+    </main>
+    <main class="main-content" id="pedidos-links-page" hidden>
+      <header class="page-header"><div><div class="eyebrow">PEDIDOS <span>/</span> PEDIDOS POR LINK</div><h1>Pedidos por link</h1><p>Compartilhe um link por rede para receber solicitações das lojas.</p></div><button id="network-links-refresh" type="button" class="button button-outline" aria-label="Atualizar links e solicitações" title="Atualizar"><span aria-hidden="true">↻</span><span class="button-label">Atualizar</span></button></header>
+      <section class="list-card"><div class="list-top"><div><h2>Links das redes</h2><p>A rede escolhe a loja e preenche o pedido. A Direct confere antes de registrar.</p></div></div><p class="section-help">Cada link vale por 90 dias. Renovar ou revogar desativa o link anterior. Compartilhe com os responsáveis da rede.</p><div id="network-links-feedback" class="feedback" role="status" aria-live="polite" hidden></div><div id="network-links-list" class="network-links-list"></div></section>
+      <section class="list-card"><div class="list-top"><div><h2>Solicitações e conferências recebidas</h2><p>Revise os pedidos e as informações enviadas pelas lojas.</p></div></div><div id="network-requests-list" class="automation-list"></div></section>
     </main>
     <main class="main-content" id="redes-page" hidden>
       <header class="page-header">

@@ -1,0 +1,46 @@
+-- Ensaio com registros sintéticos, sempre revertidos ao final.
+begin;
+do $$
+declare uid uuid; email text; fin text:='network-fin-'||gen_random_uuid()||'@example.invalid'; network text:='Super do Povo'; s1 bigint;s2 bigint;other bigint;link jsonb;newlink jsonb;r jsonb;payload jsonb;key uuid:=gen_random_uuid();request_id bigint;denied boolean;ctx jsonb;
+begin
+ select u.id,u.email into uid,email from auth.users u join public.direct_admins a on a.email=u.email limit 1;
+ if uid is null then raise exception 'Admin necessário para ensaio.';end if;
+ insert into public.lojas(rede,nome,endereco,cidade,uf,situacao) values(network,'Ensaio rede A','Rua teste, 1','Fortaleza','CE','confirmado') returning id into s1;
+ insert into public.lojas(rede,nome,endereco,cidade,uf,situacao) values(network,'Ensaio rede B','Rua teste, 2','Fortaleza','CE','confirmado') returning id into s2;
+ insert into public.lojas(rede,nome,endereco,cidade,uf,situacao) values('Hipermarket','Ensaio rede C','Rua teste, 3','Fortaleza','CE','confirmado') returning id into other;
+ insert into public.direct_staff(email,role,active) values(fin,'financeiro',true);
+ perform set_config('request.jwt.claims',jsonb_build_object('sub',uid,'email',fin,'role','authenticated')::text,true);execute 'set local role authenticated';
+ denied:=false;begin perform public.direct_network_links();exception when insufficient_privilege then denied:=true;end;if not denied then raise exception 'Financeiro leu tokens.';end if;
+ denied:=false;begin perform public.direct_network_link(network);exception when insufficient_privilege then denied:=true;end;if not denied then raise exception 'Financeiro gerou link.';end if;
+ execute 'reset role';perform set_config('request.jwt.claims',jsonb_build_object('sub',uid,'email',email,'role','authenticated')::text,true);execute 'set local role authenticated';
+ link:=public.direct_network_link(network,'renovar');
+ if not public.direct_network_links() @> jsonb_build_array(jsonb_build_object('rede',network,'lojas',(select count(*) from public.lojas where rede=network))) then raise exception 'Lista sem rede/lojas.';end if;
+ execute 'reset role';perform set_config('request.jwt.claims','{}',true);execute 'set local role anon';
+ ctx:=public.direct_network_context(link->>'token');if ctx->'lojas' @> jsonb_build_array(jsonb_build_object('id',other)) or not ctx->'lojas' @> jsonb_build_array(jsonb_build_object('id',s1)) then raise exception 'Contexto vazou outra rede.';end if;
+ if ctx::text~'"token"|"cpf"|valor_centavos' then raise exception 'Contexto expôs campos privados.';end if;
+ denied:=false;begin perform public.direct_network_link(network);exception when insufficient_privilege then denied:=true;end;if not denied then raise exception 'Anônimo gerou link.';end if;
+ payload:=jsonb_build_object('supermercado','Rede falsificada','unidade','Loja falsificada','setor','Repositor de FLV','quantidade_diaristas',2,'contato','Contato sintético','observacoes','Entrada principal','turnos',jsonb_build_array(jsonb_build_object('data',(now() at time zone 'America/Fortaleza')::date,'inicio','07:00','fim','15:20')));
+ denied:=false;begin perform public.direct_network_submit(link->>'token',other,payload,key);exception when insufficient_privilege then denied:=true;end;if not denied then raise exception 'Envio para outra rede permitido.';end if;
+ denied:=false;begin perform public.direct_network_orders(link->>'token',other);exception when insufficient_privilege then denied:=true;end;if not denied then raise exception 'Consulta de outra rede permitida.';end if;
+ denied:=false;begin perform public.direct_network_check(link->>'token',other,0,'presente');exception when insufficient_privilege then denied:=true;end;if not denied then raise exception 'Conferência de outra rede permitida.';end if;
+ r:=public.direct_network_submit(link->>'token',s1,payload,key);request_id:=(r->>'id')::bigint;
+ if (public.direct_network_submit(link->>'token',s1,payload,key)->>'id')::bigint<>request_id then raise exception 'Reenvio duplicado.';end if;
+ if jsonb_array_length(public.direct_network_orders(link->>'token',s2)->'solicitacoes')<>0 then raise exception 'Consulta misturou lojas.';end if;
+ execute 'reset role';
+ if (select dados->>'supermercado' from public.loja_solicitacoes where id=request_id)<>network or (select dados->>'unidade' from public.loja_solicitacoes where id=request_id)<>'Ensaio rede A' then raise exception 'Rede/loja falsificada foi salva.';end if;
+ if (select pedido_id from public.loja_solicitacoes where id=request_id) is not null then raise exception 'Pedido criado sem revisão.';end if;
+ perform set_config('request.jwt.claims',jsonb_build_object('sub',uid,'email',email,'role','authenticated')::text,true);execute 'set local role authenticated';
+ r:=public.direct_store_review_request(request_id,payload||jsonb_build_object('supermercado',network,'unidade','Ensaio rede A'),true);
+ if r->>'supermercado'<>network then raise exception 'Revisão não criou pedido da rede.';end if;
+ if public.direct_backup_snapshot_v9()->>'format'<>'direct-data-v9' then raise exception 'Backup sem v9.';end if;
+ if not public.direct_backup_snapshot_v9()->'tables'->'rede_links' @> jsonb_build_array(jsonb_build_object('rede',network)) then raise exception 'Backup sem link.';end if;
+ newlink:=public.direct_network_link(network,'renovar');execute 'reset role';perform set_config('request.jwt.claims','{}',true);execute 'set local role anon';
+ denied:=false;begin perform public.direct_network_context(link->>'token');exception when insufficient_privilege then denied:=true;end;if not denied then raise exception 'Link anterior continuou ativo.';end if;
+ perform public.direct_network_context(newlink->>'token');
+ execute 'reset role';perform set_config('request.jwt.claims',jsonb_build_object('sub',uid,'email',email,'role','authenticated')::text,true);execute 'set local role authenticated';perform public.direct_network_link(network,'revogar');
+ execute 'reset role';perform set_config('request.jwt.claims','{}',true);execute 'set local role anon';
+ denied:=false;begin perform public.direct_network_submit(newlink->>'token',s1,payload,gen_random_uuid());exception when insufficient_privilege then denied:=true;end;if not denied then raise exception 'Link revogado enviou pedido.';end if;
+ execute 'reset role';
+ if has_table_privilege('anon','direct_private.rede_links','SELECT') or has_table_privilege('authenticated','direct_private.rede_links','SELECT') then raise exception 'Tabela de tokens exposta.';end if;
+end;$$;
+rollback;

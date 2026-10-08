@@ -18,7 +18,7 @@ class BackupRestoreTests(unittest.TestCase):
 
     def archive(self, path, data, version="direct-data-v1"):
         payload = {"format": version, "exportedAt": "2026-09-29T12:00:00Z", "tables": data}
-        if version in ("direct-data-v5", "direct-data-v6", "direct-data-v7", "direct-data-v8"):
+        if version in ("direct-data-v5", "direct-data-v6", "direct-data-v7", "direct-data-v8", "direct-data-v9"):
             payload["snapshot"] = {"consistent": True, "counts": {table: len(rows) for table, rows in data.items()}}
         salt, iv = os.urandom(16), os.urandom(12)
         key = __import__("hashlib").pbkdf2_hmac("sha256", self.password.encode(), salt, 200000, 32)
@@ -121,6 +121,11 @@ class BackupRestoreTests(unittest.TestCase):
                 with sqlite3.connect(root/'v8.db') as db:
                     self.assertEqual(db.execute('select responsavel,proxima_acao from pendencia_acoes').fetchone(),('Equipe','Conferir resposta'))
                     self.assertEqual(json.loads(db.execute('select datas from substituicao_contatos').fetchone()[0]),['2026-10-04'])
+                data['rede_links']=[{'id':1,'rede':'Super do Povo','token':'a'*64,'ativo':True,'expira_em':'2027-01-01T00:00:00Z'}]
+                v9=root/'v9.json';self.archive(v9,data,'direct-data-v9');restore_operational(v9,self.password,root/'v9.db')
+                with sqlite3.connect(root/'v9.db') as db:
+                    record=json.loads(db.execute("select record_json from backup_private_rows where source_table='rede_links'").fetchone()[0])
+                    self.assertEqual(record['rede'],'Super do Povo')
                 broken = root / 'broken.json'; data['loja_validacoes'][0]['escala_id'] = 999
                 self.archive(broken, data, 'direct-data-v7')
                 with self.assertRaisesRegex(ValueError, 'referências quebradas'):

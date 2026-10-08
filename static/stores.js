@@ -87,7 +87,7 @@ function renderStores() {
       const edit = storeElement('button', 'text-button', 'Editar');
       edit.type = 'button'; edit.setAttribute('aria-label', `Editar loja ${item.nome}, ${item.rede}`);
       edit.addEventListener('click', () => openStoreForm(item));
-      if(window.DirectManagementUI){const report=storeElement('button','button button-outline','▧ Relatório');report.type='button';report.title='Relatório mensal desta loja';report.setAttribute('aria-label','Relatório mensal de '+item.nome);report.hidden=window.directRemote?.role==='consulta';report.onclick=()=>DirectManagementUI.storeReport(item);actions.append(report);if(!window.directRemote||['admin','operacao'].includes(window.directRemote.role)){const link=storeElement('button','button button-outline','↗ Link da loja');link.type='button';link.onclick=()=>DirectManagementUI.storeLink(item);actions.append(link);}}
+      if(window.DirectManagementUI){const report=storeElement('button','button button-outline','▧ Relatório');report.type='button';report.title='Relatório mensal desta loja';report.setAttribute('aria-label','Relatório mensal de '+item.nome);report.hidden=window.directRemote?.role==='consulta';report.onclick=()=>DirectManagementUI.storeReport(item);actions.append(report);}
       actions.append(copy, edit); card.append(info, actions); list.append(card);
     });
     section.append(list); groups.append(section);
