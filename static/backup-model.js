@@ -9,7 +9,7 @@
     const required=versions[payload?.format];if(!required||!payload.tables||Number.isNaN(Date.parse(payload.exportedAt)))throw Error('Formato ou data da cópia inválidos.');
     const ids={};let count=0;
     for(const table of required){const rows=payload.tables[table];if(!Array.isArray(rows)||rows.some(r=>!r||Array.isArray(r)||typeof r!=='object'))throw Error(`Tabela incompleta: ${table}.`);count+=rows.length;const key=['direct_staff','direct_admins'].includes(table)?'email':table==='custos_extras'?'rede':table==='portal_registros'?'diarista_id':'id';ids[table]=new Set(rows.filter(r=>r[key]!=null).map(r=>String(r[key])));if(ids[table].size!==rows.filter(r=>r[key]!=null).length)throw Error(`Registros duplicados: ${table}.`);}
-    if(['direct-data-v5','direct-data-v6','direct-data-v7','direct-data-v8'].includes(payload.format)&&(!payload.snapshot||payload.snapshot.consistent!==true||required.some(t=>payload.snapshot.counts?.[t]!==payload.tables[t].length)))throw Error('Contagens ou consistência da cópia inválidas.');
+    if(['direct-data-v5','direct-data-v6','direct-data-v7','direct-data-v8','direct-data-v9'].includes(payload.format)&&(!payload.snapshot||payload.snapshot.consistent!==true||required.some(t=>payload.snapshot.counts?.[t]!==payload.tables[t].length)))throw Error('Contagens ou consistência da cópia inválidas.');
     for(const [table,column,target]of links)if(required.includes(table))for(const row of payload.tables[table])if(row[column]!=null&&!ids[target]?.has(String(row[column])))throw Error(`Vínculo quebrado: ${table}.${column}.`);
     return {count,tables:required.length};
   }

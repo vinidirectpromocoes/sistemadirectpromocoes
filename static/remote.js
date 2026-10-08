@@ -52,8 +52,8 @@
       'edit-button': ['admin', 'operacao'], 'block-button': ['admin', 'operacao'],
       'order-edit-button': ['admin', 'operacao'], 'order-delete-button': ['admin', 'operacao'],
     })) document.getElementById(id).hidden = !roles.includes(role);
-    if (['financeiro', 'configuracoes', 'leitura', 'convites', 'vagas', 'pedidos-links'].includes(location.hash.slice(1)) &&
-        document.querySelector(`#nav-${location.hash.slice(1)}`)?.hidden) location.hash = '#inicio';
+    if (['financeiro', 'configuracoes', 'leitura', 'convites', 'vagas', 'pedidos-links'].includes(location.hash.slice(1).split('?')[0]) &&
+        document.querySelector(`#nav-${location.hash.slice(1).split('?')[0]}`)?.hidden) location.hash = '#inicio';
   }
   async function authorize(reload = false) {
     const { data: { session }, error } = await sb.auth.getSession();

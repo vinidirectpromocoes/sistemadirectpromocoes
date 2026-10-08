@@ -6,6 +6,11 @@ from urllib.parse import urlparse
 
 def ensure_schema(db):
     db.execute("CREATE TABLE IF NOT EXISTS rede_links(id INTEGER PRIMARY KEY AUTOINCREMENT,rede TEXT NOT NULL COLLATE NOCASE UNIQUE,token TEXT NOT NULL UNIQUE,ativo INTEGER NOT NULL DEFAULT 1,expira_em TEXT NOT NULL,criado_em TEXT NOT NULL,atualizado_em TEXT NOT NULL)")
+    if 'codigo' not in [row[1] for row in db.execute('PRAGMA table_info(rede_links)')]:
+        db.execute('ALTER TABLE rede_links ADD COLUMN codigo TEXT')
+    for row in db.execute('SELECT id FROM rede_links WHERE codigo IS NULL').fetchall():
+        db.execute('UPDATE rede_links SET codigo=? WHERE id=?',(secrets.token_urlsafe(12),row[0]))
+    db.execute('CREATE UNIQUE INDEX IF NOT EXISTS rede_links_codigo ON rede_links(codigo)')
     db.execute("CREATE TABLE IF NOT EXISTS loja_links(id INTEGER PRIMARY KEY AUTOINCREMENT,loja_id INTEGER NOT NULL UNIQUE REFERENCES lojas(id),token TEXT NOT NULL UNIQUE,ativo INTEGER NOT NULL DEFAULT 1,expira_em TEXT NOT NULL,criado_em TEXT NOT NULL,atualizado_em TEXT NOT NULL)")
     db.execute("CREATE TABLE IF NOT EXISTS loja_solicitacoes(id INTEGER PRIMARY KEY AUTOINCREMENT,loja_id INTEGER NOT NULL REFERENCES lojas(id),chave TEXT NOT NULL,dados TEXT NOT NULL,estado TEXT NOT NULL DEFAULT 'pendente',pedido_id INTEGER REFERENCES pedidos(id) ON DELETE SET NULL,motivo TEXT NOT NULL DEFAULT '',criado_em TEXT NOT NULL,atualizado_em TEXT NOT NULL,UNIQUE(loja_id,chave))")
     db.execute("CREATE TABLE IF NOT EXISTS loja_validacoes(id INTEGER PRIMARY KEY AUTOINCREMENT,loja_id INTEGER NOT NULL REFERENCES lojas(id),escala_id INTEGER NOT NULL UNIQUE REFERENCES pedido_escalas(id) ON DELETE CASCADE,presenca TEXT NOT NULL,observacao TEXT NOT NULL DEFAULT '',estado TEXT NOT NULL DEFAULT 'pendente',motivo TEXT NOT NULL DEFAULT '',criado_em TEXT NOT NULL,atualizado_em TEXT NOT NULL)")
@@ -56,22 +61,17 @@ def handle(handler, method, api):
         with api.connect() as db:
             if method!='GET': db.execute('BEGIN IMMEDIATE')
             if networks:
-                if method=='GET':
-                    result=[]
-                    for row in db.execute('SELECT min(rede) rede,count(*) lojas FROM lojas GROUP BY lower(trim(rede)) ORDER BY rede'):
-                        link=db.execute('SELECT * FROM rede_links WHERE lower(trim(rede))=lower(trim(?))',(row['rede'],)).fetchone()
-                        result.append({'rede':row['rede'],'lojas':row['lojas'],'token':link['token'] if link and link['ativo'] and link['expira_em']>now() else None,'ativo':bool(link and link['ativo']),'expira_em':link['expira_em'] if link else None})
-                elif method=='POST':
-                    action=p.get('acao','consultar')
-                    if action not in ('consultar','renovar','revogar'):raise ValueError('Ação inválida.')
-                    network=db.execute('SELECT min(rede) rede FROM lojas WHERE lower(trim(rede))=lower(trim(?))',(p.get('rede'),)).fetchone()['rede']
-                    if not network:raise ValueError('Rede sem lojas cadastradas.')
-                    db.execute('INSERT OR IGNORE INTO rede_links(rede,token,expira_em,criado_em,atualizado_em) VALUES(?,?,?,?,?)',(network,secrets.token_hex(32),(datetime.now(timezone.utc)+timedelta(days=90)).isoformat(),now(),now()))
-                    if action=='renovar':db.execute('UPDATE rede_links SET token=?,ativo=1,expira_em=?,atualizado_em=? WHERE lower(trim(rede))=lower(trim(?))',(secrets.token_hex(32),(datetime.now(timezone.utc)+timedelta(days=90)).isoformat(),now(),network))
-                    if action=='revogar':db.execute('UPDATE rede_links SET ativo=0,atualizado_em=? WHERE lower(trim(rede))=lower(trim(?))',(now(),network))
-                    result=dict(db.execute('SELECT * FROM rede_links WHERE lower(trim(rede))=lower(trim(?))',(network,)).fetchone())
-                    if not result['ativo'] or result['expira_em']<=now():result['token']=None
-                else:raise ValueError('Rota indisponível.')
+                if method=='POST' and p.get('acao','consultar')!='consultar':raise ValueError('O link da rede é fixo e não precisa de renovação.')
+                if method not in ('GET','POST'):raise ValueError('Rota indisponível.')
+                rows=db.execute('SELECT min(rede) rede,count(*) lojas FROM lojas GROUP BY lower(trim(rede)) ORDER BY rede').fetchall()
+                result=[]
+                for row in rows:
+                    db.execute('INSERT OR IGNORE INTO rede_links(rede,token,codigo,expira_em,criado_em,atualizado_em) VALUES(?,?,?,?,?,?)',(row['rede'],secrets.token_hex(32),secrets.token_urlsafe(12),'',now(),now()))
+                    link=db.execute('SELECT * FROM rede_links WHERE lower(trim(rede))=lower(trim(?))',(row['rede'],)).fetchone()
+                    result.append({'rede':row['rede'],'lojas':row['lojas'],'codigo':link['codigo'],'token':link['token'] if link['ativo'] else None,'ativo':True,'expira_em':None})
+                if method=='POST':
+                    result=next((row for row in result if row['rede'].lower()==str(p.get('rede','')).strip().lower()),None)
+                    if not result:raise ValueError('Rede sem lojas cadastradas.')
             elif listing and method=='GET':
                 table='loja_solicitacoes' if path.endswith('solicitacoes-lojas') else 'loja_validacoes'
                 rows=[dict(r) for r in db.execute(f'SELECT * FROM {table} ORDER BY id DESC')]
@@ -94,8 +94,8 @@ def handle(handler, method, api):
                 action=(external or network_external).group(1)
                 if network_external:
                     token=p.get('p_token')
-                    if not re.fullmatch('[a-f0-9]{64}',str(token or '')):raise ValueError('Link inválido ou expirado. Peça um novo link à Direct.')
-                    link=db.execute('SELECT * FROM rede_links WHERE token=? AND ativo=1 AND expira_em>?',(token,now())).fetchone()
+                    if not re.fullmatch(r'(?:[A-Za-z0-9_-]{16}|[a-f0-9]{64})',str(token or '')):raise ValueError('Link inválido ou expirado. Peça um novo link à Direct.')
+                    link=db.execute('SELECT * FROM rede_links WHERE codigo=? OR (token=? AND ativo=1)',(token,token)).fetchone()
                     if not link:raise ValueError('Link inválido ou expirado. Peça um novo link à Direct.')
                     if action=='context':
                         result={'rede':link['rede'],'lojas':[dict(row) for row in db.execute('SELECT id,rede,nome,endereco,cidade,uf FROM lojas WHERE lower(trim(rede))=lower(trim(?)) ORDER BY nome,cidade',(link['rede'],))],'setores':[row[0] for row in db.execute('SELECT DISTINCT setor FROM tarifas_setores ORDER BY setor')]}

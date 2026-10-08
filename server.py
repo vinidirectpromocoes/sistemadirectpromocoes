@@ -904,6 +904,8 @@ class Handler(BaseHTTPRequestHandler):
                     return self.respond(HTTPStatus.NOT_FOUND, {"erro": "Cadastro não encontrado."})
                 rows = db.execute("SELECT * FROM diarias WHERE diarista_id = ? ORDER BY data DESC, id DESC", (daily_route[0],)).fetchall()
             return self.respond(HTTPStatus.OK, [dict(row) for row in rows])
+        if re.fullmatch(r"/r/[A-Za-z0-9_-]{16}", path):
+            path = "/rede.html"
         if path == "/":
             path = "/index.html"
         assets = {"/rede.html":"text/html; charset=utf-8","/network-links.js":"text/javascript; charset=utf-8","/usability.css":"text/css; charset=utf-8","/management-model.js":"text/javascript; charset=utf-8", "/management.js":"text/javascript; charset=utf-8", "/management.css":"text/css; charset=utf-8", "/loja.html":"text/html; charset=utf-8", "/store-portal.js":"text/javascript; charset=utf-8", "/automation-model.js":"text/javascript; charset=utf-8", "/automation.js":"text/javascript; charset=utf-8", "/automation.css":"text/css; charset=utf-8", "/index.html": "text/html; charset=utf-8", "/style.css": "text/css; charset=utf-8", "/brand.css": "text/css; charset=utf-8", "/theme.css": "text/css; charset=utf-8", "/mobile.css": "text/css; charset=utf-8", "/reading.css": "text/css; charset=utf-8", "/motion.css": "text/css; charset=utf-8", "/operations.css": "text/css; charset=utf-8", "/workflow.css": "text/css; charset=utf-8", "/route-loader.js": "text/javascript; charset=utf-8", "/session-sync.js": "text/javascript; charset=utf-8",

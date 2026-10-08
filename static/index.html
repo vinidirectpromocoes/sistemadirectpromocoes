@@ -292,9 +292,19 @@
       </section>
     </main>
     <main class="main-content" id="pedidos-links-page" hidden>
-      <header class="page-header"><div><div class="eyebrow">PEDIDOS <span>/</span> PEDIDOS POR LINK</div><h1>Pedidos por link</h1><p>Compartilhe um link por rede para receber solicitações das lojas.</p></div><button id="network-links-refresh" type="button" class="button button-outline" aria-label="Atualizar links e solicitações" title="Atualizar"><span aria-hidden="true">↻</span><span class="button-label">Atualizar</span></button></header>
-      <section class="list-card"><div class="list-top"><div><h2>Links das redes</h2><p>A rede escolhe a loja e preenche o pedido. A Direct confere antes de registrar.</p></div></div><p class="section-help">Cada link vale por 90 dias. Renovar ou revogar desativa o link anterior. Compartilhe com os responsáveis da rede.</p><div id="network-links-feedback" class="feedback" role="status" aria-live="polite" hidden></div><div id="network-links-list" class="network-links-list"></div></section>
-      <section class="list-card"><div class="list-top"><div><h2>Solicitações e conferências recebidas</h2><p>Revise os pedidos e as informações enviadas pelas lojas.</p></div></div><div id="network-requests-list" class="automation-list"></div></section>
+      <header class="page-header"><div><div class="eyebrow">PEDIDOS <span>/</span> PEDIDOS POR LINK</div><h1 id="network-page-title">Pedidos por link</h1><p id="network-page-description">Cada rede tem seu espaço, seu link fixo e seu histórico de solicitações.</p></div><button id="network-links-refresh" type="button" class="button button-outline" aria-label="Atualizar links e solicitações" title="Atualizar"><span aria-hidden="true">↻</span><span class="button-label">Atualizar</span></button></header>
+      <div id="network-links-feedback" class="feedback" role="status" aria-live="polite" hidden></div>
+      <section id="network-overview" class="list-card"><div class="list-top"><div><h2>Escolha a rede</h2><p>Abra uma rede para copiar o link e acompanhar seus pedidos.</p></div></div><div id="network-links-list" class="network-links-list"></div></section>
+      <div id="network-detail" hidden>
+        <a href="#pedidos-links" class="network-back button button-outline">← Todas as redes</a>
+        <section class="list-card network-share"><div class="list-top"><div><h2>Link da rede</h2><p>Link fixo, sem vencimento. Envie ao responsável da rede para solicitar diaristas.</p></div><span class="badge">Sem vencimento</span></div><div id="network-share-content"></div></section>
+        <div id="network-summary" class="management-stats network-summary"></div>
+        <section class="list-card"><div class="list-top"><div><h2>Solicitações da rede</h2><p>Histórico exclusivo desta rede. A Direct revisa antes de registrar o pedido.</p></div></div>
+          <div class="network-history-filters"><label>Buscar<input id="network-history-search" type="search" placeholder="Loja, setor ou solicitante"></label><label>Situação<select id="network-history-status"><option value="">Todas as situações</option><option value="pendente">Aguardando revisão</option><option value="aprovada">Pedidos registrados</option><option value="recusada">Solicitações recusadas</option></select></label></div>
+          <p id="network-history-count" class="section-help"></p><div id="network-requests-list" class="network-history-list" aria-live="polite"></div>
+        </section>
+        <section id="network-checks-panel" class="list-card" hidden><div class="list-top"><div><h2>Conferências da rede</h2><p>Presenças e faltas informadas pelas lojas, aguardando revisão da Direct.</p></div></div><div id="network-checks-list" class="automation-list"></div></section>
+      </div>
     </main>
     <main class="main-content" id="redes-page" hidden>
       <header class="page-header">

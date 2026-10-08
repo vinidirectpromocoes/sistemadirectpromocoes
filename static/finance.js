@@ -573,7 +573,7 @@ async function openFinanceAudit() {
 
 async function showPage() {
   const routeHash = location.hash;
-  let page = ['inicio', 'crm', 'diaristas', 'financeiro', 'pedidos', 'leitura', 'redes', 'configuracoes', 'convites', 'vagas', 'pedidos-links'].includes(window.location.hash.slice(1)) ? window.location.hash.slice(1) : 'inicio';
+  let page = ['inicio', 'crm', 'diaristas', 'financeiro', 'pedidos', 'leitura', 'redes', 'configuracoes', 'convites', 'vagas', 'pedidos-links'].includes(window.location.hash.slice(1).split('?')[0]) ? window.location.hash.slice(1).split('?')[0] : 'inicio';
   const role = window.directRemote?.role;
   if (role && ({ 'pedidos-links':['admin','operacao'], financeiro: ['admin', 'financeiro'], configuracoes: ['admin', 'financeiro'], vagas: ['admin', 'operacao'], convites: ['admin', 'operacao'], leitura: ['admin', 'operacao', 'financeiro', 'consulta'], diaristas: ['admin', 'financeiro', 'operacao'] }[page] || ['admin', 'financeiro', 'operacao', 'consulta']).includes(role) === false) {
     page = 'inicio';
