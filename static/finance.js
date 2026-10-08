@@ -571,6 +571,8 @@ async function openFinanceAudit() {
   } catch (error) { list.textContent = `Não foi possível carregar o histórico: ${error.message}`; }
 }
 
+const pageLoadingControls=new WeakMap();
+function releasePageControls(main){for(const [control,disabled]of pageLoadingControls.get(main)||[])control.disabled=disabled;pageLoadingControls.delete(main);main.inert=false;main.removeAttribute('aria-busy');}
 async function showPage() {
   const routeHash = location.hash;
   let page = ['inicio', 'crm', 'diaristas', 'financeiro', 'pedidos', 'leitura', 'redes', 'configuracoes', 'convites', 'vagas', 'pedidos-links', 'empresa'].includes(window.location.hash.slice(1).split('?')[0]) ? window.location.hash.slice(1).split('?')[0] : 'inicio';
@@ -583,7 +585,7 @@ async function showPage() {
     const active = name === page;
     $(`#${name}-page`).hidden = !active;
     $(`#${name}-page`).inert = active;
-    if(active)$(`#${name}-page`).setAttribute('aria-busy','true');
+    if(active){const main=$(`#${name}-page`);main.setAttribute('aria-busy','true');if(!pageLoadingControls.has(main)){const controls=[...main.querySelectorAll('button,input,select,textarea')].map(c=>[c,c.disabled]);pageLoadingControls.set(main,controls);for(const [c]of controls)c.disabled=true;}}
     const link = $(`#nav-${name}`);
     link.classList.toggle('nav-active', active);
     if (active) link.setAttribute('aria-current', 'page');
@@ -591,7 +593,7 @@ async function showPage() {
   }
   document.title = `${{ empresa: 'Minha empresa', 'pedidos-links': 'Pedidos por link', vagas: 'Vagas disponíveis', convites: 'Cadastros por link', inicio: 'Início', crm: 'Pendências', diaristas: 'Diaristas', pedidos: 'Pedidos', leitura: 'Leitura IA', redes: 'Redes e lojas', financeiro: 'Financeiro', configuracoes: 'Configurações' }[page]} | Direct Promoções`;
   window.scrollTo(0, 0);
-  try { await window.DirectModules.ensure(page); } catch (error) { window.DirectUI?.notify(error.message, true); return; }
+  try { await window.DirectModules.ensure(page); } catch (error) { window.DirectUI?.notify(error.message, true); return; }finally{releasePageControls($(`#${page}-page`));}
   if (location.hash !== routeHash) return;
   $(`#${page}-page`).inert=false;$(`#${page}-page`).removeAttribute('aria-busy');
   if (page === 'empresa') window.DirectEnterprise?.load();
