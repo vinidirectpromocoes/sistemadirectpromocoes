@@ -24,7 +24,8 @@
   }
   function prepare(text,context){
     let result=parser.prepareText(text).trim().replace(/^(?:(?:oi|ol[aá]|bom dia|boa tarde|boa noite)[,!]?\s+)?(?:por favor[, ]*|eu (?:quero|preciso|gostaria de)\s+|quero\s+|preciso\s+|pode\s+|voc[eê] pode\s+)*/i,'');
-    result=result.replace(/^dar\s+(?:o\s+)?ok\s+(?:no|ao)\s+pagamento/i,'Registrar pagamento').replace(/^dar baixa (?:no|do) pagamento/i,'Registrar pagamento').replace(/^marcar (?:o )?pagamento como pago/i,'Registrar pagamento').replace(/^paguei\b/i,'Registrar pagamento').replace(/^trocar\b|^troque\b/i,'Substituir').replace(/^remova\b/i,'Remover').replace(/^exclua\b/i,'Excluir').replace(/^cancele\b/i,'Cancelar').replace(/^bloqueie\b/i,'Bloquear').replace(/^desbloqueie\b/i,'Desbloquear').replace(/^colocar\s+(.+?)\s+(?:no|em um|em) pedido/i,'Escalar $1 no pedido');
+    result=result.replace(/^(cadastre|registre|marque|confirme|altere|atualize|complete|corrija|substitua|escale)\b/i,value=>({cadastre:'Cadastrar',registre:'Registrar',marque:'Marcar',confirme:'Confirmar',altere:'Alterar',atualize:'Atualizar',complete:'Completar',corrija:'Corrigir',substitua:'Substituir',escale:'Escalar'}[value.toLowerCase()]));
+    result=result.replace(/^dar\s+(?:o\s+)?ok\s+(?:no|ao)\s+pagamento/i,'Registrar pagamento').replace(/^dar baixa (?:no|do) pagamento/i,'Registrar pagamento').replace(/^marcar (?:o )?pagamento(?: como pago)?\b/i,'Registrar pagamento').replace(/^paguei\b/i,'Registrar pagamento').replace(/^trocar\b|^troque\b/i,'Substituir').replace(/^remova\b/i,'Remover').replace(/^exclua\b/i,'Excluir').replace(/^cancele\b/i,'Cancelar').replace(/^bloqueie\b/i,'Bloquear').replace(/^desbloqueie\b/i,'Desbloquear').replace(/^colocar\s+(.+?)\s+(?:no|em um|em) pedido/i,'Escalar $1 no pedido');
     const head=result.split('\n')[0];
     if(/\b(?:faltou|nao (?:compareceu|veio trabalhar|trabalhou|esteve presente))\b/.test(norm(head))&&!/^marcar falta/.test(norm(head)))result='Marcar falta\n'+result;
     else if(/\b(?:compareceu|veio trabalhar|trabalhou|esteve presente)\b/.test(norm(head)))result='Marcar presença\n'+result;
@@ -168,9 +169,10 @@
     if(/^(?:nao|nunca|ignore|apagar todos|excluir todos|remover todos|alterar todos)\b/.test(norm(prepared)))return [{tipo:'indefinido',texto:prepared,dados:{},faltando:['Não preparei alterações. Informe uma ação e um registro específico.'],avisos:[]}];
     if(/\b(?:todos os cadastros|todos os diaristas|todas as lojas|todos os pedidos|todos os pagamentos)\b/.test(norm(prepared))&&!/^(?:consultar|listar|ver|mostrar)/.test(norm(prepared)))return [{tipo:'indefinido',texto:prepared,dados:{},faltando:['Informe um registro específico. Alterações em massa precisam de revisão no formulário.'],avisos:[]}];
     const extended=newAction(prepared,context);
+    if(!extended&&/^(?:registrar|marcar|confirmar)\b/.test(norm(prepared))&&!/^(?:registrar (?:a |o )?(?:diarista|cadastro|pedido|presenca|presente|falta|desistencia)|marcar (?:a |o )?(?:presenca|presente|falta|desistencia)|confirmar (?:presenca|presente|que vai|confirmacao))\b/.test(norm(prepared)))return [{tipo:'indefinido',texto:prepared,dados:{},faltando:['Não reconheci esta ação. Use Ajuda para consultar as ações disponíveis ou abra o formulário específico.'],avisos:[],commandOnly:true}];
     if(!extended&&/^(?:remover|excluir|bloquear|desbloquear|estornar|reabrir|escalar|cancelar|corrigir)\b/.test(norm(prepared)))return [{tipo:'indefinido',texto:prepared,dados:{},faltando:['Não reconheci esta ação. Informe o tipo de registro: cadastro, pedido, loja, escala ou pagamento.'],avisos:[],commandOnly:true}];
     const items=extended?[extended]:base.plan(prepared,context);
-    return items.map(item=>blocked(enrichQuestions(item,context),context.role));
+    return items.map(item=>{if(item.tipo==='comando'){const row=context.scales.find(s=>s.id===item.dados.escala_id);if(row)item.dados.snapshot=snapshot(row);}return blocked(enrichQuestions(item,context),context.role);});
   }
   function describe(item){
     if(item.tipo!=='acao')return base.describe(item);
@@ -216,5 +218,5 @@
     }
     return null;
   }
-  return {...base,plan,describe,reply,merge,permission,answer,snapshot,prepare,help};
+  return {...base,plan,describe,reply,merge,permission,answer,snapshot,stamp:snapshot,prepare,help};
 });
