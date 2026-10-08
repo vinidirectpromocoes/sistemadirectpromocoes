@@ -1,0 +1,124 @@
+/* Cálculos puros: pedidos, escalas e tarifas. Valores sempre em centavos. */
+(() => {
+  const norm = value => String(value || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').trim().toLowerCase();
+  function periodRange(mode, anchor) {
+    if (mode === 'all') return '';
+    if (mode === 'month') return anchor.slice(0, 7);
+    const date = new Date(`${anchor}T12:00:00Z`);
+    if (!Number.isFinite(date.getTime())) return '';
+    if (mode === 'day') return { start: anchor, end: anchor };
+    date.setUTCDate(date.getUTCDate() - (date.getUTCDay() + 6) % 7);
+    const start = date.toISOString().slice(0, 10);
+    date.setUTCDate(date.getUTCDate() + 6);
+    return { start, end: date.toISOString().slice(0, 10) };
+  }
+  function includesDate(day, period = '') {
+    return typeof period === 'string' ? !period || day.startsWith(period)
+      : (!period.start || day >= period.start) && (!period.end || day <= period.end);
+  }
+  function calculate(orders, scalesByOrder, tariffs, period = '') {
+    const result = {
+      ideal: { revenue: 0, cost: 0, extras: 0, margin: 0, net: 0 },
+      expected: { revenue: 0, cost: 0, extras: 0, margin: 0, net: 0 },
+      confirmed: { revenue: 0, cost: 0, extras: 0, margin: 0, net: 0 },
+      demand: 0, expectedDays: 0, present: 0, absent: 0, open: 0,
+      missingRevenue: 0, missingCost: 0, confirmedMissingRevenue: 0, confirmedMissingCost: 0, byNetwork: [], byOrder: [],
+    };
+    const networks = new Map();
+    for (const order of orders || []) {
+      const cancelled = order.situacao === 'cancelado';
+      const network = (tariffs?.redes || []).find(rate => norm(rate.rede) === norm(order.supermercado));
+      const sectorRates = (tariffs?.setores || []).filter(rate => norm(rate.setor) === norm(order.setor) && rate.valor_pago_centavos != null);
+      const sectorRate = sectorRates.find(rate => norm(rate.rede) === norm(order.supermercado)) || sectorRates.find(rate => !rate.rede);
+      const baseRevenue = network?.valor_recebido_centavos ?? null;
+      const baseCost = sectorRate?.valor_pago_centavos ?? network?.valor_padrao_centavos ?? null;
+      const extra = (tariffs?.extras || []).find(rate => norm(rate.rede) === norm(order.supermercado));
+      const extraPerDay = (extra?.transporte_centavos || 0) + (extra?.taxas_centavos || 0) + (extra?.outros_centavos || 0);
+      const networkName = network?.rede || order.supermercado;
+      const networkKey = norm(networkName);
+      const aggregate = networks.get(networkKey) || { name: networkName, revenue: 0, cost: 0, extras: 0, days: 0 };
+      networks.set(networkKey, aggregate);
+      const orderTotal = {
+        id: order.id, network: networkName, unit: order.unidade || '', sector: order.setor || '',
+        requested: 0, days: 0, present: 0, absent: 0, revenue: 0, cost: 0, extras: 0, margin: 0, net: 0,
+      };
+      const scales = scalesByOrder?.[order.id] || [];
+      for (const shift of order.turnos || []) {
+        if (!includesDate(shift.data, period)) continue;
+        const chosenContract = (typeof window !== 'undefined' ? window.DirectInsights : require('./insights.js'))?.contract(tariffs?.contratos, order, shift.data);
+        const currentRevenue = chosenContract?.valor_recebido_centavos ?? baseRevenue;
+        const currentCost = chosenContract?.valor_pago_centavos ?? baseCost;
+        const dayScales = scales.filter(scale => scale.data === shift.data);
+        const active = dayScales.filter(scale => !['falta','desistiu'].includes(scale.status));
+        const present = active.filter(scale => scale.status === 'presente');
+        const requested = cancelled ? present.length : Number(order.quantidade_diaristas) || 0;
+        const absent = cancelled ? 0 : dayScales.filter(s=>s.status==='falta').length;
+        // Uma vaga ainda não escalada permanece na hipótese de atendimento integral.
+        // A falta reduz a projeção; uma substituta escalada recompõe a vaga.
+        // Pedido cancelado mantém apenas diárias realizadas, inclusive valores congelados.
+        const expected = cancelled ? present.length : Math.min(requested, active.length + Math.max(0, requested - dayScales.length));
+        result.demand += requested;
+        result.expectedDays += expected;
+        result.present += present.length;
+        result.absent += absent;
+        result.open += cancelled ? 0 : Math.max(0, requested - active.length);
+        orderTotal.requested += requested;
+        orderTotal.days += expected;
+        orderTotal.present += present.length;
+        orderTotal.absent += absent;
+        if (!cancelled && currentRevenue != null) result.ideal.revenue += currentRevenue * requested;
+        if (!cancelled && currentCost != null) result.ideal.cost += currentCost * requested;
+        if (!cancelled) result.ideal.extras += extraPerDay * requested;
+        const forecastPresent = present.slice(0, expected);
+        const remaining = expected - forecastPresent.length;
+        if (currentRevenue == null) result.missingRevenue += remaining;
+        if (currentCost == null) result.missingCost += remaining;
+        if (currentRevenue != null) {
+          result.expected.revenue += currentRevenue * remaining;
+          aggregate.revenue += currentRevenue * remaining;
+          orderTotal.revenue += currentRevenue * remaining;
+        }
+        if (currentCost != null) {
+          result.expected.cost += currentCost * remaining;
+          aggregate.cost += currentCost * remaining;
+          orderTotal.cost += currentCost * remaining;
+        }
+        aggregate.days += expected;
+        result.expected.extras += extraPerDay * expected;
+        aggregate.extras += extraPerDay * expected;
+        orderTotal.extras += extraPerDay * expected;
+        for (const scale of present) {
+          const revenue = scale.diaria?.valor_recebido_centavos ?? currentRevenue;
+          const cost = scale.diaria?.valor_centavos ?? currentCost;
+          if (revenue != null) result.confirmed.revenue += revenue;
+          else result.confirmedMissingRevenue++;
+          if (cost != null) result.confirmed.cost += cost;
+          else result.confirmedMissingCost++;
+          result.confirmed.extras += extraPerDay;
+        }
+        for (const scale of forecastPresent) {
+          const revenue = scale.diaria?.valor_recebido_centavos ?? currentRevenue;
+          const cost = scale.diaria?.valor_centavos ?? currentCost;
+          if (revenue == null) result.missingRevenue++;
+          else { result.expected.revenue += revenue; aggregate.revenue += revenue; orderTotal.revenue += revenue; }
+          if (cost == null) result.missingCost++;
+          else { result.expected.cost += cost; aggregate.cost += cost; orderTotal.cost += cost; }
+        }
+      }
+      if (orderTotal.requested) {
+        orderTotal.margin = orderTotal.revenue - orderTotal.cost;
+        orderTotal.net = orderTotal.margin - orderTotal.extras;
+        result.byOrder.push(orderTotal);
+      }
+    }
+    for (const target of [result.ideal, result.expected, result.confirmed]) {
+      target.margin = target.revenue - target.cost;
+      target.net = target.margin - target.extras;
+    }
+    result.byNetwork = [...networks.values()].map(item => ({ ...item, margin: item.revenue - item.cost,
+      net: item.revenue - item.cost - item.extras })).sort((a, b) => b.revenue - a.revenue);
+    return result;
+  }
+  if (typeof window !== 'undefined') window.DirectForecast = { calculate, periodRange, includesDate };
+  if (typeof module !== 'undefined') module.exports = { calculate, periodRange, includesDate };
+})();

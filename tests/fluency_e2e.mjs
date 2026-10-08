@@ -1,0 +1,25 @@
+import assert from 'node:assert/strict';
+import {spawn} from 'node:child_process';import {fileURLToPath}from'node:url';import {mkdtemp,rm}from'node:fs/promises';import os from'node:os';import path from'node:path';import net from'node:net';import {chromium,webkit}from'playwright';
+const root=fileURLToPath(new URL('..',import.meta.url)),directory=await mkdtemp(path.join(os.tmpdir(),'direct-fluency-')),socket=net.createServer();await new Promise(r=>socket.listen(0,'127.0.0.1',r));const port=socket.address().port;await new Promise(r=>socket.close(r));const base='http://127.0.0.1:'+port,child=spawn(process.env.PYTHON||'python3',['server.py'],{cwd:root,env:{...process.env,DIARISTAS_DB_PATH:path.join(directory,'test.db'),DIARISTAS_PORT:String(port)},stdio:'ignore'});
+async function api(method,url,body){const response=await fetch(base+url,{method,headers:{'Content-Type':'application/json'},body:body?JSON.stringify(body):undefined});const data=await response.json();if(!response.ok)throw Error(data.erro);return data;}
+try{
+ for(let i=0;i<60;i++){try{const response=await fetch(base);await response.arrayBuffer();if(response.ok)break;}catch{}await new Promise(r=>setTimeout(r,100));}
+ for(const [engine,name]of[[chromium,'Chromium'],[webkit,'WebKit']])for(const width of[1280,390,320]){
+  const worker=await api('POST','/api/diaristas',{nome:'Teste concorrência '+name,cpf:'52998224725'}),browser=await engine.launch({headless:true}),context=await browser.newContext({viewport:{width,height:844}}),a=await context.newPage(),b=await context.newPage(),errors=[];for(const page of[a,b])page.on('pageerror',e=>errors.push(e.message));
+  const loaded=[];a.on('request',r=>{if(r.url().endsWith('.js'))loaded.push(new URL(r.url()).pathname);});
+  await a.goto(base+'/#diaristas');await b.goto(base+'/#diaristas');await a.waitForFunction(()=>records.length>0);await b.waitForFunction(()=>records.length>0);
+  assert.ok(!loaded.includes('/reading.js')&&!loaded.includes('/backup.js'),'Módulos opcionais não carregam na abertura');
+  let gets=0;const listener=r=>{if(r.url().endsWith('/api/lojas'))gets++;};a.on('request',listener);
+  await a.evaluate(async()=>{clearRequestCache();const values=await Promise.all(Array.from({length:20},()=>request('/api/lojas')));values[0][0].nome='Não pode alterar o cache';if(values[1][0].nome==='Não pode alterar o cache')throw Error('Cache compartilha objeto mutável');});a.off('request',listener);assert.equal(gets,1,'20 leituras concorrentes fazem uma consulta');
+  await a.evaluate(w=>openForm(w),worker);await b.evaluate(w=>openForm(w),worker);await b.locator('#nome').fill('Segundo editor mantém digitado');await a.locator('#nome').fill('Primeiro editor salvo');await a.locator('#save-button').click();await a.locator('#form-dialog').waitFor({state:'hidden'});
+  await b.locator('#save-button').click();await b.locator('#form-error').getByText(/alterado por outra pessoa/).waitFor();assert.equal(await b.locator('#nome').inputValue(),'Segundo editor mantém digitado');assert.equal((await api('GET','/api/diaristas')).find(w=>w.id===worker.id).nome,'Primeiro editor salvo');
+  await a.locator('#nav-leitura').click();await a.waitForFunction(()=>Boolean(window.DirectReading));assert.ok(loaded.includes('/reading.js'));await a.locator('#nav-diaristas').click();await a.locator('#nav-leitura').click();assert.equal(loaded.filter(n=>n==='/reading.js').length,1,'Módulo carregado apenas uma vez');
+  // Reload while a read is outstanding: WebKit must not raise detached-origin errors.
+  await a.route('**/api/lojas',async route=>{await new Promise(r=>setTimeout(r,300));try{await route.continue();}catch{/* Navigation discarded this read. */}});
+  await a.evaluate(()=>{clearRequestCache();window.readDuringReload=request('/api/lojas').catch(e=>e.name);});
+  await a.reload();await a.waitForFunction(()=>Boolean(window.DirectReading));await a.waitForLoadState('networkidle');
+  await a.unroute('**/api/lojas');
+  assert.equal((await a.evaluate(()=>request('/api/lojas'))).length,44,'Leituras continuam funcionando após recarga');
+  assert.ok(await a.evaluate(()=>document.documentElement.scrollWidth<=innerWidth+2));assert.deepEqual(errors,[]);await api('DELETE','/api/diaristas/'+worker.id);await browser.close();console.log(name+' '+width+': lazy load, consultas compartilhadas, duas edições sem perda de dados, recarga com leitura pendente, mobile OK');
+ }
+}finally{child.kill('SIGTERM');await rm(directory,{recursive:true,force:true});}

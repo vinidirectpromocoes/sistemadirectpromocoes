@@ -1,0 +1,34 @@
+.workflow-section { margin: 18px 0; }
+.workflow-header { gap: 12px; }
+.workflow-stats { display: grid; grid-template-columns: repeat(3,minmax(0,1fr)); gap: 9px; padding: 0 18px 16px; }
+.workflow-stats > div { display: grid; gap: 5px; padding: 12px; border: 1px solid var(--brand-border); border-radius: 12px; background: var(--brand-light); min-width: 0; }
+.workflow-stats span { font-size: .75rem; opacity: .8; }.workflow-stats strong { font-size: 1.05rem; overflow-wrap: anywhere; }
+.workflow-list { display: grid; gap: 8px; padding: 0 18px 18px; font-size: .82rem; }
+.workflow-entry { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 12px; border: 1px solid var(--brand-border); border-radius: 12px; background: var(--surface,#fff); transition: transform .18s ease, box-shadow .18s ease; min-width: 0; }
+.workflow-entry:hover { transform: translateY(-2px); box-shadow: 0 10px 20px #0b286015; }
+.workflow-entry > div:first-child { min-width: 0; }.workflow-entry strong,.workflow-entry small { display: block; overflow-wrap: anywhere; }
+.workflow-entry small { margin-top: 4px; opacity: .78; line-height: 1.35; }
+.workflow-entry-values { display: flex; align-items: center; justify-content: end; flex-wrap: wrap; gap: 9px; font-size: .78rem; text-align: right; }
+.workflow-entry-values .button { min-height: 34px; padding: 6px 10px; font-size: .77rem; }
+.workflow-preview { border: 1px solid var(--brand-border); border-radius: 10px; padding: 10px; background: var(--brand-light); font-size: .82rem; }
+.workflow-detail-summary { padding: 10px 12px; border-radius: 10px; background: var(--brand-light); font-size: .83rem; line-height: 1.45; }
+.workflow-detail-list { display: grid; gap: 7px; margin: 10px 0 16px; font-size: .82rem; }
+.workflow-line,.workflow-choice { display: flex; justify-content: space-between; align-items: center; gap: 10px; padding: 9px 10px; border: 1px solid var(--brand-border); border-radius: 9px; min-width: 0; }
+.workflow-line strong,.workflow-line small { display: block; overflow-wrap: anywhere; }.workflow-line small { margin-top: 3px; opacity: .75; }.workflow-line > strong { white-space: nowrap; }
+.workflow-inline-form { display: grid; gap: 10px; margin: 14px 0; padding: 12px; border: 1px solid var(--brand-border); border-radius: 12px; }
+.workflow-inline-form h3 { margin: 0; }.workflow-inline-form .button { justify-self: start; }
+.workflow-choice { cursor: pointer; }.workflow-choice input { flex: 0 0 auto; }.workflow-choice span { flex: 1; overflow-wrap: anywhere; }.workflow-choice strong { white-space: nowrap; }
+.workflow-batch-total { display: block; margin: 10px 0 16px; text-align: right; }.finance-batch-button { margin-bottom: 12px; }
+.workflow-reopen { min-width: 190px; text-align: left; }.workflow-reopen summary { cursor: pointer; }.workflow-reopen form { display: flex; gap: 6px; margin-top: 8px; }.workflow-reopen input { min-width: 0; width: 170px; font-size: 1rem; }
+html[data-theme="dark"] .workflow-entry { background: var(--dark-surface); border-color: var(--dark-border); }
+html[data-theme="dark"] .workflow-stats > div, html[data-theme="dark"] .workflow-preview, html[data-theme="dark"] .workflow-detail-summary { background: var(--dark-raised); border-color: var(--dark-border); }
+html[data-theme="dark"] .workflow-line, html[data-theme="dark"] .workflow-choice, html[data-theme="dark"] .workflow-inline-form { border-color: var(--dark-border); }
+@media (max-width: 680px) { .workflow-entry { align-items: start; flex-direction: column; }.workflow-entry-values { justify-content: start; text-align: left; }.workflow-stats { gap: 6px; padding: 0 12px 12px; }.workflow-stats > div { padding: 8px; }.workflow-stats strong { font-size: .86rem; }.workflow-list { padding: 0 12px 12px; }.workflow-line { align-items: start; }.workflow-line > strong { white-space: normal; } }
+@media (max-width: 360px) { .workflow-stats { grid-template-columns: 1fr; }.workflow-choice { flex-wrap: wrap; }.workflow-choice strong { margin-left: auto; } }
+.reading-result-filter { font-size: .76rem; min-width: 140px; }.reading-result-filter select { display: block; margin-top: 4px; width: 100%; font-size: .85rem; }
+#reading-result-sources { overflow-wrap: anywhere; }
+.reading-item[hidden] { display: none; }
+.reconciliation-entry { display: block; }
+.reconciliation-entry summary { cursor: pointer; font-weight: 650; overflow-wrap: anywhere; }
+.reconciliation-body { display: grid; gap: .65rem; margin-top: .8rem; }
+.reconciliation-issue { margin: 0; color: var(--color-warning, #d27b39); font-size: .875rem; overflow-wrap: anywhere; }
