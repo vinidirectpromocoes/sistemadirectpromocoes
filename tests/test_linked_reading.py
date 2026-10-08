@@ -25,12 +25,29 @@ class LinkedReadingTests(unittest.TestCase):
         self.assertEqual(self.call('PATCH',f"/api/pedidos/{response['pedido_id']}/escalas/{scales[0]['id']}",{'status':'presente'})[0],400)
         status,retry=self.save(p);self.assertEqual(status,200,retry);self.assertFalse(retry['pedido_criado']);self.assertEqual(retry['situacao'],'confirmado');self.assertEqual(retry['escalas_criadas'],[]);self.assertEqual(self.counts(),(1,1,2,0))
         p['pedido']['turnos'][0]['inicio']='07:00';self.assertEqual(self.save(p)[0],400);self.assertEqual(self.counts(),(1,1,2,0))
-    def test_existing_worker_preserved_and_conflict_rolls_back_all_new_days(self):
+    def test_existing_worker_reused_in_overlapping_orders(self):
         self.call('POST','/api/diaristas',{'nome':'Fernando Ferreira Grangeiro','cpf':'04068775303','bairro':'Centro'})
         p=self.payload();status,first=self.save(p);self.assertEqual(status,200,first);self.assertFalse(first['cadastro_criado'])
         worker=self.call('GET','/api/diaristas')[1][0];self.assertEqual(worker['bairro'],'Centro');self.assertEqual(worker['disponibilidade'],[])
         p=self.payload();p['pedido']['turnos']=[{'data':'2026-10-02','inicio':'06:00','fim':'14:20'},{'data':'2026-10-03','inicio':'06:00','fim':'14:20'}]
-        before=self.counts();status,error=self.save(p);self.assertEqual(status,400,error);self.assertIn('outro pedido',error['erro']);self.assertEqual(self.counts(),before)
+        status,saved=self.save(p);self.assertEqual(status,200,saved);self.assertEqual(self.counts(),(1,2,4,0));self.assertFalse(saved['cadastro_criado'])
+    def test_same_worker_two_seven_day_orders_and_independent_attendance(self):
+        today=server.datetime.now(server.FORTALEZA).date()
+        saved=[]
+        for start,end in [('07:00','15:20'),('13:40','22:00')]:
+            p=self.payload(confirmar_cadastro=True,diarista={'nome':'Paulo Roberto Porfirio','cpf':'64865592334'})
+            p['pedido']={'supermercado':'Super do Povo','unidade':'Meireles','setor':'Balcao de Frios','quantidade_diaristas':1,'turnos':[{'data':(today+timedelta(days=i)).isoformat(),'inicio':start,'fim':end} for i in range(7)]}
+            code,result=self.save(p);self.assertEqual(code,200,result);saved.append(result)
+            self.assertEqual(self.save(p)[0],200)
+        self.assertEqual(self.counts(),(1,2,14,0));self.assertEqual(saved[0]['diarista_id'],saved[1]['diarista_id'])
+        scales=[self.call('GET',f"/api/pedidos/{s['pedido_id']}/escalas")[1] for s in saved]
+        paths=[f"/api/pedidos/{s['pedido_id']}/escalas/{rows[0]['id']}" for s,rows in zip(saved,scales)]
+        for path in paths:self.assertEqual(self.call('PATCH',path,{'status':'presente'})[0],200)
+        self.assertEqual(self.counts(),(1,2,14,2))
+        self.assertEqual(self.call('PATCH',paths[1],{'status':'falta','motivo':'Não compareceu no segundo turno'})[0],200)
+        self.assertEqual(self.counts(),(1,2,14,1));self.assertEqual(self.call('GET',f"/api/pedidos/{saved[0]['pedido_id']}/escalas")[1][0]['status'],'presente')
+        with server.connect() as db:
+            daily=db.execute('select valor_recebido_centavos,valor_centavos from diarias').fetchone();self.assertEqual(tuple(daily),(13400,9000))
     def test_full_order_does_not_create_orphan_worker_and_identity_is_checked(self):
         p=self.payload(diarista={'nome':'Pessoa Existente','cpf':'52998224725'},confirmar_cadastro=True);_,first=self.save(p)
         p=self.payload(confirmar_cadastro=True,pedido_id=first['pedido_id']);before=self.counts();self.assertEqual(self.save(p)[0],400);self.assertEqual(self.counts(),before)

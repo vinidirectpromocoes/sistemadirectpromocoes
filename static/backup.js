@@ -33,9 +33,21 @@
     try {
       const pass = password();
       output.textContent = 'Preparando cópia consistente no banco...';
-      const { data: payload, error } = await window.directRemote.client.rpc('direct_backup_snapshot_v8');
+      const { data: payload, error } = await window.directRemote.client.rpc('direct_backup_snapshot_v10');
       if (error) throw new Error(error.message);
       const verified = window.DirectBackup.validate(payload);
+      payload.attachments={};
+      const photos=payload.tables.empresa_anexos||[];
+      if(photos.reduce((s,r)=>s+r.bytes,0)>50000000)throw Error('Mais de 50 MB de fotos. Use a cópia automática para incluir todas as evidências.');
+      for(const row of photos){
+        output.textContent='Incluindo fotos no backup…';
+        const result=await directRemote.client.storage.from('direct-evidencias').download(row.caminho);
+        if(result.error)throw Error('Uma evidência não pôde ser copiada.');
+        const bytes=new Uint8Array(await result.data.arrayBuffer());
+        const digest=[...new Uint8Array(await crypto.subtle.digest('SHA-256',bytes))].map(x=>x.toString(16).padStart(2,'0')).join('');
+        if(bytes.length!==row.bytes||digest!==row.sha256)throw Error('Evidência divergente.');
+        payload.attachments[row.caminho]=toBase64(bytes);
+      }
       const salt = crypto.getRandomValues(new Uint8Array(16));
       const iv = crypto.getRandomValues(new Uint8Array(12));
       const encrypted = await crypto.subtle.encrypt({ name: 'AES-GCM', iv }, await key(pass, salt), encoder.encode(JSON.stringify(payload)));
@@ -61,7 +73,8 @@
         await key(password(), fromBase64(archive.salt)), fromBase64(archive.data));
       const payload = JSON.parse(decoder.decode(plain));
       const checked = window.DirectBackup.validate(payload);
-      const missing = ['direct-data-v5','direct-data-v6','direct-data-v7','direct-data-v8'].includes(payload.format) ? '' : ' Esta cópia antiga não inclui configurações e vínculos privados do portal.';
+      for(const row of payload.tables.empresa_anexos||[]){const bytes=fromBase64(payload.attachments?.[row.caminho]||''),digest=[...new Uint8Array(await crypto.subtle.digest('SHA-256',bytes))].map(x=>x.toString(16).padStart(2,'0')).join('');if(bytes.length!==row.bytes||digest!==row.sha256)throw Error('Evidência ausente ou divergente.');}
+      const missing = ['direct-data-v5','direct-data-v6','direct-data-v7','direct-data-v8','direct-data-v9','direct-data-v10'].includes(payload.format) ? '' : ' Esta cópia antiga não inclui configurações e vínculos privados do portal.';
       output.textContent = `Cópia legível e íntegra: ${checked.count} registro(s) em ${checked.tables} tabelas, criada em ${new Date(payload.exportedAt).toLocaleString('pt-BR')}.${missing}`;
       localStorage.setItem('direct-backup-verified-at', new Date().toISOString());
       showLastCheck();

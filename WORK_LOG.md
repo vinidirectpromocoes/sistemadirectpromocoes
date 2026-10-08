@@ -1,5 +1,24 @@
 # Melhorias aprovadas — outubro de 2026
 
+## 2026-10-07 — Limpar convite ao atualizar cadastros por link
+
+- Clique em Atualizar limpa CPF, links de cadastro/vagas, validade exibida e mensagem de cópia/WhatsApp. Atualiza a lista de cadastros recebidos e retorna à primeira página.
+- Respostas atrasadas de geração/cópia não restauram o convite limpo. A próxima geração continua disponível; atualização automática e paginação mantêm o convite em edição.
+- Regressão administrativa verifica cadastro mantido, campos limpos, geração atrasada descartada e próximo convite. Chromium/WebKit em 1280, 390 e 320 pixels.
+- Encaminhamento HTTP secundário dos arquivos do teste substituído por leitura direta dos mesmos arquivos reais na origem HTTPS simulada, eliminando a conexão que apresentava ECONNRESET no WebKit. Verificações de erros permanecem ativas.
+- Sem alteração de banco. CI completo obrigatório antes da publicação.
+- A primeira execução do CI encontrou uma espera ausente no teste de busca global de loja (WebKit 320): a aba já estava visível, mas o filtro ainda não havia recebido “Meireles”. O teste agora aguarda esse valor antes da mesma verificação e espera o endereço do pedido carregar antes de testar o convite de substituição. Ensaio com atraso artificial de 750 ms na consulta de lojas aprovado nas seis combinações de Chromium/WebKit e 1280/390/320. As verificações de filtros, endereço e exceções permanecem ativas.
+
+## 2026-10-05 — Vagas compactas e conferência de cadastro
+
+- Cards resumem rede/loja, setor, período, horário, endereço e valor. Dias específicos, horários e valores variáveis ficam em detalhes expansíveis; botão “Quero essa vaga”.
+- Nome completo e CPF são conferidos no banco nos links compartilhados e individuais. Cadastro autorizado mostra indicador verde; cadastro não encontrado recebe orientação. Editar os campos invalida a autorização anterior.
+- Confirmação revalida cadastro, bloqueio, empresa e capacidade e grava todos os dias futuros numa transação, com bloqueio do pedido e proteção contra duplicidade. Não expõe ficha nem CPF na resposta pública; limite de consultas por link/IP.
+- Consultas a cada 15 segundos preservam cards sem mudanças, foco, rolagem e formulário. Indicador “Ao vivo”, “Reconectando…” ou “Sem conexão”; falhas transitórias preservam a última lista.
+- Migração já aplicada no Supabase no chat anterior. Retomada confirmou RPCs e repetiu roteiro SQL sintético com rollback, sem deixar dados de teste.
+- 80 testes de regras aprovados; portal Chromium/WebKit em 1280/390/320 aprovado. Teste administrativo repetido nas seis combinações com sucesso após interrupção transitória de conexão no ensaio anterior.
+- CI completo obrigatório antes de publicar; emulação móvel não equivale a ensaio em Android físico.
+
 ## Ordem de execução
 Lote 1: financeiro, carregamento, backup, concorrência. Publicar e verificar antes do lote 2.
 Lote 2: busca global, fila de pendências, substituição guiada, interface consistente.
@@ -26,3 +45,34 @@ A regressão no WebKit Linux detectou um campo de calendário herdando a fonte c
 Uma recarga com leituras locais ainda em andamento também expôs erros de origem descartada no WebKit. Leituras GET locais agora são canceladas em pagehide; gravações conservam seu ciclo. A regressão provoca uma recarga durante uma consulta atrasada e verifica ausência de exceções e funcionamento da leitura na página nova.
 
 O clique imediato em “Contrato”, antes da resposta das tarifas, acessava settingsData nulo. O formulário agora aguarda os setores, mostra falha de carregamento quando necessário e respeita uma mudança de aba durante a espera. A regressão atrasa deliberadamente a resposta das tarifas.
+
+## 2026-10-05 — Escalas livres entre pedidos
+
+Solicitação: permitir o mesmo diarista em vários pedidos, inclusive no mesmo dia e em horários sobrepostos.
+
+- Supabase e servidor local deixam de bloquear a escala por sobreposição ou pela disponibilidade geral cadastrada. Datas válidas do pedido, identidade, vagas e permissões continuam verificadas.
+- Escala manual mostra todos os cadastros não bloqueados e permite selecionar todos os dias com vaga; horário disponível serve para ordenar sugestões, sem impedir a escolha.
+- Leitura com nome/CPF reutiliza o cadastro e cria escalas independentes em cada pedido. Substituição em lote também aceita pessoa escalada em outro pedido.
+- Regressão: exemplo Paulo, Super do Povo/Meireles, 06–12/10/2026, 07:00–15:20 e 13:40–22:00, testado em Chromium/WebKit nas larguras 1280, 390 e 320. Dois pedidos/14 escalas; terceiro pedido manual/7 escalas; recarga preserva registros; escalar não gera pagamento.
+- 80 testes JS e 57 testes backend aprovados. Presenças dos dois turnos geram duas diárias; falta num turno remove somente sua diária; previsão mantém pedidos independentes.
+- SQL real com rollback: leitura conjunta, escala manual sem disponibilidade, presença/falta, permissões, substituição sobreposta, portal de vagas. Nenhum dado sintético fica na produção.
+- Teste de navegador de sobreposição integrado ao gate de publicação; CI completa obrigatória antes da publicação.
+
+## 2026-10-05 — Correção do setor com equipe escalada
+
+- Guarda no Supabase e backend local permite editar apenas o setor entre os campos antes imutáveis, preservando rede, loja, quantidade, datas/horários e exclusão protegida.
+- A correção não recria escalas nem recalcula os valores congelados de diárias já realizadas/pagas; novas presenças usam o setor corrigido. Controle de versão e permissões mantidos.
+- 58 testes backend e 80 JS aprovados. Teste de edição real no formulário em Chromium/WebKit, larguras 1280/390/320, mantém sete escalas e persiste após recarga.
+- Ensaio SQL com usuário autenticado, dados sintéticos e rollback confirma edição, preservação financeira, bloqueio de alteração estrutural e ausência de acesso anônimo.
+- Gerador de CPF sintético do ensaio SQL corrigido nos pesos verificadores para evitar rejeições aleatórias na própria fixture.
+- Pedido solicitado do Super do Povo/Meireles, 06–12/10/2026 07:00–15:20, corrigido de “frios ( dois)” para “Balconista de frios”, com comparação transacional garantindo equipe e demais campos idênticos.
+
+## 2026-10-05 — Excluir pedido com escalas planejadas
+
+- Exclusão via RPC invoker/autenticada e backend local remove pedido e suas escalas planejadas em uma única transação. Preserva cadastro dos diaristas e outros pedidos; versão antiga é recusada e exclusão repetida não retorna sucesso falso.
+- Histórico de presença/falta/desistência, diária, cobrança, conferência da loja ou ocorrência exige cancelamento para preservar os registros. Não foram relaxados os guards de histórico nem o RLS.
+- Frontend usa a operação atômica, explica a remoção das escalas na confirmação, desabilita duplo clique, mostra erro na posição visível e atualiza lista, início e gestão.
+- 60 testes backend, 80 JS e seis cenários de navegador aprovados (Chromium/WebKit, 1280/390/320). Botão cancelar não exclui; confirmar exclui sete escalas; cadastro e outros 14 vínculos permanecem; previsão reduz faturamento/custo/lucro em 938/630/308 no cenário testado.
+- SQL autenticado real com rollback confirma versão, atomicidade, histórico e permissões de admin/operação, com negativas para financeiro/consulta/sem perfil/anon. Security Advisor não apontou o novo RPC; avisos já existentes permanecem.
+- A primeira execução de navegador acusou mensagens nativas de origem descartada no WebKit durante recarga. O roteiro agora aguarda a conclusão da exclusão e das consultas antes da recarga de persistência; verificações de exceções foram mantidas e todos os seis cenários passaram. Logs preservados em .design-qa.
+- Pedido indicado, Super do Povo/Meireles 06–12/10/2026 07:00–15:20, removido com sete escalas depois de backup. Comparação transacional confirmou cadastro, outros pedidos, escalas e financeiro intactos, incluindo 14 escalas de Paulo nos outros dois pedidos.

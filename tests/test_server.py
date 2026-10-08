@@ -424,7 +424,7 @@ class CadastroTest(unittest.TestCase):
         self.assertEqual(self.call("DELETE", f"/api/pedidos/{created['id']}")[0], 200)
         self.assertEqual(self.call("GET", "/api/pedidos")[1], [])
 
-    def test_scale_respects_availability_conflicts_and_attendance_date(self):
+    def test_scale_allows_any_schedule_and_preserves_attendance_date(self):
         _, worker = self.call("POST", "/api/diaristas", SAMPLE)
         today = datetime.now(server.FORTALEZA).date()
         next_monday = today + timedelta(days=(7 - today.weekday()))
@@ -444,8 +444,8 @@ class CadastroTest(unittest.TestCase):
         assignment = {"diarista_id": worker["id"], "data": next_monday.isoformat()}
         status, scale = self.call("POST", f"/api/pedidos/{first['id']}/escalas", assignment)
         self.assertEqual(status, 201)
-        self.assertEqual(self.call("POST", f"/api/pedidos/{overlapping['id']}/escalas", assignment)[0], 400)
-        self.assertEqual(self.call("POST", f"/api/pedidos/{unavailable['id']}/escalas", {**assignment, "data": next_tuesday.isoformat()})[0], 400)
+        self.assertEqual(self.call("POST", f"/api/pedidos/{overlapping['id']}/escalas", assignment)[0], 201)
+        self.assertEqual(self.call("POST", f"/api/pedidos/{unavailable['id']}/escalas", {**assignment, "data": next_tuesday.isoformat()})[0], 201)
         path = f"/api/pedidos/{first['id']}/escalas/{scale['id']}"
         self.assertEqual(self.call("PATCH", path, {"status": "presente"})[0], 400)
         self.assertEqual(self.call("PATCH", path, {"status": "falta", "motivo": "Não compareceu"})[0], 400)

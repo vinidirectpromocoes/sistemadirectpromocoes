@@ -1,0 +1,268 @@
+{
+  "migrations": [
+    {
+      "version": "20260927202725",
+      "name": "initial_schema"
+    },
+    {
+      "version": "20260927203023",
+      "name": "restrict_rls_helper"
+    },
+    {
+      "version": "20260927203728",
+      "name": "history_guards"
+    },
+    {
+      "version": "20260928040536",
+      "name": "pedido_presencas"
+    },
+    {
+      "version": "20260928130202",
+      "name": "protect_daily_scheduling"
+    },
+    {
+      "version": "20260928130657",
+      "name": "validate_operational_finance_data"
+    },
+    {
+      "version": "20260928130739",
+      "name": "record_operational_audit"
+    },
+    {
+      "version": "20260928132039",
+      "name": "guard_linked_daily_integrity"
+    },
+    {
+      "version": "20260928132527",
+      "name": "cache_admin_policy_checks"
+    },
+    {
+      "version": "20260928132604",
+      "name": "hide_admin_check_from_api"
+    },
+    {
+      "version": "20260928141024",
+      "name": "configurar_tarifas"
+    },
+    {
+      "version": "20260928142518",
+      "name": "setores_sem_valor_inicial"
+    },
+    {
+      "version": "20260928152724",
+      "name": "leituras_pendentes"
+    },
+    {
+      "version": "20260928231946",
+      "name": "snapshot_tarifas_presenca"
+    },
+    {
+      "version": "20260928232446",
+      "name": "staff_roles"
+    },
+    {
+      "version": "20260928232547",
+      "name": "operations_read_history"
+    },
+    {
+      "version": "20260928232817",
+      "name": "limit_consultation_data"
+    },
+    {
+      "version": "20260928233311",
+      "name": "case_insensitive_tariffs"
+    },
+    {
+      "version": "20260929115816",
+      "name": "restore_attendance_trigger_privilege"
+    },
+    {
+      "version": "20260929133933",
+      "name": "single_select_policies"
+    },
+    {
+      "version": "20260929135306",
+      "name": "limit_consultation_rates"
+    },
+    {
+      "version": "20260929202513",
+      "name": "operacao_financeiro_integrado"
+    },
+    {
+      "version": "20260929202637",
+      "name": "private_workflow_rpcs"
+    },
+    {
+      "version": "20260929202936",
+      "name": "reject_unknown_finance_roles"
+    },
+    {
+      "version": "20260929203815",
+      "name": "index_workflow_foreign_keys"
+    },
+    {
+      "version": "20260930175435",
+      "name": "20260930110000_absence_and_extra_costs"
+    },
+    {
+      "version": "20260930180221",
+      "name": "guard_absence_history"
+    },
+    {
+      "version": "20260930194118",
+      "name": "operacao_completa"
+    },
+    {
+      "version": "20260930194321",
+      "name": "private_operation_rpcs"
+    },
+    {
+      "version": "20261001002434",
+      "name": "allow_partial_worker_registration"
+    },
+    {
+      "version": "20261001133047",
+      "name": "payment_calendars"
+    },
+    {
+      "version": "20261001142301",
+      "name": "linked_reading_assignment"
+    },
+    {
+      "version": "20261001171807",
+      "name": "confirm_linked_orders"
+    },
+    {
+      "version": "20261001184843",
+      "name": "escala_desistencia_substituicao"
+    },
+    {
+      "version": "20261001225440",
+      "name": "corrigir_ano_pedido_presenca"
+    },
+    {
+      "version": "20261003184145",
+      "name": "portal_diaristas"
+    },
+    {
+      "version": "20261003184738",
+      "name": "validate_portal_registration"
+    },
+    {
+      "version": "20261003185616",
+      "name": "portal_full_address"
+    },
+    {
+      "version": "20261003190030",
+      "name": "portal_payment_values"
+    },
+    {
+      "version": "20261003190756",
+      "name": "private_portal_invites"
+    },
+    {
+      "version": "20261003192501",
+      "name": "portal_invite_account_creation"
+    },
+    {
+      "version": "20261003201319",
+      "name": "portal_sem_conta"
+    },
+    {
+      "version": "20261003201417",
+      "name": "portal_escala_sem_conta_fix"
+    },
+    {
+      "version": "20261003205202",
+      "name": "cadastros_por_link"
+    },
+    {
+      "version": "20261004011314",
+      "name": "plataforma_vagas_integrada"
+    },
+    {
+      "version": "20261004014144",
+      "name": "vagas_compartilhadas_telefone"
+    },
+    {
+      "version": "20261004023457",
+      "name": "portal_convites_foreign_key_indexes"
+    },
+    {
+      "version": "20261004030534",
+      "name": "weekly_payment_calendars"
+    },
+    {
+      "version": "20261004123649",
+      "name": "atomic_operational_backup"
+    },
+    {
+      "version": "20261004134256",
+      "name": "lote1_automacao_operacional"
+    },
+    {
+      "version": "20261004134707",
+      "name": "corrigir_validacao_modelos"
+    },
+    {
+      "version": "20261004134751",
+      "name": "reforcar_permissoes_modelos"
+    },
+    {
+      "version": "20261004142551",
+      "name": "lote2_portal_lojas_gestao"
+    },
+    {
+      "version": "20261004143149",
+      "name": "integrar_conferencia_loja_presenca"
+    },
+    {
+      "version": "20261004145218",
+      "name": "revalidar_link_loja_apos_bloqueio"
+    },
+    {
+      "version": "20261004160738",
+      "name": "shared_revision_and_recovery"
+    },
+    {
+      "version": "20261004162911",
+      "name": "backup_history_indexes"
+    },
+    {
+      "version": "20261004171226",
+      "name": "global_search_pending_queue"
+    },
+    {
+      "version": "20261004171713",
+      "name": "queue_response_history"
+    },
+    {
+      "version": "20261005192216",
+      "name": "liberar_escalas_multiplos_pedidos"
+    },
+    {
+      "version": "20261005204505",
+      "name": "permitir_corrigir_setor_pedido_escalado"
+    },
+    {
+      "version": "20261005205637",
+      "name": "excluir_pedido_com_escalas_planejadas"
+    },
+    {
+      "version": "20261005225912",
+      "name": "vagas_compactas_identificacao"
+    },
+    {
+      "version": "20261008130214",
+      "name": "reading_confirmation_guards"
+    },
+    {
+      "version": "20261008141738",
+      "name": "network_order_links"
+    },
+    {
+      "version": "20261008155436",
+      "name": "fixed_short_network_links"
+    }
+  ]
+}

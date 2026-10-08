@@ -41,7 +41,7 @@ async function runBrowser(engine, name) {
       page.on('pageerror', error => errors.push(error.message));
       await page.goto(url, { waitUntil: 'domcontentloaded' });
       await page.locator('#nav-diaristas').waitFor({ state: 'visible' });
-      for (const tab of ['inicio', 'crm', 'diaristas', 'pedidos', 'leitura', 'redes', 'financeiro', 'configuracoes', 'convites', 'vagas']) {
+      for (const tab of ['inicio', 'crm', 'diaristas', 'pedidos', 'leitura', 'redes', 'financeiro', 'configuracoes', 'convites', 'vagas', 'pedidos-links']) {
         await page.locator(`#nav-${tab}`).click();
         assert.equal(new URL(page.url()).hash, `#${tab}`, `${name} ${viewport.width}: navegação ${tab}`);
         const overflow = await page.evaluate(() => document.documentElement.scrollWidth - innerWidth);
@@ -95,7 +95,7 @@ async function runRoleNavigation() {
       });
       await context.route('**/vendor/supabase-2.117.2.js', route => route.fulfill({
         contentType: 'text/javascript', body: `window.supabase={createClient:()=>({
-          rpc:async(name)=>({data:name==='direct_backup_snapshot_v8'?{format:'direct-data-v8',exportedAt:new Date().toISOString(),tables:Object.fromEntries(window.DirectBackup.versions['direct-data-v8'].map(t=>[t,[]])),snapshot:{consistent:true,counts:Object.fromEntries(window.DirectBackup.versions['direct-data-v8'].map(t=>[t,0]))}}:name==='direct_portal_vacancies'?[]:name==='direct_portal_registrations'?{total:0,items:[]}:{whatsapp:'',grupo_url:''},error:null}),
+          rpc:async(name)=>({data:name==='direct_backup_snapshot_v10'?{format:'direct-data-v10',exportedAt:new Date().toISOString(),tables:Object.fromEntries(window.DirectBackup.versions['direct-data-v10'].map(t=>[t,[]])),snapshot:{consistent:true,counts:Object.fromEntries(window.DirectBackup.versions['direct-data-v10'].map(t=>[t,0]))}}:name==='direct_network_links'||name==='direct_portal_vacancies'?[]:name==='direct_portal_registrations'?{total:0,items:[]}:{whatsapp:'',grupo_url:''},error:null}),
           auth:{getSession:async()=>({data:{session:{user:{email:'qa@example.invalid'}}},error:null}),onAuthStateChange:()=>{},signOut:async()=>({error:null})},
           from:(table)=>{const q={select:()=>q,eq:()=>q,order:()=>q,limit:()=>q,range:async()=>({data:[],error:null,count:0}),
             maybeSingle:async()=>({data:table==='direct_admins'?${role === 'admin' ? "{email:'qa@example.invalid'}" : 'null'}:
@@ -108,7 +108,7 @@ async function runRoleNavigation() {
       await page.waitForFunction(expected => window.directRemote?.role === expected, role);
       for (const [id, allowed] of Object.entries({
         'nav-financeiro': ['admin', 'financeiro'], 'nav-configuracoes': ['admin', 'financeiro'],
-        'nav-vagas': ['admin', 'operacao'], 'nav-convites': ['admin', 'operacao'], 'nav-leitura': ['admin', 'operacao'], 'new-order-button': ['admin', 'operacao'],
+        'nav-pedidos-links': ['admin','operacao'], 'nav-vagas': ['admin', 'operacao'], 'nav-convites': ['admin', 'operacao'], 'nav-leitura': ['admin', 'operacao', 'financeiro', 'consulta'], 'new-order-button': ['admin', 'operacao'],
         'backup-settings': ['admin'], 'staff-settings': ['admin'],
         'store-requests-button': ['admin','operacao'], 'daily-summary-button': ['admin','operacao'], 'order-models-button': ['admin','operacao'], 'cash-agenda': ['admin','financeiro'],
       })) {
@@ -148,7 +148,7 @@ async function runRoleNavigation() {
         assert.equal(result.status, 0, `Cópia do navegador não restaurou: ${result.stderr}`);
         const operational = path.join(work, 'browser-operational.db');
         const drill = spawnSync(process.env.PYTHON || 'python3', ['-c',
-          'import sys; sys.path.insert(0,"scripts"); from restore_backup import restore_operational; counts=restore_operational(sys.argv[1],sys.argv[2],sys.argv[3]); assert len(counts) == 30',
+          'import sys; sys.path.insert(0,"scripts"); from restore_backup import restore_operational; counts=restore_operational(sys.argv[1],sys.argv[2],sys.argv[3]); assert len(counts) == 35',
           archive, 'senha-de-teste-12345', operational], { cwd: root, encoding: 'utf8' });
         assert.equal(drill.status, 0, `Cópia operacional não restaurou: ${drill.stderr}`);
         console.log('Backup no navegador → verificação → SQLite operacional isolado OK');
@@ -207,7 +207,7 @@ async function runReadingFlow() {
       await page.goto(`${url}#leitura`, { waitUntil: 'domcontentloaded' });
       await page.locator('#reading-file').setInputFiles({ name: `teste-${confidence}.png`, mimeType: 'image/png', buffer: tinyPng });
       await page.locator('#reading-submit').click();
-      await page.locator('#reading-result-items .reading-item').waitFor();
+      await page.locator('#reading-result-items .reading-item').waitFor().catch(async e=>{console.error('READING DIAGNOSTIC',confidence,await page.locator('#reading-feedback').innerText(),await page.locator('#reading-result-items').innerText());throw e;});
       const state = confidence < 75 ? 'pending' : 'saved';
       await page.locator('#reading-result-items .reading-preview').waitFor();
       if(state==='saved') await page.locator('#reading-confirm').click();
@@ -364,7 +364,7 @@ async function runExtendedWorkflow() {
     const context=await browser.newContext({viewport:{width:320,height:640},isMobile:true,hasTouch:true});const page=await context.newPage();const errors=[];page.on('pageerror',e=>errors.push(e.message));
     await page.goto(url+'#diaristas');await page.evaluate(id=>openDetail(id),worker.id);
     await page.locator('#worker-reserve-button').click();await page.locator('#ext-telefone').fill('85999991234');await page.locator('#ext-reserva').selectOption('sim');await page.locator('#extended-save').click();await page.locator('#extended-dialog').waitFor({state:'hidden'});await page.locator('#detail-dialog').evaluate(e=>e.close());
-    await page.locator('#nav-crm').click();if(!await page.locator('#crm-support').evaluate(e=>e.open))await page.locator('#crm-support > summary').click();await page.locator('details.crm-tool').filter({has:page.locator('#reserves-section')}).locator('summary').click();await page.getByText('85999991234').waitFor();
+    await page.locator('#nav-crm').click();if(!await page.locator('#crm-support').evaluate(e=>e.open))await page.locator('#crm-support > summary').click();await page.locator('details.crm-tool').filter({has:page.locator('#reserves-section')}).locator('summary').click();await page.locator('#reserves-section').getByText('85999991234').waitFor();
     await page.locator('#nav-pedidos').click();await page.waitForFunction(id=>orderRecords.some(x=>x.id===id),order.id);await page.evaluate(id=>openOrderDetail(id),order.id);
     await page.getByRole('button',{name:'✓ Confirmou que vai',exact:true}).click();await page.getByText('Resposta: confirmada').waitFor();
     await page.getByRole('button',{name:/^Presença de/}).click();await page.getByRole('button',{name:'✓ Validar atendimento',exact:true}).waitFor();
@@ -485,7 +485,8 @@ async function runAssignmentPersistence() {
         assert.equal((await api('GET',`/api/pedidos/${order.id}/escalas`)).length,1);
         if (simulateRefreshFailure) {
           // Aguarda os controles auxiliares para não abortar fetches no WebKit/Linux ao recarregar.
-          await page.evaluate(async()=>{await loadHome();await window.DirectOperations.refresh();});
+          await page.evaluate(async()=>{await loadHome();await window.DirectOperations.refresh();await window.DirectManagementUI.refresh();});
+          await page.waitForFunction(()=>activeRequests===0 && !orderDetailBusy);
           await page.waitForLoadState('networkidle');
           await page.reload(); await page.locator('#orders-rows tr').filter({hasText:'Repositor de FLV'}).filter({hasText:firstDateLabel}).getByRole('button',{name:'Ver pedido de Super do Povo',exact:true}).click();
           await cards.first().locator('.order-worker-row').waitFor();
@@ -495,7 +496,8 @@ async function runAssignmentPersistence() {
         await page.getByText('Diarista escalada em 6 dias deste pedido.',{exact:true}).waitFor();
         assert.equal((await api('GET',`/api/pedidos/${order.id}/escalas`)).length,7);
         // Aguarda os controles auxiliares para não abortar fetches no WebKit/Linux ao recarregar.
-          await page.evaluate(async()=>{await loadHome();await window.DirectOperations.refresh();});
+          await page.evaluate(async()=>{await loadHome();await window.DirectOperations.refresh();await window.DirectManagementUI.refresh();});
+          await page.waitForFunction(()=>activeRequests===0 && !orderDetailBusy);
           await page.waitForLoadState('networkidle');
           await page.reload(); await page.locator('#orders-rows tr').filter({hasText:'Repositor de FLV'}).filter({hasText:firstDateLabel}).getByRole('button',{name:'Ver pedido de Super do Povo',exact:true}).click();
         await page.locator('#order-detail-shifts .order-worker-row').nth(6).waitFor();
@@ -736,7 +738,8 @@ async function runRecentOrderAttendance() {
       await page.waitForFunction(expected=>Number(document.querySelector('#confirmed-revenue').textContent.replace(/\D/g,''))===expected,before[0]+13400);
       const after=await amounts();assert.deepEqual(after.map((value,i)=>value-before[i]),[13400,9000,4400],'Presença atualiza faturamento, diária e lucro no dashboard');
       assert.match(await page.locator('#confirmed-extra-note').innerText(),/Média por diária:/);
-      await page.waitForLoadState('networkidle');await page.reload();await page.waitForFunction(()=>financeForecastInput!==null);await page.locator('#forecast-period').selectOption('day');await page.locator('#forecast-date').fill(firstDay);assert.deepEqual(await amounts(),after,'Financeiro persiste após recarga');
+      await page.waitForFunction(()=>activeRequests===0 && !orderDetailBusy);await page.waitForLoadState('networkidle');await page.reload();await page.waitForFunction(()=>financeForecastInput!==null);await page.locator('#forecast-period').selectOption('day');await page.locator('#forecast-date').fill(firstDay);assert.deepEqual(await amounts(),after,'Financeiro persiste após recarga');
+      await page.waitForFunction(()=>activeRequests===0);await page.waitForLoadState('networkidle');
       assert.ok(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth+2));assert.deepEqual(errors,[]);
       await api('PATCH',`/api/pedidos/${scales[0].pedido_id}/escalas/${scales[0].id}`,{status:'escalada'});
       for(const scale of scales)await api('DELETE',`/api/pedidos/${scale.pedido_id}/escalas/${scale.id}`);
@@ -759,11 +762,36 @@ async function runAssistantFlow(){
       const message=`Rede: Hipermarket\n*Região:* LOJA VILA UNIÃO\n*Função:* Repositor de mercearia\n*Horário:* 06:00 às 14:20\n*Data de início:* ${today.split('-').reverse().join('/')}\n*Quantidade de dias:* 2 dias\n\n*${person}*\nCPF: ${cpf}`;
       await page.locator('#reading-text').fill(message);await page.locator('#reading-submit').click();await page.locator('.reading-preview').waitFor().catch(async error=>{console.log('Diagnóstico assistente:',await page.locator('#reading-feedback').textContent(),errors);throw error;});
       assert.match(await page.locator('#reading-result-items').innerText(),/Vila União/);assert.equal(writes.length,0,'Interpretar não grava nem pendência');assert.equal((await api('GET','/api/diaristas')).filter(w=>w.cpf===cpf).length,0);
+      assert.match(await page.locator('.reading-preview').innerText(),/Diarista ainda não cadastrado/);
       await page.locator('#reading-text').fill('Corrigir horário para 07:00 às 15:20');await page.locator('#reading-submit').click();await page.waitForFunction(()=>document.querySelector('.reading-preview')?.textContent.includes('07:00 às 15:20'));assert.equal(writes.length,0);
       await page.locator('#reading-cancel').click();assert.equal(writes.length,0,'Cancelar não altera dados');
       await page.locator('#reading-text').fill(message);await page.locator('#reading-submit').click();await page.locator('.reading-preview').waitFor();await page.locator('#reading-confirm').click();await page.locator('.reading-item.saved').waitFor();
       const worker=(await api('GET','/api/diaristas')).find(w=>w.cpf===cpf),scales=(await api('GET','/api/escalas')).filter(s=>s.diarista_id===worker.id);assert.equal(scales.length,2);assert.equal((await api('GET','/api/pedidos')).find(o=>o.id===scales[0].pedido_id).situacao,'confirmado');
       const send=async text=>{await page.locator('#reading-text').fill(text);await page.locator('#reading-submit').click();await page.locator('.reading-preview').waitFor();};
+      const registrationWrites=writes.length,formattedCpf=cpf.replace(/(\d{3})(\d{3})(\d{3})(\d{2})/,'$1.$2.$3-$4');
+      await send(`Nome: Assistente Teste\nCPF: ${formattedCpf}`);
+      assert.match(await page.locator('.reading-preview').innerText(),/Diarista já cadastrado/);
+      assert.match(await page.locator('.reading-preview').innerText(),new RegExp(person));
+      assert.doesNotMatch(await page.locator('.reading-preview').innerText(),/Cadastro parcial:/);
+      assert.equal(writes.length,registrationWrites,'Consultar identidade não grava');
+      await page.locator('#reading-confirm').click();await page.locator('.reading-item.duplicate').waitFor();
+      assert.equal(writes.length,registrationWrites,'Confirmar cadastro existente não grava nem sobrescreve');
+      assert.deepEqual((await api('GET','/api/diaristas')).find(w=>w.cpf===cpf),worker);
+      const raceCpf=cpfFor(++serial);await send(`Nome: Cadastro recebido por link\nCPF: ${raceCpf}`);
+      assert.match(await page.locator('.reading-preview').innerText(),/Diarista ainda não cadastrado/);
+      const received=await api('POST','/api/diaristas',{nome:'Cadastro recebido por link completo',cpf:raceCpf,telefone:'85999998888',bairro:'Centro'});
+      await page.locator('#reading-confirm').click();await page.locator('.reading-item.duplicate').waitFor();
+      const matches=(await api('GET','/api/diaristas')).filter(w=>w.cpf===raceCpf);assert.equal(matches.length,1);assert.deepEqual(matches[0],received);
+      assert.equal(writes.length,registrationWrites,'Cadastro recebido após leitura é consultado novamente antes de confirmar');
+      await api('DELETE',`/api/diaristas/${received.id}`);
+      if(name==='Chromium'&&width===1280){
+        const concurrentCpf=cpfFor(++serial);let concurrent;
+        await send(`Nome: Cadastro concorrente\nCPF: ${concurrentCpf}`);
+        const intercept=async route=>{if(route.request().method()==='POST')concurrent=await api('POST','/api/diaristas',{nome:'Cadastro concorrente completo',cpf:concurrentCpf,bairro:'Centro'});await route.continue();};
+        await page.route('**/api/diaristas',intercept);await page.locator('#reading-confirm').click();await page.locator('.reading-item.duplicate').waitFor();await page.unroute('**/api/diaristas',intercept);
+        assert.deepEqual((await api('GET','/api/diaristas')).filter(w=>w.cpf===concurrentCpf),[concurrent]);
+        assert.equal(writes.length,registrationWrites+1,'Conflito de CPF não cria cadastro duplicado nem pendência');await api('DELETE',`/api/diaristas/${concurrent.id}`);
+      }
       const countBefore=writes.length;await send(`Marcar presença\nCPF: ${cpf}\nData: hoje\nPedido: ${scales[0].pedido_id}`);assert.equal(writes.length,countBefore);await page.locator('#reading-text').fill('está certo');await page.locator('#reading-submit').click();await page.locator('.reading-item.saved').waitFor();assert.equal((await api('GET','/api/escalas')).find(s=>s.id===scales[0].id).status,'presente');assert.equal((await api('GET',`/api/diaristas/${worker.id}/diarias`)).length,1);
       await send(`Marcar falta\nCPF: ${cpf}\nData: hoje\nPedido: ${scales[0].pedido_id}`);assert.equal(await page.locator('#reading-confirm').isEnabled(),false,'Falta sem motivo pede complemento');
       await page.locator('.reading-preview').getByRole('button',{name:'✎ Corrigir',exact:true}).click();await page.locator('#reading-text').fill(`Marcar falta\nCPF: ${cpf}\nData: hoje\nPedido: ${scales[0].pedido_id}\nMotivo: Correção controlada de teste`);await page.locator('#reading-submit').click();await page.locator('#reading-confirm').click();await page.locator('.reading-item.saved').waitFor();assert.equal((await api('GET',`/api/diaristas/${worker.id}/diarias`)).length,0,'Falta remove pagamento e faturamento de presença');
@@ -810,8 +838,11 @@ async function runMessagesFlow() {
 
 try {
   await ready();
-  if(process.env.DIRECT_EXTENDED_ONLY==='1'){await runFinancialWorkflow();await runExtendedWorkflow();}
+  if(process.env.DIRECT_READING_ONLY==='1'){await runReadingFlow();}
+  else if(process.env.DIRECT_EXTENDED_ONLY==='1'){await runFinancialWorkflow();await runExtendedWorkflow();}
+  else if(process.env.DIRECT_ASSIGNMENT_ONLY==='1'){await runAssignmentPersistence();}
   else if(process.env.DIRECT_RECENT_ONLY==='1'){await runRecentOrderAttendance();}
+  else if(process.env.DIRECT_ROLES_ONLY==='1'){await runRoleNavigation();}
   else if(process.env.DIRECT_MESSAGES_ONLY==='1'){await runMessagesFlow();await runRoleNavigation();}
   else if(process.env.DIRECT_FINANCE_ONLY==='1'){await runFinancialWorkflow();}
   else if(process.env.DIRECT_CALENDAR_ONLY==='1'){await runPaymentCalendars();}

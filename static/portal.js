@@ -5,7 +5,7 @@
   const kind = document.body.dataset.page, $ = id => document.getElementById(id);
   const sb = supabase.createClient('https://jxthqgtzybcyediyciqc.supabase.co', 'sb_publishable_sulYm_YcfXUosfNvhQnDXg_I4lgxjth',
     {auth:{storageKey:'direct-formulario-privado',persistSession:false,autoRefreshToken:false,detectSessionInUrl:false}});
-  let context = null, jobs = [], chosen = null, loading = false, accepting = false;
+  let context = null, jobs = [], chosen = null, loading = false, accepting = false, verified = false, identitySequence = 0;
   const date = value => value.split('-').reverse().join('/');
   const money = value => new Intl.NumberFormat('pt-BR',{style:'currency',currency:'BRL'}).format(value/100);
   const node = (tag,text,cls='') => {const e=document.createElement(tag);e.textContent=text;e.className=cls;return e;};
@@ -27,6 +27,9 @@
   function setupRegistration(){
     const form=$('registration-form');choices('sector-options','setores',context.setores.map(s=>[s,s]));
     choices('day-options','dias',[['segunda','Segunda'],['terca','Terça'],['quarta','Quarta'],['quinta','Quinta'],['sexta','Sexta'],['sabado','Sábado'],['domingo','Domingo']]);
+    const anyDay=$('registration-any-day'),dayInputs=[...form.querySelectorAll('input[name="dias"]')];
+    anyDay.addEventListener('change',()=>{for(const input of dayInputs)input.checked=anyDay.checked;});
+    for(const input of dayInputs)input.addEventListener('change',()=>{anyDay.checked=dayInputs.every(day=>day.checked);});
     choices('transport-options','transportes',['Ônibus','Bike','Moto','Carro','Metrô','Uber'].map(s=>[s,s]));
     for(const name of context.redes){const opt=node('option',name);opt.value=name;form.elements.rede_trabalho.append(opt);}
     form.elements.data_nascimento.max=new Date().toLocaleDateString('en-CA');
@@ -64,28 +67,89 @@
       b.disabled=true;b.textContent='Cadastrando…';try{context=await rpc('direct_portal_submit',{p_dados:data,p_convite:invitation});completed(context);}catch(error){feedback(friendly(error),true);$('feedback').scrollIntoView({block:'start'});}finally{b.disabled=false;b.textContent='CADASTRAR';}
     });
   }
+  // Resume períodos contínuos; horários diferentes continuam disponíveis nos detalhes.
+  function scheduleSummary(o){
+    const shifts=[...o.turnos].sort((a,b)=>a.data.localeCompare(b.data));
+    const consecutive=shifts.every((t,i)=>!i||Date.parse(t.data)-Date.parse(shifts[i-1].data)===86400000);
+    const period=shifts.length===1?date(shifts[0].data):consecutive?`${date(shifts[0].data)} a ${date(shifts.at(-1).data)}`:`${date(shifts[0].data)} a ${date(shifts.at(-1).data)} (dias específicos)`;
+    const hours=new Set(shifts.map(t=>`${t.inicio} às ${t.fim}`));
+    return {period,hours:hours.size===1?[...hours][0]:'Horários variáveis — veja os dias',variable:hours.size>1,shifts};
+  }
+  function live(state){
+    const el=$('live-status');if(!el)return;
+    el.dataset.state=state;el.lastElementChild.textContent=state==='live'?'Ao vivo':state==='offline'?'Sem conexão':state==='stale'?'Reconectando…':'Conectando…';
+    el.title=state==='live'?'Vagas atualizadas automaticamente a cada 15 segundos.':state==='offline'?'Conecte-se à internet para atualizar as vagas.':'Exibindo a última consulta. A próxima atualização será automática.';
+  }
+  function resetIdentity(){verified=false;++identitySequence;$('confirm-accept').disabled=true;$('identity-status').hidden=true;$('confirm-error').hidden=true;}
   function reviewJob(o){
-    if(!board&&(!context?.cadastrado||context.bloqueado))return feedback('Para pegar uma vaga, você precisa estar cadastrado e liberado. Peça à Direct seu link privado de cadastro.',true);
-    chosen=o;$('private-vacancy-confirmation').hidden=!!board;$('shared-vacancy-help').hidden=!board;$('confirm-accept').hidden=!!board;
-    const contact=$('shared-vacancy-contact');contact.hidden=true;contact.removeAttribute('href');
-    if(board&&context.whatsapp){contact.href='https://wa.me/'+context.whatsapp+'?text='+encodeURIComponent('Tenho interesse na escala '+o.rede+' · '+o.loja+' · '+o.setor+' ('+o.turnos.map(t=>date(t.data)).join(', ')+'). Pode enviar meu link individual para confirmar?');contact.hidden=false;}
-    $('confirm-cpf').value='';$('confirm-summary').textContent=`${o.rede} · ${o.loja} · ${o.setor}\n${o.turnos.length} dia(s) — escala completa\n${o.turnos.map(t=>`${date(t.data)} (${t.inicio}–${t.fim})`).join('\n')}`;$('confirm-error').hidden=true;$('confirm-dialog').showModal();
+    chosen=o;resetIdentity();$('confirm-name').value='';$('confirm-cpf').value='';
+    const summary=scheduleSummary(o);
+    $('confirm-summary').textContent=`${o.rede} · ${o.loja}\n${o.setor}\n${summary.period} · ${o.turnos.length} dia(s)\n${summary.hours}`;
+    $('confirm-dialog').showModal();
   }
-  function renderJobs(){const list=$('jobs-list');list.replaceChildren();if(!jobs.length){list.append(node('p','Nenhuma escala completa disponível no momento.'));return;}
-    for(const o of jobs){const values=new Set(o.turnos.map(t=>t.valor_centavos===undefined?o.valor_centavos:t.valor_centavos)),varies=values.size>1;
-      const card=node('article','','card');card.append(node('h3',`${o.rede} · ${o.loja}`),node('p',o.setor),node('p',o.endereco||'Confira o endereço com a Direct.'),node('p',varies?'Confira o valor de cada dia abaixo.':o.valor_centavos==null?'Valor da diária: confirmar com a Direct.':`${money(o.valor_centavos)} por diária`,'price'),node('p',`${o.turnos.length} dia(s) · compromisso com a escala inteira`));
-      for(const t of o.turnos)card.append(node('p',`${date(t.data)} · ${t.inicio} às ${t.fim}${varies?` · ${t.valor_centavos==null?'valor a confirmar':money(t.valor_centavos)}`:''}`,'shift-choice'));
-      const button=node('button','Quero pegar essa vaga','primary');button.type='button';button.addEventListener('click',()=>reviewJob(o));card.append(button);list.append(card);
+  function jobCard(o){
+    const summary=scheduleSummary(o),values=new Set(o.turnos.map(t=>t.valor_centavos===undefined?o.valor_centavos:t.valor_centavos)),varies=values.size>1;
+    const card=node('article','','card vacancy-card');card.dataset.jobId=o.id;card.dataset.signature=JSON.stringify(o);
+    const heading=node('div','','vacancy-heading');heading.append(node('h3',`${o.rede} · ${o.loja}`),node('span',`${o.turnos.length} ${o.turnos.length===1?'dia':'dias'}`,'badge'));
+    card.append(heading,node('p',o.setor,'vacancy-sector'),node('p',summary.period,'vacancy-period'),node('p',summary.hours,'vacancy-hours'),node('p',o.endereco||'Confira o endereço com a Direct.','vacancy-address'));
+    if(summary.variable||varies||!summary.shifts.every((t,i)=>!i||Date.parse(t.data)-Date.parse(summary.shifts[i-1].data)===86400000)){
+      const detail=node('details');detail.append(node('summary','Ver dias, horários e valores'));
+      for(const t of summary.shifts)detail.append(node('p',`${date(t.data)} · ${t.inicio} às ${t.fim}${varies?` · ${t.valor_centavos==null?'valor a confirmar':money(t.valor_centavos)}`:''}`,'vacancy-day'));
+      card.append(detail);
     }
+    const bottom=node('div','','vacancy-bottom'),price=varies?'Valor varia por dia':o.valor_centavos==null?'Valor a confirmar':`${money(o.valor_centavos)} / diária`;
+    const button=node('button','Quero essa vaga','primary');button.type='button';button.addEventListener('click',()=>reviewJob(o));
+    bottom.append(node('span',price,'price'),button);card.append(bottom);return card;
   }
-  async function loadJobs(){if(!context||loading||!$('jobs-list'))return;loading=true;try{jobs=await rpc(board?'direct_portal_board_orders':'direct_portal_orders',board?{p_token:board}:{p_convite:invitation});renderJobs();if(chosen&&!jobs.some(o=>o.id===chosen.id)&&!accepting){chosen=null;if($('confirm-dialog').open){$('confirm-dialog').close();feedback('Esta escala não está mais disponível. As vagas foram atualizadas.');}}}catch(e){jobs=[];chosen=null;$('confirm-dialog')?.close();feedback(friendly(e),true);$('jobs-list').replaceChildren(node('p','Não foi possível carregar as vagas. Reabra este link para tentar novamente.'));}finally{loading=false;}}
-  for(const id of ['confirm-close','confirm-cancel'])$(id)?.addEventListener('click',()=>$('confirm-dialog').close());
-  $('confirm-accept')?.addEventListener('click',async e=>{const b=e.target,cpf=$('confirm-cpf').value.replace(/\D/g,'');$('confirm-error').hidden=true;if(!validCpf(cpf)){$('confirm-error').textContent='Confira seu CPF.';$('confirm-error').hidden=false;return;}if(!chosen)return feedback('Esta escala não está mais disponível. Escolha uma vaga atual.',true);b.disabled=true;accepting=true;
-    try{const result=await rpc('direct_portal_take_order',{p_pedido_id:chosen.id,p_convite:invitation,p_cpf:cpf});$('confirm-dialog').close();feedback(result.mensagem);await loadJobs();}catch(error){$('confirm-error').textContent=friendly(error);$('confirm-error').hidden=false;await loadJobs();}finally{b.disabled=false;accepting=false;}
+  function renderJobs(){
+    const list=$('jobs-list'),existing=new Map([...list.querySelectorAll('[data-job-id]')].map(e=>[e.dataset.jobId,e]));
+    if(!jobs.length){const text='Nenhuma escala completa disponível no momento.';if(list.childElementCount!==1||list.firstElementChild.textContent!==text)list.replaceChildren(node('p',text));return;}
+    for(const child of [...list.children])if(!child.dataset.jobId||!jobs.some(o=>String(o.id)===child.dataset.jobId))child.remove();
+    jobs.forEach((o,index)=>{
+      const old=existing.get(String(o.id)),card=old?.dataset.signature===JSON.stringify(o)?old:jobCard(o);
+      if(old&&old!==card)old.replaceWith(card);
+      if(list.children[index]!==card)list.insertBefore(card,list.children[index]||null);
+    });
+  }
+  async function loadJobs(){
+    if(!context||loading||!$('jobs-list'))return;loading=true;
+    try{
+      const current=await rpc(board?'direct_portal_board_orders':'direct_portal_orders',board?{p_token:board}:{p_convite:invitation});
+      jobs=current;renderJobs();live(navigator.onLine?'live':'offline');
+      if(chosen&&!accepting){const fresh=jobs.find(o=>o.id===chosen.id);
+        if(!fresh){chosen=null;resetIdentity();if($('confirm-dialog').open){$('confirm-dialog').close();feedback('Esta escala não está mais disponível. As vagas foram atualizadas.');}}
+        else if(JSON.stringify(fresh)!==JSON.stringify(chosen)){chosen=fresh;resetIdentity();const summary=scheduleSummary(fresh);$('confirm-summary').textContent=`${fresh.rede} · ${fresh.loja}\n${fresh.setor}\n${summary.period} · ${fresh.turnos.length} dia(s)\n${summary.hours}`;$('confirm-error').textContent='A escala foi atualizada. Confira os dados e seu cadastro novamente.';$('confirm-error').hidden=false;}
+      }
+    }catch(e){
+      live(navigator.onLine?'stale':'offline');
+      if(!jobs.length){feedback(friendly(e),true);$('jobs-list').replaceChildren(node('p','Não foi possível carregar as vagas. A conexão será conferida novamente.'));}
+    }finally{loading=false;}
+  }
+  const identityArgs=()=>({p_token:board||invitation,p_tipo:board?'painel':'vagas',p_nome:$('confirm-name').value.trim(),p_cpf:$('confirm-cpf').value.replace(/\D/g,''),p_pedido_id:chosen?.id});
+  for(const id of ['confirm-close','confirm-cancel'])$(id)?.addEventListener('click',()=>{resetIdentity();$('confirm-dialog').close();});
+  $('confirm-dialog')?.addEventListener('cancel',resetIdentity);
+  for(const id of ['confirm-name','confirm-cpf'])$(id)?.addEventListener('input',resetIdentity);
+  $('confirm-check')?.addEventListener('click',async()=>{
+    resetIdentity();const args=identityArgs(),sequence=identitySequence,b=$('confirm-check');
+    const error=text=>{$('confirm-error').textContent=text;$('confirm-error').hidden=false;};
+    if(!args.p_nome.includes(' ')||args.p_nome.length<5)return error('Informe seu nome completo, como está no cadastro.');
+    if(!validCpf(args.p_cpf))return error('Confira seu CPF.');if(!chosen)return;
+    b.disabled=true;b.textContent='Conferindo…';
+    try{const result=await rpc('direct_portal_check_worker',args);if(sequence!==identitySequence||!$('confirm-dialog').open)return;
+      if(result.autorizado){verified=true;$('identity-status').textContent='Autorizado a pegar esta vaga';$('identity-status').hidden=false;$('confirm-accept').disabled=false;}
+      else error(result.mensagem);
+    }catch(e){if(sequence===identitySequence)error(friendly(e));}
+    finally{b.disabled=false;b.textContent='Conferir meu cadastro';}
+  });
+  $('confirm-accept')?.addEventListener('click',async()=>{
+    if(!verified||!chosen||accepting)return;const b=$('confirm-accept');b.disabled=true;accepting=true;$('confirm-error').hidden=true;
+    try{const result=await rpc('direct_portal_claim_order',identityArgs());if(!result.confirmado)throw Error(result.mensagem);$('confirm-dialog').close();resetIdentity();feedback(result.mensagem);await loadJobs();}
+    catch(error){resetIdentity();$('confirm-error').textContent=friendly(error);$('confirm-error').hidden=false;await loadJobs();}
+    finally{accepting=false;b.disabled=!verified;}
   });
   async function boot(){try{if(board&&kind==='vagas'){context=await rpc('direct_portal_board_context',{p_token:board});await loadJobs();return;}if(!invitation)throw Error('Acesso somente pelo link privado enviado pela Direct.');context=await rpc('direct_portal_context',{p_convite:invitation,p_tipo:kind});if(kind==='cadastro'){if(context.bloqueado)throw Error('Cadastro bloqueado. Fale com a Direct.');if(context.cadastrado)completed(context);else setupRegistration();}else await loadJobs();}catch(error){feedback(friendly(error),true);$('registration-form')?.setAttribute('hidden','');$('jobs-list')?.replaceChildren();}}
   window.addEventListener('hashchange',()=>location.reload());
   function refreshJobs(){if(!document.hidden&&navigator.onLine)loadJobs();}
-  if($('jobs-list')){window.addEventListener('focus',refreshJobs);window.addEventListener('online',refreshJobs);document.addEventListener('visibilitychange',refreshJobs);setInterval(refreshJobs,15000);}
+  if($('jobs-list')){window.addEventListener('focus',refreshJobs);window.addEventListener('online',refreshJobs);window.addEventListener('offline',()=>live('offline'));document.addEventListener('visibilitychange',refreshJobs);setInterval(refreshJobs,15000);}
   boot();
 })();

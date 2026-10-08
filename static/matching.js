@@ -25,13 +25,12 @@
   function rank(worker, shift, order, store, orders, scales) {
     if (worker.bloqueada) return { eligible: false, reason: 'Cadastro bloqueado' };
     const day = weekday[new Date(`${shift.data}T12:00:00`).getDay()];
-    if (!(worker.disponibilidade || []).some(slot => slot.dia === day && slot.inicio <= shift.inicio && slot.fim >= shift.fim))
-      return { eligible: false, reason: 'Fora da disponibilidade' };
-    if (conflicts(worker.id, shift, orders, scales)) return { eligible: false, reason: 'Conflito de horário' };
+    const available = (worker.disponibilidade || []).some(slot => slot.dia === day && slot.inicio <= shift.inicio && slot.fim >= shift.fim);
     const sameArea = store?.bairro && normal(store.bairro) === normal(worker.bairro);
     if (store?.bairro && !sameArea && !worker.pode_se_deslocar) return { eligible: false, reason: 'Deslocamento limitado' };
     const reasons = [];
     let score = 0;
+    if (available) { score += 15; reasons.push('horário informado no cadastro'); }
     if (matchesSector(worker, order.setor)) { score += 50; reasons.push('experiência no setor'); }
     if (sameArea) { score += 25; reasons.push('mesmo bairro'); }
     else if (worker.pode_se_deslocar) { score += 10; reasons.push('pode se deslocar'); }

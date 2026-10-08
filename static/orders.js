@@ -371,11 +371,9 @@ function chooseOrderWorker(data, select, picker) {
   document.querySelectorAll('.order-assign-choice').forEach(panel => panel.remove());
   if (item.turnos.length === 1) return addOrderWorker([data], worker.id);
   const assigned = new Set(orderScales.filter(scale => scale.diarista_id === worker.id).map(scale => scale.data));
-  const store = matchingOrderStore(item.supermercado, item.unidade);
-  let unavailable = 0, full = 0;
+  let full = 0;
   const dates = item.turnos.filter(shift => {
     if (assigned.has(shift.data)) return false;
-    if (!window.DirectMatching.rank(worker, shift, item, store, orderRecords, weeklyScales).eligible) { unavailable++; return false; }
     const occupied = orderScales.filter(scale => scale.data === shift.data && !['falta','desistiu'].includes(scale.status)).length;
     if (occupied >= item.quantidade_diaristas) { full++; return false; }
     return true;
@@ -384,7 +382,7 @@ function chooseOrderWorker(data, select, picker) {
   const question = document.createElement('strong'); question.textContent = `Escalar ${worker.nome} só em ${dateLabel(data)} ou nos outros dias deste pedido?`;
   panel.append(question);
   const details = document.createElement('p');
-  details.textContent = `${dates.length} dia${dates.length === 1 ? '' : 's'} com vaga e horário ${dates.length === 1 ? 'compatível' : 'compatíveis'}.${unavailable ? ` ${unavailable} com indisponibilidade, conflito ou deslocamento limitado.` : ''}${full ? ` ${full} já preenchido${full === 1 ? '' : 's'}.` : ''}`;
+  details.textContent = `${dates.length} dia${dates.length === 1 ? '' : 's'} com vaga neste pedido.${full ? ` ${full} já preenchido${full === 1 ? '' : 's'}.` : ''}`;
   panel.append(details);
   const actions = document.createElement('div'); actions.className = 'order-assign-actions';
   const single = document.createElement('button'); single.type = 'button'; single.className = 'button button-quiet'; single.textContent = 'Só este dia';
@@ -561,13 +559,13 @@ function renderOrderShifts() {
       const placeholder = document.createElement('option'); placeholder.value = ''; placeholder.textContent = 'Selecione uma diarista'; select.append(placeholder);
       const store = matchingOrderStore(item.supermercado, item.unidade);
       const candidates = orderWorkers.map(worker => ({ worker, match: window.DirectMatching.rank(worker, shift, item, store, orderRecords, weeklyScales) }))
-        .filter(({ worker, match }) => match.eligible && !scales.some(scale => scale.diarista_id === worker.id))
-        .sort((a, b) => b.match.score - a.match.score || a.worker.nome.localeCompare(b.worker.nome, 'pt-BR'));
+        .filter(({ worker }) => !worker.bloqueada && !scales.some(scale => scale.diarista_id === worker.id))
+        .sort((a, b) => (b.match.score || 0) - (a.match.score || 0) || a.worker.nome.localeCompare(b.worker.nome, 'pt-BR'));
       candidates.forEach(({ worker, match }, index) => {
         const option = document.createElement('option'); option.value = String(worker.id);
-        option.textContent = `${index < 3 ? '★ ' : ''}${worker.nome}${match.reasons.length ? ` · ${match.reasons.join(', ')}` : ''}`; select.append(option);
+        option.textContent = `${index < 3 && match.eligible ? '★ ' : ''}${worker.nome}${(match.reasons || []).length ? ` · ${match.reasons.join(', ')}` : ''}`; select.append(option);
       });
-      if (!candidates.length) placeholder.textContent = 'Nenhuma diarista compatível';
+      if (!candidates.length) placeholder.textContent = 'Nenhuma diarista cadastrada disponível para selecionar';
       const add = document.createElement('button'); add.type = 'button'; add.className = 'button button-outline'; add.textContent = 'Escalar';
       add.disabled = !candidates.length;
       select.addEventListener('change', () => chooseOrderWorker(shift.data, select, picker));
@@ -586,6 +584,7 @@ async function openOrderDetail(id) {
   $('#order-detail-error').hidden = true;
   $('#order-detail-success').hidden = true;
   $('#order-detail-title').textContent = item.supermercado;
+  let reserves=document.getElementById('order-enterprise-reserves');if(!reserves){reserves=document.createElement('button');reserves.id='order-enterprise-reserves';reserves.type='button';reserves.className='button button-outline';document.querySelector('#order-detail-dialog .dialog-footer').prepend(reserves);}reserves.textContent='Reservas e qualificações';reserves.hidden=window.directRemote&&!['admin','operacao'].includes(directRemote.role);reserves.onclick=async()=>{try{$('#order-detail-dialog').close();await DirectModules.ensure('empresa');await DirectEnterprise.reserves(id);}catch(e){showOrderFeedback(e.message,true);}};
   $('#order-detail-fields').replaceChildren(
     detailSection('Solicitação', [
       ['Supermercado', item.supermercado], ['Unidade ou local', item.unidade || '—'],
@@ -637,12 +636,16 @@ async function openOrderDetail(id) {
 
 async function deleteOrder() {
   const item = orderRecords.find(row => row.id === orderDetailId);
-  if (!item || !window.confirm(`Excluir o pedido de ${item.supermercado}? Esta ação não pode ser desfeita.`)) return;
+  if (!item || !window.confirm(`Excluir o pedido de ${item.supermercado}${item.unidade ? ' · ' + item.unidade : ''}? As escalas deste pedido também serão removidas. O cadastro dos diaristas será mantido. Esta ação não pode ser desfeita.`)) return;
+  const button = $('#order-delete-button'); button.disabled = true;
   try {
-    await request(`/api/pedidos/${item.id}`, { method: 'DELETE' });
+    await request(`/api/pedidos/${item.id}`, { method: 'DELETE', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ expected_updated_at: item.atualizado_em || null }) });
     $('#order-detail-dialog').close(); orderDetailId = null;
     await loadOrders(); showOrderFeedback('Pedido excluído.');
-  } catch (err) { $('#order-detail-error').textContent = err.message; $('#order-detail-error').hidden = false; }
+    window.DirectManagementUI?.refresh();
+    if (typeof loadHome === 'function') loadHome().catch(() => {});
+  } catch (err) { orderDetailError(err.message); }
+  finally { button.disabled = false; }
 }
 
 function orderDialogBackdrop(event) {

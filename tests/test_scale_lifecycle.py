@@ -28,9 +28,9 @@ class LifecycleTests(unittest.TestCase):
         self.assertEqual(self.call('PATCH',new_route,{'status':'presente'})[0],200)
         with server.connect() as db:self.assertEqual(db.execute('select count(*) from diarias').fetchone()[0],1)
         self.assertEqual(self.call('PATCH',new_route,{'status':'desistiu','motivo':'Não pode apagar atendimento'})[0],400)
-    def test_failed_replacement_rolls_back_withdrawal_and_releases_conflict_only_when_saved(self):
+    def test_failed_replacement_preserves_original_and_any_schedule_is_allowed(self):
         first,worker,old=self.prepare();route=f"/api/pedidos/{first['pedido_id']}/escalas/{old['id']}/substituir"
-        status,_=self.call('POST',route,{'diarista_id':worker['id'],'motivo':'Troca solicitada pela pessoa'});self.assertEqual(status,400)
+        status,_=self.call('POST',route,{'diarista_id':worker['id'],'motivo':'x'});self.assertEqual(status,400)
         self.assertEqual(self.call('GET','/api/escalas')[1][0]['status'],'escalada')
         self.call('PATCH',f"/api/diaristas/{worker['id']}/bloqueio",{'bloqueada':True})
         self.assertEqual(self.call('POST',route,{'diarista_id':worker['id'],'motivo':'Troca solicitada','disponibilidade_confirmada':True})[0],400)

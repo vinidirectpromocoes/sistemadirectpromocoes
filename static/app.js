@@ -63,10 +63,9 @@ let loadingTimer;
 const requestCache = new Map();
 const localReadControllers = new Set();
 let pageDeparting = false;
-window.addEventListener('pagehide', () => {
-  pageDeparting = true;
-  for (const controller of localReadControllers) controller.abort();
-});
+function cancelDepartingReads(){pageDeparting=true;for(const controller of localReadControllers)controller.abort();}
+window.addEventListener('beforeunload',cancelDepartingReads);
+window.addEventListener('pagehide',cancelDepartingReads);
 window.addEventListener('pageshow', () => { pageDeparting = false; });
 let requestEpoch = 0;
 function clearRequestCache() { requestEpoch++; requestCache.clear(); }

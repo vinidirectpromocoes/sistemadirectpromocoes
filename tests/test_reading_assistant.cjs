@@ -1,7 +1,25 @@
 const {test}=require('node:test');const assert=require('node:assert/strict');const a=require('../static/reading-assistant.js');
 const context={today:'2026-10-03',stores:[{rede:'Hipermarket',nome:'Vila União'}],workers:[{id:1,nome:'Maria da Silva',cpf:'52998224725'},{id:2,nome:'Fernando Ferreira Grangeiro',cpf:'04068775303'}],orders:[{id:8,supermercado:'Hipermarket',unidade:'Vila União',setor:'Repositor de mercearia',turnos:[{data:'2026-10-03',inicio:'06:00',fim:'14:20'}]}],scales:[{id:10,pedido_id:8,diarista_id:1,data:'2026-10-03',status:'escalada',confirmacao:'aguardando'}]};
+test('CPF identifica cadastro existente mesmo com nome abreviado e remove aviso de cadastro parcial',()=>{
+ const before=JSON.stringify(context.workers),[p]=a.plan('Nome: Maria da Silva Oliveira\nCPF: 529.982.247-25',context);
+ assert.deepEqual(p.cadastro,{status:'existente',nome:'Maria da Silva',id:1});
+ assert.equal(p.dados.nome,'Maria da Silva Oliveira');assert.deepEqual(p.completar,[]);
+ assert.match(p.avisos.join(' '),/cadastro existente será preservado/);assert.doesNotMatch(p.avisos.join(' '),/Cadastro parcial/);
+ assert.ok(a.describe(p).some(([label,value])=>label==='Cadastro'&&value==='Diarista já cadastrado'));
+ assert.equal(JSON.stringify(context.workers),before);
+});
+test('nome igual com CPF novo não reutiliza cadastro e CPF inválido não afirma ausência',()=>{
+ const [p]=a.plan('Nome: Maria da Silva\nCPF: 11144477735',context);assert.equal(p.cadastro.status,'novo');
+ assert.ok(a.describe(p).some(([,value])=>value==='Diarista ainda não cadastrado'));
+ for(const cpf of ['11111111111','']){const [invalid]=a.plan(`Nome: Maria da Silva\nCPF: ${cpf}`,context);assert.equal(invalid.cadastro.status,'verificar');assert.ok(invalid.faltando.length);}
+});
+test('consulta compara CPF normalizado e revalida cadastro recebido após a leitura',()=>{
+ const [p]=a.plan('Nome: Maria da Silva\nCPF: 52998224725',{...context,workers:[]});assert.equal(p.cadastro.status,'novo');
+ a.identifyRegistration(p,[{...context.workers[0],cpf:'529.982.247-25'}]);assert.equal(p.cadastro.status,'existente');
+ a.identifyRegistration(p,context.workers);assert.deepEqual(p.avisos,[]);
+});
 test('WhatsApp mistura cadastro e pedido, inclusive nome antes do pedido',()=>{
- const message='Rede: Hipermarket\nRegião: LOJA VILA UNIÃO\nFunção: Repositor de mercearia\nHorário: 6:00 às 14:20\nData: 03/10\nQuantidade de dias: 2\n\n*Fernando Ferreira Grangeiro* CPF: 04068775303';const [p]=a.plan(message,context);assert.equal(p.tipo,'pedido');assert.equal(p.dados.diarista_escalado.cpf,'04068775303');assert.equal(p.dados.turnos.length,2);assert.deepEqual(p.faltando,[]);
+ const message='Rede: Hipermarket\nRegião: LOJA VILA UNIÃO\nFunção: Repositor de mercearia\nHorário: 6:00 às 14:20\nData: 03/10\nQuantidade de dias: 2\n\n*Fernando Ferreira Grangeiro* CPF: 04068775303';const [p]=a.plan(message,context);assert.equal(p.tipo,'pedido');assert.equal(p.dados.diarista_escalado.cpf,'04068775303');assert.equal(p.dados.turnos.length,2);assert.deepEqual(p.faltando,[]);assert.equal(p.cadastro.status,'existente');assert.equal(a.plan(message,{...context,workers:[]})[0].cadastro.status,'novo');
  const [before]=a.plan('Nome: Maria da Silva\nCPF: 52998224725\n'+message.slice(0,message.indexOf('\n\n')),context);assert.equal(before.tipo,'pedido');assert.equal(before.dados.diarista_escalado.nome,'Maria da Silva');
 });
 test('cadastro por frase e separadores WhatsApp',()=>{const [p]=a.plan('Cadastre Maria da Silva CPF: 52998224725',context);assert.equal(p.dados.nome,'Maria da Silva');assert.deepEqual(p.faltando,[]);const [eq]=a.plan('Nome = Maria da Silva; CPF = 52998224725',context);assert.deepEqual(eq.faltando,[]);});

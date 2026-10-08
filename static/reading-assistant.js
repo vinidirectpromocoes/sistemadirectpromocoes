@@ -2,6 +2,21 @@
 (function(root,factory){const api=factory(typeof module==='object'?require('./reading-parser.js'):root.DirectReadingParser);if(typeof module==='object'&&module.exports)module.exports=api;else root.DirectReadingAssistant=api;})(typeof window==='undefined'?globalThis:window,function(parser){
   const norm=v=>String(v||'').normalize('NFD').replace(/[\u0300-\u036f]/g,'').toLowerCase().replace(/[^a-z0-9]+/g,' ').trim();
   const digits=v=>String(v||'').replace(/\D/g,'');
+  function identifyRegistration(item,workers){
+    const person=item.tipo==='diarista'?item.dados:item.tipo==='pedido'?item.dados.diarista_escalado:null;
+    if(!person)return item;
+    item.avisos=(item.avisos||[]).filter(note=>!note.startsWith('O CPF pertence a '));
+    const cpf=digits(person.cpf),valid=parser.validCpf(cpf);
+    const existing=valid?workers.find(w=>digits(w.cpf)===cpf):null;
+    item.cadastro={status:existing?'existente':valid?'novo':'verificar',nome:existing?.nome||'',id:existing?.id};
+    if(existing&&item.tipo==='diarista'){
+      item.avisos=(item.avisos||[]).filter(note=>!note.startsWith('Cadastro parcial:'));
+      item.completar=[];
+    }
+    if(existing&&norm(existing.nome)!==norm(person.nome))item.avisos.push(`O CPF pertence a ${existing.nome}. O nome informado é diferente; o cadastro existente será preservado.`);
+    return item;
+  }
+  const registrationLabel=item=>({existente:'Diarista já cadastrado',novo:'Diarista ainda não cadastrado',verificar:'Confira o CPF para verificar o cadastro'}[item.cadastro?.status]||'');
   const line=(text,labels)=>{for(const row of text.split('\n')){const m=/^\s*\*?([^:]+?)\*?\s*:\s*(.*?)\s*$/.exec(row);if(m&&labels.includes(norm(m[1])))return m[2].replace(/^\*|[\\*]+$/g,'').trim();}return '';};
   const contains=(text,value)=>!!norm(value)&&(` ${norm(text)} `).includes(` ${norm(value)} `);
   const stamp=scale=>JSON.stringify([scale.id,scale.pedido_id,scale.diarista_id,scale.data,scale.status,scale.confirmacao||'aguardando',scale.substituida_por_escala_id||null]);
@@ -84,14 +99,14 @@
     const items=parser.parse(text,context);
     if(items.length===2&&items[0].tipo==='diarista'&&items[1].tipo==='pedido'&&!items[1].dados.diarista_escalado){
       const worker=items[0],order=items[1];order.dados.diarista_escalado={nome:worker.dados.nome,cpf:worker.dados.cpf};
-      order.faltando.push(...worker.faltando);order.texto=text;order.avisos.push('A pessoa informada antes do pedido será escalada em todos os dias. Confira essa associação.');return [order];
+      order.faltando.push(...worker.faltando);order.texto=text;order.avisos.push('A pessoa informada antes do pedido será escalada em todos os dias. Confira essa associação.');return [identifyRegistration(order,workers)];
     }
-    return items;
+    return items.map(item=>identifyRegistration(item,workers));
   }
   function describe(item){
     const d=item.dados;
-    if(item.tipo==='diarista')return [['Ação','Cadastrar diarista (ou preservar cadastro existente)'],['Nome',d.nome],['CPF',d.cpf],['Setores',(d.setores||[]).join(', ')],['Bairro',d.bairro],['Endereço',[d.logradouro,d.numero].filter(Boolean).join(', ')]];
-    if(item.tipo==='pedido')return [['Ação',d.diarista_escalado?'Salvar pedido e escalar a pessoa em todos os dias':'Salvar pedido'],['Rede',d.supermercado],['Loja',d.unidade],['Setor',d.setor],['Período',d.turnos?.length?`${d.turnos[0].data.split('-').reverse().join('/')} a ${d.turnos.at(-1).data.split('-').reverse().join('/')} · ${d.turnos.length} dia(s)`:''],['Horário',d.turnos?.length?`${d.turnos[0].inicio} às ${d.turnos[0].fim}`:''],['Pessoas por dia',d.quantidade_diaristas],['Diarista',d.diarista_escalado?.nome],['CPF',d.diarista_escalado?.cpf]];
+    if(item.tipo==='diarista')return [['Cadastro',registrationLabel(item)],['Ação',item.cadastro?.status==='existente'?'Preservar cadastro existente, sem duplicar':'Cadastrar diarista'],['Nome',d.nome],['Nome no cadastro',item.cadastro?.nome],['CPF',d.cpf],['Setores',(d.setores||[]).join(', ')],['Bairro',d.bairro],['Endereço',[d.logradouro,d.numero].filter(Boolean).join(', ')]];
+    if(item.tipo==='pedido')return [['Ação',d.diarista_escalado?'Salvar pedido e escalar a pessoa em todos os dias':'Salvar pedido'],['Cadastro',registrationLabel(item)],['Nome no cadastro',item.cadastro?.nome],['Rede',d.supermercado],['Loja',d.unidade],['Setor',d.setor],['Período',d.turnos?.length?`${d.turnos[0].data.split('-').reverse().join('/')} a ${d.turnos.at(-1).data.split('-').reverse().join('/')} · ${d.turnos.length} dia(s)`:''],['Horário',d.turnos?.length?`${d.turnos[0].inicio} às ${d.turnos[0].fim}`:''],['Pessoas por dia',d.quantidade_diaristas],['Diarista',d.diarista_escalado?.nome],['CPF',d.diarista_escalado?.cpf]];
     if(item.tipo==='atualizacao')return [['Ação','Completar cadastro'],['Pessoa',d.pessoa],...Object.entries(d.changes).map(([k,v])=>[{nome:'Novo nome',bairro:'Bairro',cep:'CEP',logradouro:'Rua',numero:'Número',complemento:'Complemento'}[k],v])];
     if(item.tipo==='comando')return [['Ação',{presente:'Marcar presença',falta:'Marcar falta',confirmou:'Confirmar que vai',desistiu:'Registrar desistência',substituir:'Substituir diarista'}[d.acao]],['Pessoa',d.pessoa],['Data',d.data?.split('-').reverse().join('/')],['Pedido',d.pedido_id?`#${d.pedido_id} · ${d.rede} · ${d.loja}`:''],['Setor',d.setor],['Motivo',d.motivo],['Substituto',d.substituto]];
     return [];
@@ -115,5 +130,5 @@
     let merged=original;for(const r of rows){const m=/^\s*\*?([^:]+?)\*?\s*:\s*(.*?)\s*$/.exec(r);const corrected=correction(`Corrigir ${m[1]} para ${m[2]}`,merged);if(corrected)merged=corrected;else{const lines=merged.split('\n');const index=lines.findIndex(v=>{const k=/^\s*\*?([^:]+?)\*?\s*:/.exec(v);return k&&norm(k[1])===norm(m[1]);});if(index>=0)lines[index]=r;else lines.push(r);merged=lines.join('\n');}}
     return merged;
   }
-  return {plan,describe,correction,completion,stamp,norm};
+  return {plan,describe,correction,completion,stamp,norm,identifyRegistration};
 });

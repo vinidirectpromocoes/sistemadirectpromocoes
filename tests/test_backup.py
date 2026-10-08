@@ -18,7 +18,7 @@ class BackupRestoreTests(unittest.TestCase):
 
     def archive(self, path, data, version="direct-data-v1"):
         payload = {"format": version, "exportedAt": "2026-09-29T12:00:00Z", "tables": data}
-        if version in ("direct-data-v5", "direct-data-v6", "direct-data-v7", "direct-data-v8"):
+        if version in ("direct-data-v5", "direct-data-v6", "direct-data-v7", "direct-data-v8", "direct-data-v9"):
             payload["snapshot"] = {"consistent": True, "counts": {table: len(rows) for table, rows in data.items()}}
         salt, iv = os.urandom(16), os.urandom(12)
         key = __import__("hashlib").pbkdf2_hmac("sha256", self.password.encode(), salt, 200000, 32)
@@ -121,6 +121,11 @@ class BackupRestoreTests(unittest.TestCase):
                 with sqlite3.connect(root/'v8.db') as db:
                     self.assertEqual(db.execute('select responsavel,proxima_acao from pendencia_acoes').fetchone(),('Equipe','Conferir resposta'))
                     self.assertEqual(json.loads(db.execute('select datas from substituicao_contatos').fetchone()[0]),['2026-10-04'])
+                data['rede_links']=[{'id':1,'rede':'Super do Povo','token':'a'*64,'ativo':True,'expira_em':'2027-01-01T00:00:00Z'}]
+                v9=root/'v9.json';self.archive(v9,data,'direct-data-v9');restore_operational(v9,self.password,root/'v9.db')
+                with sqlite3.connect(root/'v9.db') as db:
+                    record=json.loads(db.execute("select record_json from backup_private_rows where source_table='rede_links'").fetchone()[0])
+                    self.assertEqual(record['rede'],'Super do Povo')
                 broken = root / 'broken.json'; data['loja_validacoes'][0]['escala_id'] = 999
                 self.archive(broken, data, 'direct-data-v7')
                 with self.assertRaisesRegex(ValueError, 'referências quebradas'):
@@ -209,7 +214,7 @@ class BackupRestoreTests(unittest.TestCase):
                     contract_id=db.execute("INSERT INTO contratos(rede,loja,setor,inicio,valor_recebido_centavos,valor_pago_centavos,criado_em) VALUES('Super do Povo','Meireles','Operador de caixa','2026-09-01',13400,9000,'2026-09-29')").lastrowid
                     db.execute("UPDATE diarias SET contrato_id=? WHERE id=?",(contract_id,daily_id))
                     db.execute("INSERT INTO ocorrencias(pedido_id,escala_id,tipo,descricao,autor,criado_em) VALUES(?,?,'elogio','Atendimento bem avaliado','Teste','2026-09-29')",(order_id,scale_id))
-                    db.execute("CREATE TABLE direct_staff (email TEXT PRIMARY KEY, role TEXT, active INTEGER)")
+                    db.execute("CREATE TABLE IF NOT EXISTS direct_staff (email TEXT PRIMARY KEY, role TEXT, active INTEGER)")
                     data = {table: [dict(row) for row in db.execute(f"SELECT * FROM {table}")] for table in TABLES}
                 archive, target = root / "source.json", root / "recovered.db"
                 self.archive(archive, data, "direct-data-v4")

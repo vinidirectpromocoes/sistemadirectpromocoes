@@ -87,7 +87,7 @@ function renderStores() {
       const edit = storeElement('button', 'text-button', 'Editar');
       edit.type = 'button'; edit.setAttribute('aria-label', `Editar loja ${item.nome}, ${item.rede}`);
       edit.addEventListener('click', () => openStoreForm(item));
-      if(window.DirectManagementUI){const report=storeElement('button','button button-outline','▧ Relatório');report.type='button';report.title='Relatório mensal desta loja';report.setAttribute('aria-label','Relatório mensal de '+item.nome);report.hidden=window.directRemote?.role==='consulta';report.onclick=()=>DirectManagementUI.storeReport(item);actions.append(report);if(!window.directRemote||['admin','operacao'].includes(window.directRemote.role)){const link=storeElement('button','button button-outline','↗ Link da loja');link.type='button';link.onclick=()=>DirectManagementUI.storeLink(item);actions.append(link);}}
+      if(window.DirectManagementUI){const report=storeElement('button','button button-outline','▧ Relatório');report.type='button';report.title='Relatório mensal desta loja';report.setAttribute('aria-label','Relatório mensal de '+item.nome);report.hidden=window.directRemote?.role==='consulta';report.onclick=()=>DirectManagementUI.storeReport(item);actions.append(report);}
       actions.append(copy, edit); card.append(info, actions); list.append(card);
     });
     section.append(list); groups.append(section);
@@ -95,7 +95,7 @@ function renderStores() {
 }
 
 async function loadStores() {
-  try { storeRecords = await request('/api/lojas'); renderStores(); }
+  try { storeRecords = await request('/api/lojas'); let catalog=[];try{catalog=(await request('/api/empresa/lista?tipo=rede&tamanho=50')).items.filter(r=>r.status==='ativo').map(r=>r.titulo);}catch{}const names=[...new Set([...STORE_NETWORKS,...catalog,...storeRecords.map(r=>r.rede)])];STORE_NETWORKS.splice(0,STORE_NETWORKS.length,...names);for(const [id,empty]of [['stores-network-filter','Todas as redes'],['store-network',null]]){const select=document.getElementById(id),previous=select.value;select.replaceChildren(...(empty?[new Option(empty,'')]:[]),...names.map(n=>new Option(n,n)));select.value=previous|| (empty?'':names[0]);}renderStores(); }
   catch (error) { storeFeedback(`Não foi possível carregar as lojas: ${error.message}`, true); }
 }
 

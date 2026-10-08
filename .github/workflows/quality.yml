@@ -8,7 +8,18 @@ on:
 jobs:
   test:
     runs-on: ubuntu-latest
-    timeout-minutes: 20
+    timeout-minutes: 30
+    services:
+      postgres:
+        image: postgres:17
+        env:
+          POSTGRES_PASSWORD: postgres
+        ports: [5432:5432]
+        options: >-
+          --health-cmd "pg_isready -U postgres"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
@@ -22,21 +33,59 @@ jobs:
           version: 11.19.0
       - name: Instalar dependências de teste
         run: |
+          python -m pip install --disable-pip-version-check cryptography==50.0.1 psycopg2-binary==2.9.13
+          pnpm install --frozen-lockfile
+      - name: Testes de backend e restauração
+        run: python -m unittest discover -s tests -p 'test_*.py' -v
+      - name: Banco isolado, permissões e integrações
+        env:
+          DIRECT_QA_PG_DSN: postgresql://postgres:postgres@127.0.0.1:5432/postgres
+        run: python scripts/test_enterprise_postgres.py
+      - name: Testes de regras de negócio
+        run: pnpm test:unit
+  navegacao:
+    name: Navegação — ${{ matrix.area }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - area: Empresa
+            scripts: |
+              node tests/enterprise_e2e.mjs
+              node tests/enterprise_integrations_e2e.mjs
+          - area: Operação
+            scripts: |
+              node tests/overlapping_e2e.mjs
+              node tests/usability_e2e.mjs
+              node tests/pagination_e2e.mjs
+              node tests/fluency_e2e.mjs
+              node tests/automation_e2e.mjs
+              node tests/management_e2e.mjs
+              node tests/network_links_e2e.mjs
+          - area: Assistente e portais
+            scripts: |
+              pnpm test:e2e
+              node tests/dialogue_e2e.mjs
+              node tests/portal_e2e.mjs
+              node tests/portal_admin_e2e.mjs
+              node tests/vacancies_e2e.mjs
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 11.19.0
+      - name: Instalar dependências de navegação
+        run: |
           python -m pip install --disable-pip-version-check cryptography==50.0.1
           pnpm install --frozen-lockfile
           pnpm exec playwright install --with-deps chromium webkit
-      - name: Testes de backend e restauração
-        run: python -m unittest discover -s tests -p 'test_*.py' -v
-      - name: Testes de regras de negócio
-        run: pnpm test:unit
-      - name: Navegação, perfis e telas móveis
-        run: |
-          node tests/usability_e2e.mjs
-          node tests/pagination_e2e.mjs
-          node tests/fluency_e2e.mjs
-          node tests/automation_e2e.mjs
-          node tests/management_e2e.mjs
-          pnpm test:e2e
-          node tests/portal_e2e.mjs
-          node tests/portal_admin_e2e.mjs
-          node tests/vacancies_e2e.mjs
+      - name: Fluxos, perfis e telas móveis
+        run: ${{ matrix.scripts }}

@@ -571,30 +571,37 @@ async function openFinanceAudit() {
   } catch (error) { list.textContent = `Não foi possível carregar o histórico: ${error.message}`; }
 }
 
+const pageLoadingControls=new WeakMap();
+function releasePageControls(main){const guard=pageLoadingControls.get(main);if(guard?.parentNode===main)guard.replaceWith(...guard.childNodes);pageLoadingControls.delete(main);main.inert=false;main.removeAttribute('aria-busy');}
 async function showPage() {
   const routeHash = location.hash;
-  let page = ['inicio', 'crm', 'diaristas', 'financeiro', 'pedidos', 'leitura', 'redes', 'configuracoes', 'convites', 'vagas'].includes(window.location.hash.slice(1)) ? window.location.hash.slice(1) : 'inicio';
+  let page = ['inicio', 'crm', 'diaristas', 'financeiro', 'pedidos', 'leitura', 'redes', 'configuracoes', 'convites', 'vagas', 'pedidos-links', 'empresa'].includes(window.location.hash.slice(1).split('?')[0]) ? window.location.hash.slice(1).split('?')[0] : 'inicio';
   const role = window.directRemote?.role;
-  if (role && ({ financeiro: ['admin', 'financeiro'], configuracoes: ['admin', 'financeiro'], vagas: ['admin', 'operacao'], convites: ['admin', 'operacao'], leitura: ['admin', 'operacao'], diaristas: ['admin', 'financeiro', 'operacao'] }[page] || ['admin', 'financeiro', 'operacao', 'consulta']).includes(role) === false) {
+  if (role && ({ 'pedidos-links':['admin','operacao'], financeiro: ['admin', 'financeiro'], configuracoes: ['admin', 'financeiro'], vagas: ['admin', 'operacao'], convites: ['admin', 'operacao'], leitura: ['admin', 'operacao', 'financeiro', 'consulta'], diaristas: ['admin', 'financeiro', 'operacao'] }[page] || ['admin', 'financeiro', 'operacao', 'consulta']).includes(role) === false) {
     page = 'inicio';
     if (location.hash !== '#inicio') location.hash = '#inicio';
   }
-  for (const name of ['inicio', 'crm', 'diaristas', 'pedidos', 'leitura', 'redes', 'financeiro', 'configuracoes', 'convites', 'vagas']) {
+  for (const name of ['inicio', 'crm', 'diaristas', 'pedidos', 'leitura', 'redes', 'financeiro', 'configuracoes', 'convites', 'vagas', 'pedidos-links', 'empresa']) {
     const active = name === page;
     $(`#${name}-page`).hidden = !active;
+    $(`#${name}-page`).inert = active;
+    if(active){const main=$(`#${name}-page`);main.setAttribute('aria-busy','true');if(!pageLoadingControls.has(main)){const guard=document.createElement('fieldset');guard.disabled=true;guard.className='page-loading-controls';guard.append(...main.childNodes);main.append(guard);pageLoadingControls.set(main,guard);}}
     const link = $(`#nav-${name}`);
     link.classList.toggle('nav-active', active);
     if (active) link.setAttribute('aria-current', 'page');
     else link.removeAttribute('aria-current');
   }
-  document.title = `${{ vagas: 'Vagas disponíveis', convites: 'Cadastros por link', inicio: 'Início', crm: 'Pendências', diaristas: 'Diaristas', pedidos: 'Pedidos', leitura: 'Leitura IA', redes: 'Redes e lojas', financeiro: 'Financeiro', configuracoes: 'Configurações' }[page]} | Direct Promoções`;
+  document.title = `${{ empresa: 'Minha empresa', 'pedidos-links': 'Pedidos por link', vagas: 'Vagas disponíveis', convites: 'Cadastros por link', inicio: 'Início', crm: 'Pendências', diaristas: 'Diaristas', pedidos: 'Pedidos', leitura: 'Leitura IA', redes: 'Redes e lojas', financeiro: 'Financeiro', configuracoes: 'Configurações' }[page]} | Direct Promoções`;
   window.scrollTo(0, 0);
-  try { await window.DirectModules.ensure(page); } catch (error) { window.DirectUI?.notify(error.message, true); return; }
+  try { await window.DirectModules.ensure(page); } catch (error) { window.DirectUI?.notify(error.message, true); return; }finally{releasePageControls($(`#${page}-page`));}
   if (location.hash !== routeHash) return;
+  $(`#${page}-page`).inert=false;$(`#${page}-page`).removeAttribute('aria-busy');
+  if (page === 'empresa') window.DirectEnterprise?.load();
   if (page === 'inicio' || page === 'crm') loadHome();
   if (page === 'diaristas') load();
   if (page === 'financeiro') loadFinance();
   if (page === 'pedidos' && typeof loadOrders === 'function') loadOrders();
+  if (page === 'pedidos-links') window.DirectNetworkLinks?.load();
   if (page === 'redes' && typeof loadStores === 'function') loadStores();
   if (page === 'configuracoes' && typeof loadSettings === 'function') loadSettings().catch(() => {});
 }
