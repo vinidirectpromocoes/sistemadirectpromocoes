@@ -322,7 +322,7 @@ function workerWhatsAppContact(record) {
   if (!/^[1-9]\d{9,14}$/.test(digits) || (!international && ![12, 13].includes(digits.length))) return phone;
   const url = new URL('https://web.whatsapp.com/send');
   url.searchParams.set('phone', digits);
-  url.searchParams.set('text', 'Oi, eu sou supervisor da Direc Promoções, estou aqui entrando em contato a respeito de vagas para diárias. Você teria interesse?');
+  url.searchParams.set('text', 'Oi, eu sou supervisor da Direct Promoções, estou aqui entrando em contato a respeito de vagas para diárias. Você teria interesse?');
   const link = document.createElement('a');
   link.className = 'worker-whatsapp-link';
   link.href = url.href;
