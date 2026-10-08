@@ -1,3 +1,16 @@
+.worker-whatsapp-link {
+  display: inline-flex;
+  align-items: center;
+  min-height: 44px;
+  color: var(--brand-blue);
+  font-weight: 600;
+  text-decoration: underline;
+  text-underline-offset: 3px;
+  overflow-wrap: anywhere;
+}
+.worker-whatsapp-link:focus-visible { outline: 3px solid currentColor; outline-offset: 3px; border-radius: 4px; }
+html[data-theme="dark"] .worker-whatsapp-link { color: #a7c8ff; }
+
 :root {
   --brand-navy: #07165c;
   --brand-dark: #17253e;
