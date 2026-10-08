@@ -311,6 +311,29 @@ function eyeIcon() {
   return svg;
 }
 
+function workerWhatsAppContact(record) {
+  const phone = String(record.telefone || '').trim();
+  // Números brasileiros sem código de país incluem o DDD (inclusive DDD 55).
+  if (!phone || !/^[+\d\s().-]+$/.test(phone)) return phone || 'Não informado';
+  let digits = phone.replace(/\D/g, '');
+  const international = phone.startsWith('+') || digits.startsWith('00');
+  if (digits.startsWith('00')) digits = digits.slice(2);
+  if (!international && (digits.length === 10 || digits.length === 11)) digits = `55${digits}`;
+  if (!/^[1-9]\d{9,14}$/.test(digits) || (!international && ![12, 13].includes(digits.length))) return phone;
+  const url = new URL('https://web.whatsapp.com/send');
+  url.searchParams.set('phone', digits);
+  url.searchParams.set('text', 'Oi, eu sou supervisor da Direc Promoções, estou aqui entrando em contato a respeito de vagas para diárias. Você teria interesse?');
+  const link = document.createElement('a');
+  link.className = 'worker-whatsapp-link';
+  link.href = url.href;
+  link.target = '_blank';
+  link.rel = 'noopener noreferrer';
+  link.textContent = phone;
+  link.setAttribute('aria-label', `Conversar com ${record.nome} no WhatsApp Web`);
+  link.title = 'Abrir WhatsApp Web com mensagem pronta sobre vagas para diárias';
+  return link;
+}
+
 function render() {
   const rawTerm = $('#search').value.trim().toLocaleLowerCase('pt-BR');
   const term = /^[\d.\s-]+$/.test(rawTerm) ? rawTerm.replace(/\D/g, '') : '';
@@ -329,6 +352,8 @@ function render() {
     const name = document.createElement('strong'); name.textContent = item.nome;
     const cpf = document.createElement('small'); cpf.textContent = `CPF ${maskCpf(item.cpf)}`;
     identity.append(name, cpf);
+    const contact = workerWhatsAppContact(item);
+    if (contact instanceof Node) identity.append(contact);
     tr.append(identity, cell(item.setores.join(', '), 'sector-cell'), cell(item.bairro));
     const status = document.createElement('td');
     const badge = document.createElement('span');
@@ -358,7 +383,9 @@ function detailSection(title, entries) {
   entries.forEach(([label, value]) => {
     const pair = document.createElement('div');
     const term = document.createElement('dt'); term.textContent = label;
-    const description = document.createElement('dd'); description.textContent = value || 'Não informado';
+    const description = document.createElement('dd');
+    if (value instanceof Node) description.append(value);
+    else description.textContent = value || 'Não informado';
     pair.append(term, description); list.append(pair);
   });
   section.append(heading, list);
@@ -388,7 +415,7 @@ function renderDetail(record) {
   const address = [[record.logradouro, record.numero].filter(Boolean).join(', '), record.complemento, record.bairro, [record.cidade, record.uf].filter(Boolean).join('/'), record.cep ? `CEP ${formatCep(record.cep)}` : ''].filter(Boolean).join(' · ');
   $('#edit-button').textContent = partialWorker(record) ? 'Completar cadastro' : 'Editar cadastro';
   $('#detail-fields').replaceChildren(
-    detailSection('Dados pessoais', [['Nome completo', record.nome], ['CPF', formatCpf(record.cpf)], ['Telefone / WhatsApp', record.telefone || 'Não informado'], ['Nascimento', record.data_nascimento ? record.data_nascimento.split('-').reverse().join('/') : 'Não informado'], ['Setores de experiência', record.setores.join(', ')]]),
+    detailSection('Dados pessoais', [['Nome completo', record.nome], ['CPF', formatCpf(record.cpf)], ['Telefone / WhatsApp', workerWhatsAppContact(record)], ['Nascimento', record.data_nascimento ? record.data_nascimento.split('-').reverse().join('/') : 'Não informado'], ['Setores de experiência', record.setores.join(', ')]]),
     detailSection('Endereço', [['Endereço completo', address]]),
     detailSection('Trabalho e disponibilidade', [['Trabalha atualmente', record.trabalhando == null ? 'Não informado' : record.trabalhando ? 'Sim' : 'Não'], ['Local de trabalho', record.local_trabalho || (record.trabalhando === false ? '—' : 'Não informado')], ['Dias e horários', schedule]]),
     detailSection('Locomoção', [['Pode atender qualquer região', record.pode_se_deslocar == null ? 'Não informado' : record.pode_se_deslocar ? 'Sim' : 'Regiões limitadas'], ['Meio de transporte', record.transporte || (record.pode_se_deslocar === false ? '—' : 'Não informado')], ['Observações', record.observacoes_locomocao || '—']]),
