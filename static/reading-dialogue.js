@@ -206,6 +206,8 @@
     if(!permission(item,context.role))return {message:'Seu perfil não tem permissão para consultar estas informações.',target:null};
     if(item.dados.consulta==='ajuda')return {message:help,target:null};
     if(item.dados.consulta==='pessoa'){
+      const supplied=field(item.texto,['cpf'])||/\bCPF\s*:?\s*([\d. -]{11,18})/i.exec(item.texto)?.[1];
+      if(supplied&&!parser.validCpf(digits(supplied)))return {message:'Confira o CPF: o número informado não é válido. Não posso afirmar se a pessoa está cadastrada com esse CPF.',target:null};
       const matches=people(item.texto,context);if(matches.length!==1)return {message:matches.length?'Encontrei mais de uma pessoa. Informe o CPF para consultar o cadastro correto.':'Diarista ainda não cadastrado com os dados informados. Confira o nome e o CPF antes de cadastrar.',target:'#diaristas'};
       const w=matches[0],scales=(context.scales||[]).filter(s=>s.diarista_id===w.id&&!s.substituida_por_escala_id);return {message:`${w.nome}: diarista já cadastrado${w.bloqueada?', cadastro bloqueado':''}. Setores: ${(w.setores||[]).join(', ')||'não informados'}. ${scales.filter(s=>s.status==='escalada').length} escala(s) planejada(s), ${scales.filter(s=>s.status==='presente').length} presença(s), ${scales.filter(s=>s.status==='falta').length} falta(s).`,target:'#diaristas'};
     }
