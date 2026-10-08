@@ -1,7 +1,7 @@
 {
   "private": true,
   "scripts": {
-    "test:unit": "node --test tests/test_management.cjs tests/test_automation.cjs tests/test_forecast.cjs tests/test_reading.cjs tests/test_reading_assistant.cjs tests/test_matching.cjs tests/test_reconciliation.cjs tests/test_insights.cjs tests/test_crm.cjs tests/test_payment_calendar.cjs tests/test_portal_signup.mjs tests/test_messages.cjs tests/test_backup_model.cjs tests/test_usability.cjs",
+    "test:unit": "node --test tests/test_management.cjs tests/test_automation.cjs tests/test_forecast.cjs tests/test_reading.cjs tests/test_reading_assistant.cjs tests/test_reading_dialogue.cjs tests/test_matching.cjs tests/test_reconciliation.cjs tests/test_insights.cjs tests/test_crm.cjs tests/test_payment_calendar.cjs tests/test_portal_signup.mjs tests/test_messages.cjs tests/test_backup_model.cjs tests/test_usability.cjs",
     "test:e2e": "node tests/e2e.mjs"
   },
   "devDependencies": {

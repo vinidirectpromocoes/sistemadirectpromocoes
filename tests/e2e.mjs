@@ -108,7 +108,7 @@ async function runRoleNavigation() {
       await page.waitForFunction(expected => window.directRemote?.role === expected, role);
       for (const [id, allowed] of Object.entries({
         'nav-financeiro': ['admin', 'financeiro'], 'nav-configuracoes': ['admin', 'financeiro'],
-        'nav-vagas': ['admin', 'operacao'], 'nav-convites': ['admin', 'operacao'], 'nav-leitura': ['admin', 'operacao'], 'new-order-button': ['admin', 'operacao'],
+        'nav-vagas': ['admin', 'operacao'], 'nav-convites': ['admin', 'operacao'], 'nav-leitura': ['admin', 'operacao', 'financeiro', 'consulta'], 'new-order-button': ['admin', 'operacao'],
         'backup-settings': ['admin'], 'staff-settings': ['admin'],
         'store-requests-button': ['admin','operacao'], 'daily-summary-button': ['admin','operacao'], 'order-models-button': ['admin','operacao'], 'cash-agenda': ['admin','financeiro'],
       })) {
@@ -841,6 +841,7 @@ try {
   if(process.env.DIRECT_EXTENDED_ONLY==='1'){await runFinancialWorkflow();await runExtendedWorkflow();}
   else if(process.env.DIRECT_ASSIGNMENT_ONLY==='1'){await runAssignmentPersistence();}
   else if(process.env.DIRECT_RECENT_ONLY==='1'){await runRecentOrderAttendance();}
+  else if(process.env.DIRECT_ROLES_ONLY==='1'){await runRoleNavigation();}
   else if(process.env.DIRECT_MESSAGES_ONLY==='1'){await runMessagesFlow();await runRoleNavigation();}
   else if(process.env.DIRECT_FINANCE_ONLY==='1'){await runFinancialWorkflow();}
   else if(process.env.DIRECT_CALENDAR_ONLY==='1'){await runPaymentCalendars();}

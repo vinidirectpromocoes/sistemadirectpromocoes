@@ -38,6 +38,7 @@ jobs:
           node tests/automation_e2e.mjs
           node tests/management_e2e.mjs
           pnpm test:e2e
+          node tests/dialogue_e2e.mjs
           node tests/portal_e2e.mjs
           node tests/portal_admin_e2e.mjs
           node tests/vacancies_e2e.mjs

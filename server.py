@@ -912,7 +912,7 @@ class Handler(BaseHTTPRequestHandler):
             assets['/'+asset]='text/javascript; charset=utf-8'
         assets['/messages.css']='text/css; charset=utf-8'
         assets["/reconciliation.js"] = "text/javascript; charset=utf-8"
-        for asset in ['usability.js','usability-model.js','reading-assistant.js','insights.js','offline.js','operations-extended.js','crm-model.js','hub.js','portal-admin.js','vacancies-admin.js','portal.js','sw.js']:
+        for asset in ['usability.js','usability-model.js','reading-assistant.js','reading-dialogue.js','insights.js','offline.js','operations-extended.js','crm-model.js','hub.js','portal-admin.js','vacancies-admin.js','portal.js','sw.js']:
             assets['/'+asset]='text/javascript; charset=utf-8'
         assets['/manifest.webmanifest']='application/manifest+json'
         assets['/extended.css']='text/css; charset=utf-8'
@@ -1047,14 +1047,14 @@ class Handler(BaseHTTPRequestHandler):
                     for day in days:
                         if order_shift(order, day) is None:
                             raise ValueError(f"A data {day} não consta no pedido.")
-                        validate_worker_shift(db, person, order, day)
+                        validate_worker_shift(db, person, order, day, scoped_availability=payload.get('disponibilidade_confirmada') is True)
                         if db.execute("SELECT 1 FROM pedido_escalas WHERE pedido_id = ? AND data = ? AND diarista_id = ?", (scale_route[0], day, person["id"])).fetchone():
                             raise ValueError(f"A diarista já está neste pedido em {day}.")
                         count = db.execute("SELECT count(*) FROM pedido_escalas WHERE pedido_id = ? AND data = ? AND status NOT IN ('falta','desistiu')", (scale_route[0], day)).fetchone()[0]
                         if count >= order["quantidade_diaristas"]:
                             raise ValueError(f"A quantidade de diaristas em {day} já foi preenchida.")
                     now = datetime.now(timezone.utc).isoformat()
-                    ids = [db.execute("INSERT INTO pedido_escalas (pedido_id, diarista_id, data, status, criado_em, atualizado_em) VALUES (?, ?, ?, 'escalada', ?, ?)", (scale_route[0], payload["diarista_id"], day, now, now)).lastrowid for day in days]
+                    ids = [db.execute("INSERT INTO pedido_escalas (pedido_id, diarista_id, data, status, disponibilidade_pedido_confirmada, criado_em, atualizado_em) VALUES (?, ?, ?, 'escalada', ?, ?, ?)", (scale_route[0], payload["diarista_id"], day, int(payload.get('disponibilidade_confirmada') is True), now, now)).lastrowid for day in days]
                     for day, new_id in zip(days, ids):
                         absence = db.execute("""SELECT id FROM pedido_escalas WHERE pedido_id = ? AND data = ?
                             AND status IN ('falta','desistiu') AND substituida_por_escala_id IS NULL ORDER BY id LIMIT 1""", (scale_route[0], day)).fetchone()
@@ -1361,6 +1361,8 @@ class Handler(BaseHTTPRequestHandler):
                     scale = db.execute("SELECT * FROM pedido_escalas WHERE id = ? AND pedido_id = ?", (scale_route[1], scale_route[0])).fetchone()
                     if not scale:
                         return self.respond(HTTPStatus.NOT_FOUND, {"erro": "Escala não encontrada."})
+                    if payload.get('expected_updated_at') and payload['expected_updated_at'] != scale['atualizado_em']:
+                        return self.respond(HTTPStatus.CONFLICT, {'erro':'A escala mudou depois da leitura. Confira novamente.'})
                     order = db.execute("SELECT * FROM pedidos WHERE id = ?", (scale_route[0],)).fetchone()
                     if scale['status']=='desistiu' and status!='desistiu': raise ValueError('Preserve a desistência registrada. Escolha uma substituição.')
                     if status=='desistiu' and scale['status'] not in ('escalada','desistiu'): raise ValueError('Desistência disponível apenas antes da presença ou falta.')
@@ -1438,9 +1440,17 @@ class Handler(BaseHTTPRequestHandler):
                 if "motivo_ajuste" in payload:
                     updates["motivo_ajuste"] = clean_text(payload["motivo_ajuste"], "o motivo da correção", 300, False)
                 with connect() as db:
+                    db.execute('BEGIN IMMEDIATE')
                     old = db.execute("SELECT * FROM diarias WHERE id = ? AND diarista_id = ?", (int(payment_match.group(2)), int(payment_match.group(1)))).fetchone()
                     if not old:
                         return self.respond(HTTPStatus.NOT_FOUND, {"erro": "Diária não encontrada."})
+                    if 'expected_payment' in payload:
+                        expected=payload['expected_payment']
+                        keys=('data_pagamento','valor_centavos','vencimento_pagamento','forma_pagamento','pagamento_lote_id')
+                        if not isinstance(expected,dict) or any(key not in expected for key in keys):
+                            raise ValueError('Confira novamente os dados do pagamento.')
+                        if any(expected[key] != old[key] for key in keys):
+                            return self.respond(HTTPStatus.CONFLICT, {'erro':'O pagamento mudou depois da leitura. Confira novamente antes de aplicar.'})
                     if old["pagamento_lote_id"] is not None:
                         raise ValueError("Reabra o fechamento antes de corrigir esta diária.")
                     effective = {key: updates.get(key, old[key]) for key in ("data_pagamento", "valor_centavos", "vencimento_pagamento")}
@@ -1468,9 +1478,9 @@ class Handler(BaseHTTPRequestHandler):
             if not isinstance(payload, dict) or not isinstance(payload.get("bloqueada"), bool):
                 raise ValueError("Informe o estado do bloqueio.")
             with connect() as db:
-                cur = db.execute("UPDATE diaristas SET bloqueada = ?, atualizado_em = ? WHERE id = ?", (int(payload["bloqueada"]), datetime.now(timezone.utc).isoformat(), int(match.group(1))))
+                cur = db.execute("UPDATE diaristas SET bloqueada = ?, atualizado_em = ? WHERE id = ? AND (? IS NULL OR atualizado_em = ?)", (int(payload["bloqueada"]), datetime.now(timezone.utc).isoformat(), int(match.group(1)),payload.get('expected_updated_at'),payload.get('expected_updated_at')))
                 if not cur.rowcount:
-                    return self.respond(HTTPStatus.NOT_FOUND, {"erro": "Cadastro não encontrado."})
+                    return self.respond(HTTPStatus.CONFLICT, {"erro": "O cadastro mudou ou não foi encontrado. Confira novamente."})
                 row = db.execute("SELECT * FROM diaristas WHERE id = ?", (int(match.group(1)),)).fetchone()
             return self.respond(HTTPStatus.OK, public_row(row))
         except (ValueError, json.JSONDecodeError, TypeError) as exc:
@@ -1496,11 +1506,15 @@ class Handler(BaseHTTPRequestHandler):
             return self.respond(HTTPStatus.OK if cur.rowcount else HTTPStatus.NOT_FOUND, {"ok": bool(cur.rowcount)})
         scale_route = self.route_escalas()
         if scale_route and scale_route[1] is not None:
+            payload=self.read_json() if int(self.headers.get('Content-Length','0')) else {}
             with connect() as db:
-                scale = db.execute("SELECT status FROM pedido_escalas WHERE id = ? AND pedido_id = ?", (scale_route[1], scale_route[0])).fetchone()
+                db.execute('BEGIN IMMEDIATE')
+                scale = db.execute("SELECT * FROM pedido_escalas WHERE id = ? AND pedido_id = ?", (scale_route[1], scale_route[0])).fetchone()
                 if not scale:
                     return self.respond(HTTPStatus.NOT_FOUND, {"erro": "Escala não encontrada."})
-                if scale["status"] != "escalada":
+                if payload.get('expected_updated_at') and payload['expected_updated_at'] != scale['atualizado_em']:
+                    return self.respond(HTTPStatus.CONFLICT, {'erro':'A escala mudou depois da leitura. Confira novamente.'})
+                if scale["status"] != "escalada" or scale['substituida_por_escala_id'] or db.execute('SELECT 1 FROM pedido_escalas WHERE substituida_por_escala_id=?',(scale_route[1],)).fetchone():
                     return self.respond(HTTPStatus.CONFLICT, {"erro": "Presenças e faltas registradas não podem ser excluídas."})
                 db.execute("UPDATE pedido_escalas SET substituida_por_escala_id = NULL WHERE substituida_por_escala_id = ?", (scale_route[1],))
                 db.execute("DELETE FROM pedido_escalas WHERE id = ?", (scale_route[1],))
@@ -1554,7 +1568,12 @@ class Handler(BaseHTTPRequestHandler):
         record_id = self.route_id()
         if record_id is None:
             return self.respond(HTTPStatus.NOT_FOUND, {"erro": "Rota não encontrada."})
+        payload=self.read_json() if int(self.headers.get('Content-Length','0')) else {}
         with connect() as db:
+            db.execute('BEGIN IMMEDIATE')
+            old=db.execute('SELECT atualizado_em FROM diaristas WHERE id=?',(record_id,)).fetchone()
+            if payload.get('expected_updated_at') and (not old or payload['expected_updated_at']!=old['atualizado_em']):
+                return self.respond(HTTPStatus.CONFLICT, {'erro':'O cadastro mudou depois da leitura. Confira novamente antes de excluir.'})
             if db.execute("SELECT 1 FROM pedido_escalas WHERE diarista_id = ? LIMIT 1", (record_id,)).fetchone():
                 return self.respond(HTTPStatus.CONFLICT, {"erro": "Esta diarista possui escalas registradas. Bloqueie o cadastro para preservar o histórico."})
             if db.execute("SELECT 1 FROM diarias WHERE diarista_id = ? LIMIT 1", (record_id,)).fetchone():

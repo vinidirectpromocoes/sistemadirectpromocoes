@@ -37,6 +37,7 @@ def replace(db,order_id,scale_id,payload,core):
     old=db.execute('SELECT * FROM pedido_escalas WHERE id=? AND pedido_id=?',(scale_id,order_id)).fetchone()
     order=db.execute('SELECT * FROM pedidos WHERE id=?',(order_id,)).fetchone()
     if not old or not order: raise ValueError('Escala não encontrada.')
+    if payload.get('expected_updated_at') and payload['expected_updated_at']!=old['atualizado_em']: raise ValueError('A escala mudou depois da leitura. Confira novamente antes de substituir.')
     if order['situacao'] in ('cancelado','concluido') or old['status']=='presente': raise ValueError('Substituição disponível apenas antes da presença e em pedido aberto.')
     if old['diarista_id']==payload['diarista_id']: raise ValueError('Escolha outra pessoa para substituir.')
     if old['substituida_por_escala_id']:

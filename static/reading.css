@@ -105,3 +105,9 @@ html[data-theme="dark"] .reading-help p, html[data-theme="dark"] .reading-review
 html[data-theme="dark"] .reading-suggestions button { border-color:var(--dark-border); color:var(--dark-text); }
 @media(max-width:700px) { .reading-chat { padding:14px 15px 0; } .reading-help { margin:14px 15px 0; } .reading-review-fields { gap:9px; } .reading-form textarea { font-size:16px; } #reading-review-actions { position:sticky; bottom:0; background:var(--surface,#fff); border-radius:0 0 16px 16px; padding-top:12px; } html[data-theme="dark"] #reading-review-actions { background:var(--dark-raised); } }
 @media(prefers-reduced-motion:reduce) { .reading-preview { animation:none; } }
+
+.reading-questions { display:flex; flex-wrap:wrap; gap:8px; margin:12px 0; }
+.reading-questions p { flex-basis:100%; margin:0; font-weight:600; }
+.reading-choice { min-height:44px; max-width:100%; white-space:normal; overflow-wrap:anywhere; text-align:left; }
+.reading-availability { min-height:44px; }
+.reading-availability input { flex-shrink:0; }
