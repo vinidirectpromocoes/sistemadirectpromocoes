@@ -32,6 +32,25 @@ def sync(db,order_id):
     db.execute('UPDATE pedidos SET situacao=?,atualizado_em=? WHERE id=?',(status,datetime.now(timezone.utc).isoformat(),order_id))
 
 
+def withdraw_remaining(db, order_id, scale_id, payload, core):
+    old = db.execute('SELECT * FROM pedido_escalas WHERE id=? AND pedido_id=?', (scale_id, order_id)).fetchone()
+    order = db.execute('SELECT * FROM pedidos WHERE id=?', (order_id,)).fetchone()
+    if not old or not order: raise ValueError('Escala não encontrada.')
+    if order['situacao'] in ('cancelado', 'concluido'): raise ValueError('Desistência disponível apenas em pedido aberto.')
+    if old['status'] not in ('escalada', 'desistiu'): raise ValueError('Desistência disponível apenas antes da presença ou falta.')
+    if old['substituida_por_escala_id']: raise ValueError('Esta escala já tem substituição registrada.')
+    reason = old['desistencia_motivo'] if old['status'] == 'desistiu' else core.clean_text(payload.get('motivo'), 'o motivo da desistência', 300)
+    if len(reason or '') < 5: raise ValueError('Informe o motivo da desistência com 5 a 300 caracteres.')
+    now = datetime.now(timezone.utc).isoformat()
+    changed = db.execute("""UPDATE pedido_escalas SET status='desistiu', desistencia_motivo=?,
+        desistencia_em=?,desistencia_por='Servidor local',atualizado_em=?
+        WHERE pedido_id=? AND diarista_id=? AND data>=? AND status='escalada'
+        AND substituida_por_escala_id IS NULL""", (reason, now, now, order_id, old['diarista_id'], old['data'])).rowcount
+    sync(db, order_id)
+    row = next(r for r in core.order_scale_rows(db, order_id) if r['id'] == scale_id)
+    return {**row, 'desistencias_registradas': changed}
+
+
 def replace(db,order_id,scale_id,payload,core):
     if not isinstance(payload,dict) or type(payload.get('diarista_id')) is not int: raise ValueError('Escolha a pessoa substituta.')
     old=db.execute('SELECT * FROM pedido_escalas WHERE id=? AND pedido_id=?',(scale_id,order_id)).fetchone()
@@ -44,6 +63,8 @@ def replace(db,order_id,scale_id,payload,core):
         found=db.execute('SELECT * FROM pedido_escalas WHERE id=?',(old['substituida_por_escala_id'],)).fetchone()
         if found and found['diarista_id']==payload['diarista_id']: return dict(found)
         raise ValueError('Esta escala já tem substituição registrada.')
+    if old['status']=='desistiu':
+        withdraw_remaining(db,order_id,scale_id,{},core)
     person=db.execute('SELECT * FROM diaristas WHERE id=?',(payload['diarista_id'],)).fetchone()
     if not person or person['bloqueada']: raise ValueError('Escolha uma pessoa cadastrada e não bloqueada.')
     now=datetime.now(timezone.utc).isoformat()

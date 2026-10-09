@@ -687,8 +687,8 @@ async function runScaleLifecycle() {
       await page.getByRole('button',{name:'✓ Confirmou que vai',exact:true}).click();await page.getByText('Resposta: confirmada',{exact:true}).waitFor();
       let scale=(await api('GET','/api/escalas')).find(s=>s.pedido_id===original.pedido_id);assert.equal(scale.status,'escalada');assert.equal(scale.confirmacao,'confirmou');assert.equal(scale.diaria,null);
       await page.getByRole('button',{name:`Substituir ${person} em ${day.split('-').reverse().join('/')}`,exact:true}).click();
-      await page.getByLabel(`Pessoa substituta de ${person}`,{exact:true}).selectOption(String(replacement.id));await page.getByLabel('Motivo da desistência para substituir',{exact:true}).fill('Desistiu por motivo pessoal');await page.getByText('Confirmei a disponibilidade da substituta para este dia e horário',{exact:true}).click();await page.getByRole('button',{name:'Salvar substituição',exact:true}).click();
-      await page.getByText('Substituição registrada. Histórico preservado; confirme se a nova pessoa vai e depois registre presença ou falta.',{exact:true}).waitFor();
+      await page.getByLabel(`Pessoa substituta de ${person}`,{exact:true}).selectOption(String(replacement.id));await page.getByLabel('Motivo da desistência para substituir',{exact:true}).fill('Desistiu por motivo pessoal');await page.getByText('Confirmei a disponibilidade da pessoa substituta para os dias e horários escolhidos',{exact:true}).click();await page.getByRole('button',{name:'Salvar substituição',exact:true}).click();
+      await page.getByText(/^Substituição registrada somente em /).waitFor();
       let scales=(await api('GET','/api/escalas')).filter(s=>s.pedido_id===original.pedido_id);const old=scales.find(s=>s.diarista_id===original.diarista_id),current=scales.find(s=>s.diarista_id===replacement.id);assert.equal(old.status,'desistiu');assert.equal(old.substituida_por_escala_id,current.id);assert.equal(old.confirmacao,'confirmou');assert.equal(current.status,'escalada');assert.equal(current.confirmacao,'aguardando');assert.equal(current.diaria,null);
       await page.locator('#order-detail-close-bottom').click();
       // This assertion checks persistence after the save and its dependent refreshes.
@@ -697,7 +697,7 @@ async function runScaleLifecycle() {
       await page.reload();await page.locator('#orders-search').fill(label);await row.filter({hasText:substitute}).waitFor();assert.doesNotMatch(await row.innerText(),new RegExp(`Escalados?: ${person}`));assert.equal(await row.locator('.order-neon.green').count(),1);
       await row.getByRole('button',{name:'Ver pedido de Hipermarket',exact:true}).click();await page.locator('#order-detail-dialog').waitFor({state:'visible'});
       page.once('dialog',dialog=>dialog.accept('Desistência comunicada para teste'));
-      await page.getByRole('button',{name:`Desistência de ${substitute} em ${day.split('-').reverse().join('/')}`,exact:true}).click();await page.getByText('Desistência registrada. Vaga aberta para substituição; previsão financeira atualizada.',{exact:true}).waitFor();
+      await page.getByRole('button',{name:`Desistência de ${substitute} em ${day.split('-').reverse().join('/')}`,exact:true}).click();await page.getByText(/^Desistência registrada. Diarista retirado das escalas deste dia em diante neste pedido/).waitFor();
       await page.locator('#order-detail-close-bottom').click();assert.equal(await row.locator('.order-neon.yellow').count(),1);
       assert.equal(await page.evaluate(()=>orderCoverage({id:99999,situacao:'novo',quantidade_diaristas:1,turnos:[{data:'2099-10-01',inicio:'07:00',fim:'15:20'}]}).color),'red');
       for(const theme of ['light','dark']){await page.evaluate(t=>document.documentElement.dataset.theme=t,theme);assert.ok(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth+2));}

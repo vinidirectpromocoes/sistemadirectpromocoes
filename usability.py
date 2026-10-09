@@ -70,9 +70,37 @@ def response_save(db,p):
 def replace_remaining(db,order_id,scale_id,p,core):
     old=db.execute('SELECT * FROM pedido_escalas WHERE id=? AND pedido_id=?',(scale_id,order_id)).fetchone()
     if not old:raise ValueError('Escala não encontrada.')
-    slots=db.execute("SELECT id FROM pedido_escalas WHERE pedido_id=? AND diarista_id=? AND data>=? AND status<>'presente' AND substituida_por_escala_id IS NULL ORDER BY data,id",(order_id,old['diarista_id'],old['data'])).fetchall()
-    if not slots:raise ValueError('Nenhum dia para substituir.')
-    return [core.scale_lifecycle.replace(db,order_id,s['id'],p,core) for s in slots]
+    order=db.execute('SELECT * FROM pedidos WHERE id=?',(order_id,)).fetchone()
+    if order['situacao'] in ('cancelado','concluido') or old['status']=='presente':raise ValueError('Substituição disponível apenas antes da presença e em pedido aberto.')
+    if type(p.get('diarista_id')) is not int or p['diarista_id']==old['diarista_id']:raise ValueError('Escolha outra pessoa para substituir.')
+    if p.get('expected_updated_at') and p['expected_updated_at']!=old['atualizado_em']:raise ValueError('A escala mudou depois da leitura. Confira novamente antes de substituir.')
+    results=[]
+    for shift in sorted(json.loads(order['turnos']),key=lambda t:t['data']):
+        day=shift['data']
+        if day<old['data']:continue
+        origin=db.execute('SELECT * FROM pedido_escalas WHERE pedido_id=? AND diarista_id=? AND data=?',(order_id,old['diarista_id'],day)).fetchone()
+        if origin:
+            if origin['status']=='presente':continue
+            if origin['substituida_por_escala_id']:
+                replacement=db.execute('SELECT * FROM pedido_escalas WHERE id=?',(origin['substituida_por_escala_id'],)).fetchone()
+                if origin['id']==scale_id and replacement['diarista_id']!=p['diarista_id']:raise ValueError('Esta escala já tem substituição registrada.')
+                if replacement['diarista_id']==p['diarista_id']:results.append(dict(replacement))
+                continue
+            results.append(core.scale_lifecycle.replace(db,order_id,origin['id'],{k:v for k,v in p.items() if k!='expected_updated_at'},core))
+        else:
+            count=db.execute("SELECT count(*) FROM pedido_escalas WHERE pedido_id=? AND data=? AND status NOT IN ('falta','desistiu')",(order_id,day)).fetchone()[0]
+            if count>=order['quantidade_diaristas']:continue
+            person=db.execute('SELECT * FROM diaristas WHERE id=?',(p['diarista_id'],)).fetchone()
+            if not person or person['bloqueada']:raise ValueError('Escolha uma pessoa cadastrada e não bloqueada.')
+            scoped=p.get('disponibilidade_confirmada',False)
+            if type(scoped) is not bool:raise ValueError('Confirme a disponibilidade para os dias escolhidos.')
+            core.validate_worker_shift(db,person,order,day,scoped_availability=scoped)
+            now=datetime.now(timezone.utc).isoformat()
+            id=db.execute("INSERT INTO pedido_escalas(pedido_id,diarista_id,data,status,disponibilidade_pedido_confirmada,criado_em,atualizado_em) VALUES (?,?,?,'escalada',?,?,?)",(order_id,person['id'],day,int(scoped),now,now)).lastrowid
+            results.append(dict(db.execute('SELECT * FROM pedido_escalas WHERE id=?',(id,)).fetchone()))
+    if not results:raise ValueError('Nenhum dia para substituir.')
+    core.scale_lifecycle.sync(db,order_id)
+    return results
 
 def handle(handler,method,core):
     path=urlparse(handler.path).path

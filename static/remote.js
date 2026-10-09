@@ -413,6 +413,7 @@
           return unwrap(await sb.from('pedido_escalas').insert({ pedido_id: id, diarista_id: Number(p.diarista_id), data: p.data }).select().single());
         }
         if (method === 'PATCH') {
+          if(p.status==='desistiu')return unwrap(await sb.rpc('direct_withdraw_order_remaining',{p_pedido_id:id,p_escala_id:scaleId,p_motivo:p.motivo||'',p_expected_updated_at:p.expected_updated_at||null}));
           let query=sb.from('pedido_escalas').update({status:p.status,...(p.status==='falta'?{falta_motivo:p.motivo}:p.status==='desistiu'?{desistencia_motivo:p.motivo}:{})}).eq('pedido_id',id).eq('id',scaleId);
           if(p.expected_updated_at)query=query.eq('atualizado_em',p.expected_updated_at);
           const saved=unwrap(await query.select().maybeSingle());if(!saved)throw Error('A escala mudou depois da leitura. Confira novamente.');return saved;
