@@ -7,3 +7,12 @@ test('v10 preserves enterprise relationships and rejects missing parent snapshot
 test('hypothetical cash scenarios do not masquerade as realized profit',()=>{a.deepEqual(m.simulate({opening:10000,receipts:5000,payments:3000,extra:2000,delayed:1000}),{base:12000,scenario:9000});const r=m.assistant('qual a margem?',{inicio:'2026-10-01',fim:'2026-10-08'});a.match(r.message,/não tem acesso/);});
 
 test('deadlines display in Fortaleza rather than shifting on repeated edits',()=>{a.equal(m.localDateTime('2026-10-08T12:30:45.123Z'),'2026-10-08T09:30');a.equal(m.localDateTime('2026-10-08T09:30:45-03:00'),'2026-10-08T09:30');});
+
+const workspace=require('../static/enterprise-workspace.js');
+test('every business entity belongs to exactly one dedicated area with an action and explanation',()=>{
+ const assigned=Object.values(workspace.areas).flatMap(a=>a.kinds);
+ a.equal(new Set(assigned).size,assigned.length);
+ a.deepEqual([...assigned].sort(),Object.keys(m.schema.entities).sort());
+ for(const key of assigned){a.ok(workspace.guides[key].every(Boolean));a.ok(workspace.areas[workspace.areaFor(key)]);}
+ for(const role of ['admin','operacao','financeiro','consulta'])for(const key of Object.keys(workspace.areas))for(const kind of workspace.readable(key,m.schema,role))a.ok(m.canRead(kind,role));
+});

@@ -55,6 +55,7 @@ jobs:
         include:
           - area: Empresa
             scripts: |
+              node tests/enterprise_workspace_e2e.mjs
               node tests/enterprise_e2e.mjs
               node tests/enterprise_integrations_e2e.mjs
           - area: Operação

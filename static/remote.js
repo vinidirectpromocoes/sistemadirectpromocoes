@@ -42,6 +42,7 @@
       'pedidos-links': ['admin','operacao'], financeiro: ['admin', 'financeiro'], configuracoes: ['admin', 'financeiro'],
       vagas: ['admin', 'operacao'], convites: ['admin', 'operacao'], leitura: ['admin', 'operacao', 'financeiro', 'consulta'], diaristas: ['admin', 'operacao', 'financeiro'],
     })) document.querySelector(`#nav-${name}`).hidden = !allowed.includes(role);
+    for(const link of document.querySelectorAll('[data-enterprise-roles]')) link.hidden=!link.dataset.enterpriseRoles.split(',').includes(role);
     document.querySelector('#new-button').hidden = !['admin', 'operacao'].includes(role);
     document.querySelector('#new-order-button').hidden = !['admin', 'operacao'].includes(role);
     document.querySelector('#new-store-button').hidden = !['admin', 'operacao'].includes(role);
