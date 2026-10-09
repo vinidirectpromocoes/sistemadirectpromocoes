@@ -404,28 +404,31 @@ async function changeOrderAttendance(scale, status) {
   if (scale.status === 'presente' && status === 'falta' && !window.confirm(`Corrigir a presença de ${scale.diarista_nome} para falta? A diária pendente será retirada do Financeiro.`)) return;
   let motivo = null;
   if (['falta','desistiu'].includes(status)) {
-    motivo = window.prompt(`Motivo ${status==='desistiu'?'da desistência':'da falta'} de ${scale.diarista_nome} em ${dateLabel(scale.data)}:`, '')?.trim();
+    motivo = window.prompt(`Motivo ${status==='desistiu'?'da desistência':'da falta'} de ${scale.diarista_nome} em ${dateLabel(scale.data)}:${status==='desistiu'?'\nA pessoa sairá das escalas deste dia em diante neste pedido. Dias já trabalhados serão preservados.':''}`, '')?.trim();
     if (motivo == null) return;
-    if (motivo.length < 5 || motivo.length > 300) return orderDetailError('Informe o motivo da falta com 5 a 300 caracteres.');
+    if (motivo.length < 5 || motivo.length > 300) return orderDetailError('Informe o motivo com 5 a 300 caracteres.');
   }
   orderDetailBusy = true;
   $('#order-detail-error').hidden = true;
   try {
-    await request(`/api/pedidos/${orderDetailId}/escalas/${scale.id}`, {
-      method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ status, motivo }),
+    const result = await request(`/api/pedidos/${orderDetailId}/escalas/${scale.id}`, {
+      method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ status, motivo, expected_updated_at: scale.atualizado_em }),
     });
     await refreshOrderScales();
     if (['falta','desistiu'].includes(status)) {
       const notice = $('#order-detail-success');
-      notice.textContent = `${status==='desistiu'?'Desistência':'Falta'} registrada. Vaga aberta para substituição; previsão financeira atualizada.`;
+      notice.textContent = status==='desistiu' ? `Desistência registrada. Diarista retirado das escalas deste dia em diante neste pedido (${result.desistencias_registradas || 0} dia(s)). Escolha a pessoa substituta e os dias que ela atenderá.` : 'Falta registrada. Vaga aberta para substituição; previsão financeira atualizada.';
       notice.hidden = false;
-      const pending=orderScales.find(s=>s.id===scale.id),row=document.querySelector(`[data-scale-id="${scale.id}"]`);if(pending&&row&&!pending.substituida_por_escala_id){orderDetailBusy=false;showOrderSubstitute(pending,row);orderDetailBusy=true;}
     }
     if (!window.directRemote || ['admin', 'financeiro'].includes(window.directRemote.role)) {
       if (status === 'presente') $('#finance-month').value = scale.data.slice(0, 7);
       await loadFinance();
     }
     if (typeof loadHome === 'function') await loadHome();
+    if (['falta','desistiu'].includes(status)) {
+      const pending=orderScales.find(s=>s.id===scale.id),row=document.querySelector(`[data-scale-id="${scale.id}"]`);
+      if(pending&&row&&!pending.substituida_por_escala_id){orderDetailBusy=false;showOrderSubstitute(pending,row);}
+    }
   } catch (err) { orderDetailError(err.message); }
   finally { orderDetailBusy = false; }
 }
@@ -440,8 +443,16 @@ function showOrderSubstitute(scale,row) {
   label.append(select);panel.append(label);
   const reason=document.createElement('input');reason.type='text';reason.maxLength=300;reason.placeholder='Motivo da desistência';reason.setAttribute('aria-label','Motivo da desistência para substituir');
   if(scale.status==='escalada')panel.append(reason);
-  const allLabel=document.createElement('label');allLabel.className='scope-choice';const all=document.createElement('input');all.type='checkbox';allLabel.append(all,document.createTextNode('Substituir nos demais dias deste pedido a partir deste dia'));panel.append(allLabel);
-  const scope=document.createElement('label');scope.className='scope-choice';const checkbox=document.createElement('input');checkbox.type='checkbox';scope.append(checkbox,document.createTextNode('Confirmei a disponibilidade da substituta para este dia e horário'));panel.append(scope);
+  const order=orderRecords.find(o=>o.id===scale.pedido_id);
+  const dates=DirectQueue.remaining(scale,orderScales,order);
+  const choices=document.createElement('fieldset');choices.className='replacement-scope';
+  const legend=document.createElement('legend');legend.textContent='Quais dias a pessoa substituta atenderá?';choices.append(legend);
+  const singleLabel=document.createElement('label');singleLabel.className='scope-choice';const single=document.createElement('input');single.type='radio';single.name=`replacement-scope-${scale.id}`;single.value='dia';single.checked=true;singleLabel.append(single,document.createTextNode(`Somente este dia (${dateLabel(scale.data)})`));choices.append(singleLabel);
+  const allLabel=document.createElement('label');allLabel.className='scope-choice';const all=document.createElement('input');all.type='radio';all.name=single.name;all.value='restantes';allLabel.append(all,document.createTextNode(`Este dia e os dias restantes do pedido (${dates.length} dia(s))`));choices.append(allLabel);panel.append(choices);
+  const summary=document.createElement('p');summary.className='section-help';panel.append(summary);
+  const scope=document.createElement('label');scope.className='scope-choice';const checkbox=document.createElement('input');checkbox.type='checkbox';scope.append(checkbox,document.createTextNode('Confirmei a disponibilidade da pessoa substituta para os dias e horários escolhidos'));panel.append(scope);
+  function describeScope(){summary.textContent=all.checked?`A pessoa será escalada em ${dates.map(dateLabel).join(', ')}. Dias já trabalhados, preenchidos por outra pessoa ou com substituição concluída serão preservados.`:`A substituição será apenas em ${dateLabel(scale.data)}. As vagas dos outros dias continuarão pendentes.`;checkbox.checked=false;}
+  all.addEventListener('change',describeScope);single.addEventListener('change',()=>all.dispatchEvent(new Event('change')));describeScope();
   const actions=document.createElement('div');actions.className='order-assign-actions';
   const save=document.createElement('button');save.type='button';save.className='button button-primary';save.textContent='Salvar substituição';
   save.addEventListener('click',async()=>{
@@ -449,9 +460,9 @@ function showOrderSubstitute(scale,row) {
     if(scale.status==='escalada'&&reason.value.trim().length<5)return orderDetailError('Informe o motivo da desistência com pelo menos 5 caracteres.');
     orderDetailBusy=true;save.disabled=true;
     try {
-      await request(`/api/pedidos/${scale.pedido_id}/escalas/${scale.id}/substituir`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({diarista_id:Number(select.value),motivo:reason.value.trim(),disponibilidade_confirmada:checkbox.checked,todos_restantes:all.checked})});
+      const result=await request(`/api/pedidos/${scale.pedido_id}/escalas/${scale.id}/substituir`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({diarista_id:Number(select.value),motivo:reason.value.trim(),disponibilidade_confirmada:checkbox.checked,todos_restantes:all.checked})});
       await refreshOrderScales();if(typeof loadFinance==='function'&&(!window.directRemote||['admin','financeiro'].includes(window.directRemote.role)))await loadFinance();
-      $('#order-detail-success').textContent='Substituição registrada. Histórico preservado; confirme se a nova pessoa vai e depois registre presença ou falta.';$('#order-detail-success').hidden=false;
+      $('#order-detail-success').textContent=`Substituição registrada ${all.checked?`em ${result.length} dia(s) restantes do pedido`:`somente em ${dateLabel(scale.data)}`}. Histórico preservado; confirme se a nova pessoa vai e depois registre presença ou falta.`;$('#order-detail-success').hidden=false;
     }catch(error){orderDetailError(error.message);}finally{orderDetailBusy=false;save.disabled=false;}
   });
   const cancel=document.createElement('button');cancel.type='button';cancel.className='button button-quiet';cancel.textContent='Cancelar';cancel.addEventListener('click',()=>{panel.remove();refreshOrderScales().catch(e=>orderDetailError(e.message));});actions.append(save,cancel);panel.append(actions);row.append(panel);panel.scrollIntoView({block:'nearest'});

@@ -741,6 +741,8 @@ def apply_local_attendance(db, order_id, scale_id, payload):
     scale = db.execute("SELECT * FROM pedido_escalas WHERE id = ? AND pedido_id = ?", (scale_id, order_id)).fetchone()
     if not scale:
         raise ValueError("Escala não encontrada.")
+    if status == 'desistiu':
+        return scale_lifecycle.withdraw_remaining(db, order_id, scale_id, payload, sys.modules[__name__])
     order = db.execute("SELECT * FROM pedidos WHERE id = ?", (order_id,)).fetchone()
     if scale['status']=='desistiu' and status!='desistiu': raise ValueError('Preserve a desistência registrada. Escolha uma substituição.')
     if status=='desistiu' and scale['status'] not in ('escalada','desistiu'): raise ValueError('Desistência disponível apenas antes da presença ou falta.')
@@ -1381,66 +1383,7 @@ class Handler(BaseHTTPRequestHandler):
                         return self.respond(HTTPStatus.NOT_FOUND, {"erro": "Escala não encontrada."})
                     if payload.get('expected_updated_at') and payload['expected_updated_at'] != scale['atualizado_em']:
                         return self.respond(HTTPStatus.CONFLICT, {'erro':'A escala mudou depois da leitura. Confira novamente.'})
-                    order = db.execute("SELECT * FROM pedidos WHERE id = ?", (scale_route[0],)).fetchone()
-                    if scale['status']=='desistiu' and status!='desistiu': raise ValueError('Preserve a desistência registrada. Escolha uma substituição.')
-                    if status=='desistiu' and scale['status'] not in ('escalada','desistiu'): raise ValueError('Desistência disponível apenas antes da presença ou falta.')
-                    if status != scale["status"]:
-                        reason = clean_text(payload.get("motivo"), "o motivo da falta ou desistência", 300) if status in ("falta","desistiu") else None
-                        if reason is not None and len(reason) < 5:
-                            raise ValueError("Informe o motivo da falta com pelo menos 5 caracteres.")
-                        if status in {"presente", "falta"} and scale["data"] > datetime.now(FORTALEZA).date().isoformat():
-                            raise ValueError("Presença ou falta só pode ser registrada a partir da data da diária.")
-                        if scale["status"] == "presente":
-                            daily = db.execute("SELECT data_pagamento FROM diarias WHERE pedido_escala_id = ?", (scale["id"],)).fetchone()
-                            if daily and daily["data_pagamento"]:
-                                raise ValueError("A diária já foi paga. Corrija o pagamento antes de alterar a presença.")
-                            if db.execute("""SELECT 1 FROM cobranca_itens i JOIN diarias d ON d.id = i.diaria_id
-                                WHERE d.pedido_escala_id = ?""", (scale["id"],)).fetchone():
-                                raise ValueError("Esta presença já entrou numa cobrança. Cancele a cobrança antes de corrigir a falta.")
-                            db.execute("DELETE FROM diarias WHERE pedido_escala_id = ?", (scale["id"],))
-                        if scale["status"] == "falta" and status != "falta":
-                            person = db.execute("SELECT * FROM diaristas WHERE id=?", (scale["diarista_id"],)).fetchone()
-                            if not person or person["bloqueada"] or order["situacao"] in {"cancelado", "concluido"}:
-                                raise ValueError("Confira o cadastro e a situação do pedido antes de reativar a escala.")
-                            validate_worker_shift(db, person, order, scale["data"], scoped_availability=bool(scale["disponibilidade_pedido_confirmada"]))
-                            count = db.execute("SELECT count(*) FROM pedido_escalas WHERE pedido_id = ? AND data = ? AND status NOT IN ('falta','desistiu')", (scale_route[0], scale["data"])).fetchone()[0]
-                            if count >= order["quantidade_diaristas"]:
-                                raise ValueError("A quantidade de diaristas deste dia já foi preenchida.")
-                        if status == "presente":
-                            local = order["supermercado"] + (f" · {order['unidade']}" if order["unidade"] else "")
-                            network_rate = db.execute("SELECT * FROM tarifas_redes WHERE lower(rede) = lower(?)", (order["supermercado"],)).fetchone()
-                            sector_rate = db.execute("""SELECT valor_pago_centavos FROM tarifas_setores
-                                WHERE lower(setor) = lower(?) AND (lower(rede) = lower(?) OR rede IS NULL) AND valor_pago_centavos IS NOT NULL
-                                ORDER BY CASE WHEN lower(rede) = lower(?) THEN 0 ELSE 1 END LIMIT 1""",
-                                (order["setor"], order["supermercado"], order["supermercado"])).fetchone()
-                            paid_rate = sector_rate[0] if sector_rate else (network_rate["valor_padrao_centavos"] if network_rate else None)
-                            received_rate = network_rate["valor_recebido_centavos"] if network_rate else None
-                            contract = extended.effective_contract(db, order, scale['data'])
-                            if contract:
-                                paid_rate = contract['valor_pago_centavos'] if contract['valor_pago_centavos'] is not None else paid_rate
-                                received_rate = contract['valor_recebido_centavos'] if contract['valor_recebido_centavos'] is not None else received_rate
-                            import enterprise_actions
-                            proposal=enterprise_actions.contracted(db,scale_route[0])
-                            if proposal:
-                                paid_rate=proposal['custo_unitario_centavos'];received_rate=proposal['valor_unitario_centavos']
-                            due = calendar.payment_due(scale['data'], network_rate['pagamento_primeira_quinzena'], network_rate['pagamento_segunda_quinzena'], network_rate['pagamento_semanal_dia']) if network_rate else None
-                            db.execute("""INSERT INTO diarias (diarista_id, data, local, setor, observacoes, pedido_escala_id,
-                                valor_centavos, valor_recebido_centavos, vencimento_pagamento, criado_em, contrato_id, vencimento_recebimento, vencimento_origem)
-                                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
-                                (scale["diarista_id"], scale["data"], local, order["setor"],
-                                 f"Presença no pedido #{scale_route[0]}", scale["id"], paid_rate, received_rate,
-                                 due, datetime.now(timezone.utc).isoformat(), contract["id"] if contract else None, due, "calendario" if due else "nao_informado"))
-                        now = datetime.now(timezone.utc).isoformat()
-                        db.execute("""UPDATE pedido_escalas SET status = ?, atualizado_em = ?,
-                            falta_motivo = ?, falta_confirmada_por = ?, falta_confirmada_em = ?,
-                            substituida_por_escala_id = CASE WHEN ? IN ('falta','desistiu') THEN substituida_por_escala_id ELSE NULL END
-                            WHERE id = ?""", (status, now, reason if status=='falta' else None, "Servidor local" if status=='falta' else None,
-                            now if status=='falta' else None, status, scale["id"]))
-                        if status=='desistiu': db.execute('UPDATE pedido_escalas SET desistencia_motivo=?,desistencia_em=?,desistencia_por=? WHERE id=?',(reason,now,'Servidor local',scale['id']))
-                        scale_lifecycle.sync(db,scale_route[0])
-                        if scale['status'] == 'presente' and status != 'presente':
-                            db.execute("UPDATE pedido_escalas SET loja_validacao='pendente',loja_responsavel='',loja_observacao='',chegada_em=NULL,saida_em=NULL,loja_validada_em=NULL,loja_validada_por=NULL WHERE id=?", (scale['id'],))
-                    row = next(row for row in order_scale_rows(db, scale_route[0]) if row["id"] == scale["id"])
+                    row = apply_local_attendance(db, scale_route[0], scale_route[1], payload)
                 return self.respond(HTTPStatus.OK, row)
             except (ValueError, json.JSONDecodeError, TypeError) as exc:
                 return self.respond(HTTPStatus.BAD_REQUEST, {"erro": str(exc)})

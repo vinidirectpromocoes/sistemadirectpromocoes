@@ -70,6 +70,7 @@ class UsabilityTests(unittest.TestCase):
         self.assertEqual(self.call('POST','/api/substituicao-contatos',{'escala_id':scales[0]['id'],'diarista_id':new['id'],'resposta':'recusou'})[0],409)
         self.assertEqual(self.call('POST','/api/substituicao-contatos',{'escala_id':scales[0]['id'],'diarista_id':new['id'],'resposta':'recusou','expected_updated_at':response['atualizado_em'],'datas':['2039-01-01']})[0],400)
         with server.connect() as db:self.assertEqual(db.execute('select count(*) from diarias').fetchone()[0],0)
+
         # Cadastro bloqueado impede a troca inteira, sem alterar a escala original.
         self.call('PATCH',f"/api/diaristas/{new['id']}/bloqueio",{'bloqueada':True})
         code,result=self.call('POST',route,{'diarista_id':new['id'],'todos_restantes':True,'motivo':'Troca solicitada pela pessoa'});self.assertEqual(code,400,result)
@@ -79,3 +80,40 @@ class UsabilityTests(unittest.TestCase):
         code,result=self.call('POST',route,{'diarista_id':new['id'],'todos_restantes':True,'disponibilidade_confirmada':True,'motivo':'Troca solicitada pela pessoa'});self.assertEqual(code,200,result);self.assertEqual(len(result),3)
         scales=self.call('GET',f"/api/pedidos/{o['id']}/escalas")[1];self.assertEqual(sum(s['status']=='desistiu' for s in scales),3);self.assertTrue(all(s['substituida_por_escala_id'] for s in scales if s['diarista_id']==old['id']))
         with server.connect() as db:self.assertEqual(db.execute('select count(*) from diarias').fetchone()[0],0)
+
+    def test_withdrawal_releases_remaining_days_and_single_replacement_stays_single(self):
+        old=self.worker('52998224725','Original');new=self.worker('11144477735','Substituto')
+        today=datetime.now(server.FORTALEZA).date()
+        dates=[(today+timedelta(days=i)).isoformat() for i in [-1,0,1,2,3]]
+        p={'supermercado':'Hipermarket','unidade':'Vila União','setor':'FLV','quantidade_diaristas':1,'turnos':[{'data':d,'inicio':'07:00','fim':'15:20'} for d in dates]}
+        _,o=self.call('POST','/api/pedidos',p);route=f"/api/pedidos/{o['id']}/escalas"
+        self.assertEqual(self.call('POST',route,{'datas':dates,'diarista_id':old['id']})[0],201)
+        _,other=self.call('POST','/api/pedidos',p);other_route=f"/api/pedidos/{other['id']}/escalas"
+        self.assertEqual(self.call('POST',other_route,{'datas':dates,'diarista_id':old['id']})[0],201)
+        scales=self.call('GET',route)[1];before_other=self.call('GET',other_route)[1]
+        self.assertEqual(self.call('PATCH',route+f"/{scales[0]['id']}",{'status':'presente'})[0],200)
+        before_money=self.call('GET','/api/financeiro')[1]
+        origin=next(s for s in self.call('GET',route)[1] if s['data']==dates[1])
+        code,result=self.call('PATCH',route+f"/{origin['id']}",{'status':'desistiu','motivo':'Não pode continuar no pedido','expected_updated_at':'2000-01-01'})
+        self.assertEqual(code,409,result);self.assertEqual(sum(s['status']=='desistiu' for s in self.call('GET',route)[1]),0)
+        code,result=self.call('PATCH',route+f"/{origin['id']}",{'status':'desistiu','motivo':'Não pode continuar no pedido','expected_updated_at':origin['atualizado_em']})
+        self.assertEqual(code,200,result);self.assertEqual(result['desistencias_registradas'],4)
+        withdrawn=self.call('GET',route)[1];self.assertEqual(withdrawn[0]['status'],'presente');self.assertTrue(all(s['desistencia_em'] and s['desistencia_por'] for s in withdrawn[1:]));self.assertEqual(self.call('GET',other_route)[1],before_other)
+        self.assertEqual(self.call('GET','/api/financeiro')[1],before_money)
+        code,replacement=self.call('POST',route+f"/{origin['id']}/substituir",{'diarista_id':new['id'],'disponibilidade_confirmada':True,'todos_restantes':False})
+        self.assertEqual(code,200,replacement)
+        final=self.call('GET',route)[1];self.assertEqual([s['data'] for s in final if s['diarista_id']==new['id']],[dates[1]]);self.assertTrue(all(s['status']=='desistiu' and s['substituida_por_escala_id'] is None for s in final if s['diarista_id']==old['id'] and s['data']>dates[1]))
+        self.assertEqual(self.call('GET','/api/financeiro')[1],before_money)
+
+    def test_remaining_replacement_includes_empty_days_and_preserves_completed_replacements(self):
+        old=self.worker('52998224725','Original');new=self.worker('11144477735','Substituto');other=self.worker('12345678909','Outra pessoa')
+        dates=[(datetime.now(server.FORTALEZA).date()+timedelta(days=i)).isoformat() for i in range(4)]
+        p={'supermercado':'Hipermarket','unidade':'Vila União','setor':'FLV','quantidade_diaristas':1,'turnos':[{'data':d,'inicio':'07:00','fim':'15:20'} for d in dates]}
+        _,o=self.call('POST','/api/pedidos',p);route=f"/api/pedidos/{o['id']}/escalas"
+        self.call('POST',route,{'datas':dates[:2],'diarista_id':old['id']});self.call('POST',route,{'data':dates[3],'diarista_id':other['id']})
+        scales=self.call('GET',route)[1];self.call('POST',route+f"/{scales[1]['id']}/substituir",{'diarista_id':other['id'],'disponibilidade_confirmada':True,'motivo':'Troca já concluída neste dia'})
+        before_other=[s for s in self.call('GET',route)[1] if s['diarista_id']==other['id']]
+        code,result=self.call('POST',route+f"/{scales[0]['id']}/substituir",{'diarista_id':new['id'],'todos_restantes':True,'motivo':'Troca para dias restantes','disponibilidade_confirmada':True})
+        self.assertEqual(code,200,result);self.assertEqual([r['data'] for r in result],[dates[0],dates[2]])
+        final=self.call('GET',route)[1];self.assertEqual([s for s in final if s['diarista_id']==other['id']],before_other)
+        self.assertEqual(self.call('GET','/api/financeiro')[1],[])

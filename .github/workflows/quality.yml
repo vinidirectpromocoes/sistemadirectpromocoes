@@ -40,7 +40,9 @@ jobs:
       - name: Banco isolado, permissões e integrações
         env:
           DIRECT_QA_PG_DSN: postgresql://postgres:postgres@127.0.0.1:5432/postgres
-        run: python scripts/test_enterprise_postgres.py
+        run: |
+          python scripts/test_enterprise_postgres.py
+          python scripts/test_withdrawal_postgres.py
       - name: Testes de regras de negócio
         run: pnpm test:unit
   navegacao:
