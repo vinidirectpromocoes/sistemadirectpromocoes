@@ -95,7 +95,7 @@ async function runRoleNavigation() {
       });
       await context.route('**/vendor/supabase-2.117.2.js', route => route.fulfill({
         contentType: 'text/javascript', body: `window.supabase={createClient:()=>({
-          rpc:async(name)=>({data:name==='direct_backup_snapshot_v10'?{format:'direct-data-v10',exportedAt:new Date().toISOString(),tables:Object.fromEntries(window.DirectBackup.versions['direct-data-v10'].map(t=>[t,[]])),snapshot:{consistent:true,counts:Object.fromEntries(window.DirectBackup.versions['direct-data-v10'].map(t=>[t,0]))}}:name==='direct_network_links'||name==='direct_portal_vacancies'?[]:name==='direct_portal_registrations'?{total:0,items:[]}:{whatsapp:'',grupo_url:''},error:null}),
+          rpc:async(name)=>({data:name==='direct_backup_snapshot_v11'?{format:'direct-data-v11',exportedAt:new Date().toISOString(),tables:Object.fromEntries(window.DirectBackup.versions['direct-data-v11'].map(t=>[t,[]])),snapshot:{consistent:true,counts:Object.fromEntries(window.DirectBackup.versions['direct-data-v11'].map(t=>[t,0]))}}:name==='direct_network_links'||name==='direct_portal_vacancies'?[]:name==='direct_portal_registrations'?{total:0,items:[]}:{whatsapp:'',grupo_url:''},error:null}),
           auth:{getSession:async()=>({data:{session:{user:{email:'qa@example.invalid'}}},error:null}),onAuthStateChange:()=>{},signOut:async()=>({error:null})},
           from:(table)=>{const q={select:()=>q,eq:()=>q,order:()=>q,limit:()=>q,range:async()=>({data:[],error:null,count:0}),
             maybeSingle:async()=>({data:table==='direct_admins'?${role === 'admin' ? "{email:'qa@example.invalid'}" : 'null'}:
@@ -148,7 +148,7 @@ async function runRoleNavigation() {
         assert.equal(result.status, 0, `Cópia do navegador não restaurou: ${result.stderr}`);
         const operational = path.join(work, 'browser-operational.db');
         const drill = spawnSync(process.env.PYTHON || 'python3', ['-c',
-          'import sys; sys.path.insert(0,"scripts"); from restore_backup import restore_operational; counts=restore_operational(sys.argv[1],sys.argv[2],sys.argv[3]); assert len(counts) == 35',
+          'import sys; sys.path.insert(0,"scripts"); from restore_backup import restore_operational,ALL_TABLES; counts=restore_operational(sys.argv[1],sys.argv[2],sys.argv[3]); assert set(counts) == set(ALL_TABLES)',
           archive, 'senha-de-teste-12345', operational], { cwd: root, encoding: 'utf8' });
         assert.equal(drill.status, 0, `Cópia operacional não restaurou: ${drill.stderr}`);
         console.log('Backup no navegador → verificação → SQLite operacional isolado OK');

@@ -37,7 +37,7 @@
   for(const f of finance){if(f.origem==='cobranca'){
     if(f.status==='cancelada')continue;add(f.vencimento,'expectedIncome',Math.max(0,f.valor_centavos-(f.valor_recebido_centavos||0)));for(const r of f.recebimentos||[])if(!r.estornado)add(r.data_recebimento,'actualIncome',r.valor_centavos);continue;
    }
-   if(f.data_pagamento){if(f.valor_centavos==null){missing++;continue;}add(f.data_pagamento,f.tipo==='receita'?'actualIncome':'actualOut',f.valor_centavos);}
+   if(f.data_pagamento){if(f.valor_centavos==null){missing++;continue;}add(f.data_pagamento,f.tipo==='receita'?'actualIncome':'actualOut',f.caixa_centavos??f.valor_centavos);}
    else if(f.origem!=='diaria'||!linked.has(f.id)){if(f.valor_centavos==null){missing++;continue;}add(f.vencimento,f.tipo==='receita'?'expectedIncome':'expectedOut',f.valor_centavos);}
   }
   return {days:[...days.values()].sort((a,b)=>(a.date||'9999').localeCompare(b.date||'9999')),missing};

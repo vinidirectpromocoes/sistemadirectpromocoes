@@ -39,7 +39,7 @@
     document.querySelector('#logout-button').hidden = false;
     document.querySelector('#storage-status').textContent = 'Dados sincronizados';
     for (const [name, allowed] of Object.entries({
-      'pedidos-links': ['admin','operacao'], financeiro: ['admin', 'financeiro'], configuracoes: ['admin', 'financeiro'],
+      supervisor:['admin','operacao','financeiro'], 'pedidos-links': ['admin','operacao'], financeiro: ['admin', 'financeiro'], configuracoes: ['admin', 'financeiro'],
       vagas: ['admin', 'operacao'], convites: ['admin', 'operacao'], leitura: ['admin', 'operacao', 'financeiro', 'consulta'], diaristas: ['admin', 'operacao', 'financeiro'],
     })) document.querySelector(`#nav-${name}`).hidden = !allowed.includes(role);
     for(const link of document.querySelectorAll('[data-enterprise-roles]')) link.hidden=!link.dataset.enterpriseRoles.split(',').includes(role);
@@ -206,11 +206,11 @@
     });
   }
   async function financeRows() {
-    const [manual, daily, invoices] = await Promise.all([
+    const [manual, daily, invoices, ledger, scales] = await Promise.all([
       rows('financeiro_lancamentos'),
-      rows('diarias', '*, diaristas(nome)'), invoiceRows(),
+      rows('diarias', '*, diaristas(nome)'), invoiceRows(), rows('supervisor_registros'), rows('pedido_escalas'),
     ]);
-    return [
+    return DirectSupervisorModel.finance([
       ...manual.map(item => ({ ...item, chave: `manual:${item.id}`, origem: 'manual', referencia: item.vencimento, diarista_id: null })),
       ...daily.map(item => ({
         ...item, chave: `diaria:${item.id}`, origem: 'diaria', tipo: 'despesa',
@@ -224,7 +224,7 @@
         contraparte: item.rede, referencia: item.periodo_fim, data_pagamento: null,
         forma_pagamento: '', observacoes: item.numero_nota || '', diarista_id: null,
       })),
-    ];
+    ],ledger,scales.map(s=>({...s,diaria:daily.find(d=>d.pedido_escala_id===s.id)})));
   }
   async function run(url, options = {}) {
     await booting;
@@ -239,6 +239,7 @@
     const child = parts[3];
     if (parts[0] !== 'api') throw new Error('Rota inválida.');
 
+    if(entity==='supervisor')return unwrap(await sb.rpc('direct_supervisor_'+parts[2].replaceAll('-','_'),{p:method==='GET'?Object.fromEntries(parsed.searchParams):p}));
     if (entity === 'empresa') return unwrap(await sb.rpc('direct_empresa_'+parts[2].replaceAll('-','_'),{p:method==='GET'?Object.fromEntries(parsed.searchParams):p}));
     if (entity === 'busca' && method==='GET') return unwrap(await sb.rpc('direct_search',{p_query:parsed.searchParams.get('q')||''}));
     if (entity === 'pendencias-acoes') {
