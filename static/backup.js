@@ -33,7 +33,7 @@
     try {
       const pass = password();
       output.textContent = 'Preparando cópia consistente no banco...';
-      const { data: payload, error } = await window.directRemote.client.rpc('direct_backup_snapshot_v10');
+      const { data: payload, error } = await window.directRemote.client.rpc('direct_backup_snapshot_v11');
       if (error) throw new Error(error.message);
       const verified = window.DirectBackup.validate(payload);
       payload.attachments={};
@@ -74,7 +74,7 @@
       const payload = JSON.parse(decoder.decode(plain));
       const checked = window.DirectBackup.validate(payload);
       for(const row of payload.tables.empresa_anexos||[]){const bytes=fromBase64(payload.attachments?.[row.caminho]||''),digest=[...new Uint8Array(await crypto.subtle.digest('SHA-256',bytes))].map(x=>x.toString(16).padStart(2,'0')).join('');if(bytes.length!==row.bytes||digest!==row.sha256)throw Error('Evidência ausente ou divergente.');}
-      const missing = ['direct-data-v5','direct-data-v6','direct-data-v7','direct-data-v8','direct-data-v9','direct-data-v10'].includes(payload.format) ? '' : ' Esta cópia antiga não inclui configurações e vínculos privados do portal.';
+      const missing = ['direct-data-v5','direct-data-v6','direct-data-v7','direct-data-v8','direct-data-v9','direct-data-v10','direct-data-v11'].includes(payload.format) ? '' : ' Esta cópia antiga não inclui configurações e vínculos privados do portal.';
       output.textContent = `Cópia legível e íntegra: ${checked.count} registro(s) em ${checked.tables} tabelas, criada em ${new Date(payload.exportedAt).toLocaleString('pt-BR')}.${missing}`;
       localStorage.setItem('direct-backup-verified-at', new Date().toISOString());
       showLastCheck();

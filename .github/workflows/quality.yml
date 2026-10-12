@@ -43,6 +43,7 @@ jobs:
         run: |
           python scripts/test_enterprise_postgres.py
           python scripts/test_withdrawal_postgres.py
+          python scripts/test_supervisor_postgres.py
       - name: Testes de regras de negócio
         run: pnpm test:unit
   navegacao:
@@ -55,6 +56,7 @@ jobs:
         include:
           - area: Empresa
             scripts: |
+              node tests/supervisor_e2e.mjs
               node tests/enterprise_workspace_e2e.mjs
               node tests/enterprise_e2e.mjs
               node tests/enterprise_integrations_e2e.mjs

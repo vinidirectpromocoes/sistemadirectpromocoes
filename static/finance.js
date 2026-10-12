@@ -223,8 +223,8 @@ function groupedFinanceRows(items) {
 function financeGroupTotals(items) {
   return {
     known: items.reduce((sum, item) => sum + (item.valor_centavos || 0), 0),
-    pending: items.reduce((sum, item) => sum + (item.data_pagamento ? 0 : item.valor_centavos || 0), 0),
-    paid: items.reduce((sum, item) => sum + (item.data_pagamento ? item.valor_centavos || 0 : 0), 0),
+    pending: items.reduce((sum, item) => sum + (item.data_pagamento ? 0 : DirectSupervisorModel.cash(item) || 0), 0),
+    paid: items.reduce((sum, item) => sum + (item.data_pagamento ? DirectSupervisorModel.cash(item) || 0 : 0), 0),
     missing: items.filter(item => item.valor_centavos == null).length,
     paidCount: items.filter(item => item.data_pagamento).length,
   };
@@ -280,6 +280,7 @@ function renderFinanceGroup() {
     const badge = document.createElement('span'); badge.className = `finance-badge ${state.style}`; badge.textContent = state.label;
     const detail = document.createElement('span');
     detail.textContent = item.data_pagamento ? `Pago em ${dateLabel(item.data_pagamento)}${item.forma_pagamento ? ` · ${item.forma_pagamento}` : ''}` : item.vencimento ? `Vence em ${dateLabel(item.vencimento)}` : 'Vencimento não informado';
+    if(item.caixa_centavos!=null&&item.caixa_centavos!==item.valor_centavos)detail.textContent+=' · '+(item.data_pagamento?'Dinheiro no acerto: ':'Saldo após adiantamento: ')+moneyLabel(item.caixa_centavos);
     const edit = document.createElement('button'); edit.type = 'button'; edit.className = 'text-button'; edit.textContent = item.valor_centavos == null ? 'Completar pagamento' : 'Editar pagamento';
     edit.setAttribute('aria-label', `${edit.textContent} da diária de ${dateLabel(item.data)}`);
     edit.disabled = Boolean(item.pagamento_lote_id);
@@ -321,8 +322,8 @@ function renderFinance() {
         value + (!receipt.estornado && financeInPeriod(receipt.data_recebimento) ? receipt.valor_centavos : 0), 0);
       return sum + (financeInPeriod(item.vencimento) ? Math.max(0, item.valor_centavos - item.valor_recebido_centavos) : 0);
     }
-    if (paid && item.data_pagamento && financeInPeriod(item.data_pagamento)) return sum + item.valor_centavos;
-    if (!paid && !item.data_pagamento && financeInPeriod(financePeriodDate(item))) return sum + item.valor_centavos;
+    if (paid && item.data_pagamento && financeInPeriod(item.data_pagamento)) return sum + DirectSupervisorModel.cash(item);
+    if (!paid && !item.data_pagamento && financeInPeriod(financePeriodDate(item))) return sum + DirectSupervisorModel.cash(item);
     return sum;
   }, 0);
   const incoming = total('receita', true);
@@ -365,7 +366,7 @@ function renderFinance() {
       const description = document.createElement('td');
       const title = document.createElement('strong'); title.textContent = days.length === 1 ? '1 diária' : `${days.length} diárias agrupadas`;
       const category = document.createElement('small'); category.textContent = 'Pagamento de diarista';
-      description.append(title, category); row.append(description);
+      description.append(title, category);if(item.caixa_centavos!=null&&item.caixa_centavos!==item.valor_centavos){const cash=document.createElement('small');cash.textContent=(item.data_pagamento?'Dinheiro no acerto: ':'Saldo após adiantamento: ')+moneyLabel(item.caixa_centavos);description.append(cash);} row.append(description);
       row.append(cell(days[0].contraparte));
       row.append(cell(financeGroupDates(days)));
       const type = document.createElement('td');
@@ -403,10 +404,10 @@ function renderFinance() {
     statusCell.append(badge); row.append(statusCell);
     const actions = document.createElement('td'); actions.className = 'finance-actions';
     const edit = document.createElement('button'); edit.type = 'button'; edit.className = 'text-button';
-    edit.textContent = item.origem === 'cobranca' ? 'Ver cobrança' : item.origem === 'diaria' && item.valor_centavos == null ? 'Completar' : 'Editar';
+    edit.textContent = item.origem==='supervisor'?'Ver extrato':item.origem === 'cobranca' ? 'Ver cobrança' : item.origem === 'diaria' && item.valor_centavos == null ? 'Completar' : 'Editar';
     edit.setAttribute('aria-label', `${edit.textContent} ${item.descricao}`);
     edit.disabled = item.origem === 'diaria' && Boolean(item.pagamento_lote_id);
-    edit.addEventListener('click', () => item.origem === 'cobranca' ? window.openInvoiceDetail(item.id)
+    edit.addEventListener('click', () => item.origem==='supervisor'?(location.hash='#supervisor?view=extrato&diarista_id='+item.diarista_id):item.origem === 'cobranca' ? window.openInvoiceDetail(item.id)
       : item.origem === 'diaria' ? startPayment(item, 'finance') : openFinanceForm(item));
     actions.append(edit);
     if (item.origem === 'manual') {
@@ -575,13 +576,13 @@ const pageLoadingControls=new WeakMap();
 function releasePageControls(main){const guard=pageLoadingControls.get(main);if(guard?.parentNode===main)guard.replaceWith(...guard.childNodes);pageLoadingControls.delete(main);main.inert=false;main.removeAttribute('aria-busy');}
 async function showPage() {
   const routeHash = location.hash;
-  let page = ['inicio', 'crm', 'diaristas', 'financeiro', 'pedidos', 'leitura', 'redes', 'configuracoes', 'convites', 'vagas', 'pedidos-links', 'empresa'].includes(window.location.hash.slice(1).split('?')[0]) ? window.location.hash.slice(1).split('?')[0] : 'inicio';
+  let page = ['inicio', 'crm', 'diaristas', 'financeiro', 'pedidos', 'leitura', 'redes', 'configuracoes', 'convites', 'vagas', 'pedidos-links', 'empresa', 'supervisor'].includes(window.location.hash.slice(1).split('?')[0]) ? window.location.hash.slice(1).split('?')[0] : 'inicio';
   const role = window.directRemote?.role;
-  if (role && ({ 'pedidos-links':['admin','operacao'], financeiro: ['admin', 'financeiro'], configuracoes: ['admin', 'financeiro'], vagas: ['admin', 'operacao'], convites: ['admin', 'operacao'], leitura: ['admin', 'operacao', 'financeiro', 'consulta'], diaristas: ['admin', 'financeiro', 'operacao'] }[page] || ['admin', 'financeiro', 'operacao', 'consulta']).includes(role) === false) {
+  if (role && ({ supervisor:['admin','operacao','financeiro'], 'pedidos-links':['admin','operacao'], financeiro: ['admin', 'financeiro'], configuracoes: ['admin', 'financeiro'], vagas: ['admin', 'operacao'], convites: ['admin', 'operacao'], leitura: ['admin', 'operacao', 'financeiro', 'consulta'], diaristas: ['admin', 'financeiro', 'operacao'] }[page] || ['admin', 'financeiro', 'operacao', 'consulta']).includes(role) === false) {
     page = 'inicio';
     if (location.hash !== '#inicio') location.hash = '#inicio';
   }
-  for (const name of ['inicio', 'crm', 'diaristas', 'pedidos', 'leitura', 'redes', 'financeiro', 'configuracoes', 'convites', 'vagas', 'pedidos-links', 'empresa']) {
+  for (const name of ['inicio', 'crm', 'diaristas', 'pedidos', 'leitura', 'redes', 'financeiro', 'configuracoes', 'convites', 'vagas', 'pedidos-links', 'empresa', 'supervisor']) {
     const active = name === page;
     $(`#${name}-page`).hidden = !active;
     $(`#${name}-page`).inert = active;
@@ -591,11 +592,12 @@ async function showPage() {
     if (active) link.setAttribute('aria-current', 'page');
     else link.removeAttribute('aria-current');
   }
-  document.title = `${{ empresa: 'Minha empresa', 'pedidos-links': 'Pedidos por link', vagas: 'Vagas disponíveis', convites: 'Cadastros por link', inicio: 'Início', crm: 'Pendências', diaristas: 'Diaristas', pedidos: 'Pedidos', leitura: 'Leitura IA', redes: 'Redes e lojas', financeiro: 'Financeiro', configuracoes: 'Configurações' }[page]} | Direct Promoções`;
+  document.title = `${{ supervisor:'Central do supervisor', empresa: 'Minha empresa', 'pedidos-links': 'Pedidos por link', vagas: 'Vagas disponíveis', convites: 'Cadastros por link', inicio: 'Início', crm: 'Pendências', diaristas: 'Diaristas', pedidos: 'Pedidos', leitura: 'Leitura IA', redes: 'Redes e lojas', financeiro: 'Financeiro', configuracoes: 'Configurações' }[page]} | Direct Promoções`;
   window.scrollTo(0, 0);
   try { await window.DirectModules.ensure(page); } catch (error) { window.DirectUI?.notify(error.message, true); return; }finally{releasePageControls($(`#${page}-page`));}
   if (location.hash !== routeHash) return;
   $(`#${page}-page`).inert=false;$(`#${page}-page`).removeAttribute('aria-busy');
+  if(page==='supervisor')window.DirectSupervisor?.load();
   if (page === 'empresa') window.DirectEnterprise?.load();
   if (page === 'inicio' || page === 'crm') loadHome();
   if (page === 'diaristas') load();

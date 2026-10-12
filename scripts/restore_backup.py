@@ -33,7 +33,8 @@ V9_PRIVATE = V7_PRIVATE + ("rede_links",)
 V9_TABLES = V8_TABLES + ("rede_links",)
 V10_PUBLIC = ("empresa_registros","empresa_extrato","empresa_anexos")
 V10_PRIVATE = V9_PRIVATE + ("empresa_compartilhamentos",)
-ALL_TABLES = V9_TABLES + V10_PUBLIC + ("empresa_compartilhamentos",)
+V10_TABLES = V9_TABLES + V10_PUBLIC + ("empresa_compartilhamentos",)
+ALL_TABLES = V10_TABLES + ("supervisor_registros",)
 LEGACY_TABLES = TABLES[:11]
 
 
@@ -47,15 +48,15 @@ def decrypt_archive(archive, password):
         raise ValueError("Parâmetros de criptografia inválidos")
     key = __import__("hashlib").pbkdf2_hmac("sha256", password.encode(), salt, 200000, 32)
     payload = json.loads(AESGCM(key).decrypt(iv, ciphertext, None))
-    if payload.get("format") not in ("direct-data-v1", "direct-data-v2", "direct-data-v3", "direct-data-v4", "direct-data-v5", "direct-data-v6", "direct-data-v7", "direct-data-v8", "direct-data-v9", "direct-data-v10") or not isinstance(payload.get("tables"), dict):
+    if payload.get("format") not in ("direct-data-v1", "direct-data-v2", "direct-data-v3", "direct-data-v4", "direct-data-v5", "direct-data-v6", "direct-data-v7", "direct-data-v8", "direct-data-v9", "direct-data-v10", "direct-data-v11") or not isinstance(payload.get("tables"), dict):
         raise ValueError("Conteúdo da cópia não reconhecido")
-    required = ALL_TABLES if payload["format"] == "direct-data-v10" else V9_TABLES if payload["format"] == "direct-data-v9" else V8_TABLES if payload["format"] == "direct-data-v8" else V7_TABLES if payload["format"] == "direct-data-v7" else V6_TABLES if payload["format"] == "direct-data-v6" else V5_TABLES if payload["format"] == "direct-data-v5" else TABLES if payload["format"] == "direct-data-v4" else TABLES[:16] if payload["format"] == "direct-data-v3" else TABLES[:15] if payload["format"] == "direct-data-v2" else LEGACY_TABLES
+    required = ALL_TABLES if payload["format"] == "direct-data-v11" else V10_TABLES if payload["format"] == "direct-data-v10" else V9_TABLES if payload["format"] == "direct-data-v9" else V8_TABLES if payload["format"] == "direct-data-v8" else V7_TABLES if payload["format"] == "direct-data-v7" else V6_TABLES if payload["format"] == "direct-data-v6" else V5_TABLES if payload["format"] == "direct-data-v5" else TABLES if payload["format"] == "direct-data-v4" else TABLES[:16] if payload["format"] == "direct-data-v3" else TABLES[:15] if payload["format"] == "direct-data-v2" else LEGACY_TABLES
     for table in required:
         if not isinstance(payload["tables"].get(table), list):
             raise ValueError(f"Tabela ausente: {table}")
         if not all(isinstance(row, dict) for row in payload["tables"][table]):
             raise ValueError(f"Registros inválidos: {table}")
-    if payload["format"] in ("direct-data-v5", "direct-data-v6", "direct-data-v7", "direct-data-v8", "direct-data-v9", "direct-data-v10"):
+    if payload["format"] in ("direct-data-v5", "direct-data-v6", "direct-data-v7", "direct-data-v8", "direct-data-v9", "direct-data-v10", "direct-data-v11"):
         snapshot = payload.get("snapshot", {})
         if snapshot.get("consistent") is not True or any(snapshot.get("counts", {}).get(t) != len(payload["tables"][t]) for t in required):
             raise ValueError("Contagens ou consistência inválidas")
@@ -67,7 +68,7 @@ def decrypt_archive(archive, password):
 def relationship_errors(data):
     ids = {table: {str(row["id"]) for row in data.get(table,[]) if row.get("id") is not None}
            for table in ("diaristas", "pedidos", "pedido_escalas", "diarias", "cobrancas", "pagamento_lotes", "contratos", "portal_convites", "lojas", "empresa_registros")}
-    links = (
+    links = (("supervisor_registros","pedido_id","pedidos"),("supervisor_registros","diarista_id","diaristas"),
         ("financeiro_lancamentos","empresa_registro_id","empresa_registros"),
         ("empresa_extrato","conta_id","empresa_registros"),
         ("empresa_anexos","registro_id","empresa_registros"),
@@ -161,7 +162,9 @@ def restore_operational(archive_path, password, output_path):
         try:
             db.execute("PRAGMA foreign_keys = OFF")
             db.execute("DROP TRIGGER IF EXISTS empresa_finance_guard_delete")
-            order = ("empresa_compartilhamentos","empresa_anexos","empresa_extrato","empresa_registros","substituicao_contatos", "pendencia_acoes", "loja_validacoes", "loja_solicitacoes", "loja_links", "pedido_modelos", "ocorrencias", "contratos", "cobranca_recebimentos", "cobranca_itens", "cobrancas", "diarias", "pedido_escalas",
+            db.execute("DROP TRIGGER IF EXISTS supervisor_daily_guard")
+            db.execute("DROP TRIGGER IF EXISTS supervisor_settled_guard")
+            order = ("supervisor_registros","empresa_compartilhamentos","empresa_anexos","empresa_extrato","empresa_registros","substituicao_contatos", "pendencia_acoes", "loja_validacoes", "loja_solicitacoes", "loja_links", "pedido_modelos", "ocorrencias", "contratos", "cobranca_recebimentos", "cobranca_itens", "cobrancas", "diarias", "pedido_escalas",
                      "pagamento_lotes", "financeiro_lancamentos", "leituras_pendentes", "custos_extras",
                      "tarifas_setores", "tarifas_redes", "lojas", "pedidos", "diaristas", "direct_auditoria")
             with db:
@@ -173,7 +176,7 @@ def restore_operational(archive_path, password, output_path):
                 insert_order = ("diaristas", "pedidos", "lojas", "tarifas_redes", "tarifas_setores",
                                 "contratos", "pagamento_lotes", "pedido_escalas", "diarias", "ocorrencias", "cobrancas", "cobranca_itens",
                                 "cobranca_recebimentos", "empresa_registros", "empresa_extrato", "empresa_anexos", "empresa_compartilhamentos", "financeiro_lancamentos", "leituras_pendentes",
-                                "custos_extras", "direct_staff", "pedido_modelos", "loja_solicitacoes", "loja_validacoes", *V8_PUBLIC)
+                                "supervisor_registros", "custos_extras", "direct_staff", "pedido_modelos", "loja_solicitacoes", "loja_validacoes", *V8_PUBLIC)
                 for table in insert_order:
                     columns = {item["name"] for item in db.execute(f"PRAGMA table_info({table})")}
                     for row in data[table]:
@@ -196,7 +199,8 @@ def restore_operational(archive_path, password, output_path):
                 for table in V10_PRIVATE:
                     db.executemany("INSERT INTO backup_private_rows VALUES (?,?,?)", ((table,index,json.dumps(row,ensure_ascii=False)) for index,row in enumerate(data[table])))
             db.execute("PRAGMA foreign_keys = ON")
-            import enterprise
+            import enterprise,supervisor
+            supervisor.ensure_schema(db)
             # Reinstall only guard DDL, without catalog seeding altering restored rows.
             db.execute("CREATE TRIGGER IF NOT EXISTS empresa_finance_guard_delete BEFORE DELETE ON financeiro_lancamentos WHEN OLD.empresa_registro_id IS NOT NULL BEGIN SELECT RAISE(ABORT,'Preserve a despesa aprovada e seu lançamento.');END;")
             invalid = db.execute("PRAGMA foreign_key_check").fetchall()
@@ -204,7 +208,7 @@ def restore_operational(archive_path, password, output_path):
                 raise ValueError(f"Integridade referencial inválida: {len(invalid)} vínculo(s)")
             if db.execute("PRAGMA integrity_check").fetchone()[0] != "ok":
                 raise ValueError("Falha de integridade da base restaurada")
-            actual = {table: db.execute(f"SELECT count(*) FROM {table}").fetchone()[0] for table in TABLES + V7_PUBLIC + V8_PUBLIC + V10_PUBLIC}
+            actual = {table: db.execute(f"SELECT count(*) FROM {table}").fetchone()[0] for table in TABLES + V7_PUBLIC + V8_PUBLIC + V10_PUBLIC + ("supervisor_registros",)}
             actual.update({table: db.execute("SELECT count(*) FROM backup_private_rows WHERE source_table=?", (table,)).fetchone()[0] for table in V10_PRIVATE})
             expected = {table: len(data[table]) for table in ALL_TABLES}
             if actual != expected:

@@ -8,6 +8,7 @@ import re
 import sqlite3
 import usability
 import enterprise
+import supervisor
 import scale_lifecycle
 import store_portal
 from datetime import date, datetime, timezone
@@ -322,6 +323,7 @@ def init_db():
         usability.ensure_schema(db)
         store_portal.ensure_schema(db)
         enterprise.ensure_schema(db)
+        supervisor.ensure_schema(db)
         if not db.execute("SELECT 1 FROM direct_config_meta WHERE chave='calendario_pagamentos_v1'").fetchone():
             for network, (first, second) in calendar.INITIAL_CALENDARS.items():
                 db.execute("UPDATE tarifas_redes SET pagamento_primeira_quinzena=?, pagamento_segunda_quinzena=? WHERE rede=?", (first, second, network))
@@ -565,6 +567,8 @@ def finance_rows():
                        'referencia': invoice['periodo_fim'], 'data_pagamento': None,
                        'forma_pagamento': '', 'observacoes': invoice['numero_nota'],
                        'diarista_id': None})
+    with connect() as db:
+        result=supervisor.finance_projection(result,supervisor.records(db),all_scale_rows(db))
     return result
 
 
@@ -850,6 +854,7 @@ class Handler(BaseHTTPRequestHandler):
         if not self._allowed_origin():
             return self.respond(HTTPStatus.FORBIDDEN, {"erro": "Acesso não permitido."})
         path = urlparse(self.path).path
+        if supervisor.handle(self, "GET", sys.modules[__name__]): return
         if enterprise.handle(self, "GET", sys.modules[__name__]): return
         if usability.handle(self, "GET", sys.modules[__name__]): return
         if extended.handle(self, "GET", sys.modules[__name__]): return
@@ -924,7 +929,7 @@ class Handler(BaseHTTPRequestHandler):
             path = "/rede.html"
         if path == "/":
             path = "/index.html"
-        assets = {"/enterprise-workspace.js":"text/javascript; charset=utf-8","/empresa-ajuda.html":"text/html; charset=utf-8","/enterprise-language.js":"text/javascript; charset=utf-8","/enterprise-features.js":"text/javascript; charset=utf-8","/enterprise-local.js":"text/javascript; charset=utf-8","/enterprise-local-worker.js":"text/javascript; charset=utf-8","/relatorio.html":"text/html; charset=utf-8","/relatorio.js":"text/javascript; charset=utf-8","/enterprise-contract.js":"text/javascript; charset=utf-8", "/enterprise-model.js":"text/javascript; charset=utf-8", "/enterprise.js":"text/javascript; charset=utf-8", "/enterprise.css":"text/css; charset=utf-8", "/enterprise-schema.json":"application/json", "/rede.html":"text/html; charset=utf-8","/network-links.js":"text/javascript; charset=utf-8","/usability.css":"text/css; charset=utf-8","/management-model.js":"text/javascript; charset=utf-8", "/management.js":"text/javascript; charset=utf-8", "/management.css":"text/css; charset=utf-8", "/loja.html":"text/html; charset=utf-8", "/store-portal.js":"text/javascript; charset=utf-8", "/automation-model.js":"text/javascript; charset=utf-8", "/automation.js":"text/javascript; charset=utf-8", "/automation.css":"text/css; charset=utf-8", "/index.html": "text/html; charset=utf-8", "/style.css": "text/css; charset=utf-8", "/brand.css": "text/css; charset=utf-8", "/theme.css": "text/css; charset=utf-8", "/mobile.css": "text/css; charset=utf-8", "/reading.css": "text/css; charset=utf-8", "/motion.css": "text/css; charset=utf-8", "/operations.css": "text/css; charset=utf-8", "/workflow.css": "text/css; charset=utf-8", "/route-loader.js": "text/javascript; charset=utf-8", "/session-sync.js": "text/javascript; charset=utf-8",
+        assets = {"/supervisor.js":"text/javascript; charset=utf-8","/supervisor-model.js":"text/javascript; charset=utf-8","/supervisor.css":"text/css; charset=utf-8","/enterprise-workspace.js":"text/javascript; charset=utf-8","/empresa-ajuda.html":"text/html; charset=utf-8","/enterprise-language.js":"text/javascript; charset=utf-8","/enterprise-features.js":"text/javascript; charset=utf-8","/enterprise-local.js":"text/javascript; charset=utf-8","/enterprise-local-worker.js":"text/javascript; charset=utf-8","/relatorio.html":"text/html; charset=utf-8","/relatorio.js":"text/javascript; charset=utf-8","/enterprise-contract.js":"text/javascript; charset=utf-8", "/enterprise-model.js":"text/javascript; charset=utf-8", "/enterprise.js":"text/javascript; charset=utf-8", "/enterprise.css":"text/css; charset=utf-8", "/enterprise-schema.json":"application/json", "/rede.html":"text/html; charset=utf-8","/network-links.js":"text/javascript; charset=utf-8","/usability.css":"text/css; charset=utf-8","/management-model.js":"text/javascript; charset=utf-8", "/management.js":"text/javascript; charset=utf-8", "/management.css":"text/css; charset=utf-8", "/loja.html":"text/html; charset=utf-8", "/store-portal.js":"text/javascript; charset=utf-8", "/automation-model.js":"text/javascript; charset=utf-8", "/automation.js":"text/javascript; charset=utf-8", "/automation.css":"text/css; charset=utf-8", "/index.html": "text/html; charset=utf-8", "/style.css": "text/css; charset=utf-8", "/brand.css": "text/css; charset=utf-8", "/theme.css": "text/css; charset=utf-8", "/mobile.css": "text/css; charset=utf-8", "/reading.css": "text/css; charset=utf-8", "/motion.css": "text/css; charset=utf-8", "/operations.css": "text/css; charset=utf-8", "/workflow.css": "text/css; charset=utf-8", "/route-loader.js": "text/javascript; charset=utf-8", "/session-sync.js": "text/javascript; charset=utf-8",
             "/app.js": "text/javascript; charset=utf-8", "/theme.js": "text/javascript; charset=utf-8", "/finance.js": "text/javascript; charset=utf-8", "/forecast.js": "text/javascript; charset=utf-8", "/operations.js": "text/javascript; charset=utf-8", "/workflow.js": "text/javascript; charset=utf-8", "/matching.js": "text/javascript; charset=utf-8", "/backup.js": "text/javascript; charset=utf-8", "/orders.js": "text/javascript; charset=utf-8", "/stores.js": "text/javascript; charset=utf-8", "/settings.js": "text/javascript; charset=utf-8", "/reading.js": "text/javascript; charset=utf-8", "/reading-parser.js": "text/javascript; charset=utf-8", "/remote.js": "text/javascript; charset=utf-8", "/payment-calendar.js": "text/javascript; charset=utf-8", "/vendor/supabase-2.117.2.js": "text/javascript; charset=utf-8", "/stores.css": "text/css; charset=utf-8", "/settings.css": "text/css; charset=utf-8", "/login.css": "text/css; charset=utf-8", "/favicon.svg": "image/svg+xml", "/logo-direct-promocoes.jpg": "image/jpeg", "/logo-direct-promocoes-transparente.png": "image/png"}
         for asset in ['messages-model.js','messages.js','backup-model.js']:
             assets['/'+asset]='text/javascript; charset=utf-8'
@@ -959,6 +964,7 @@ class Handler(BaseHTTPRequestHandler):
                 return self.respond(HTTPStatus.OK,result)
             except (ValueError,TypeError,json.JSONDecodeError,sqlite3.IntegrityError) as error:
                 return self.respond(HTTPStatus.BAD_REQUEST,{'erro':str(error)})
+        if supervisor.handle(self, "POST", sys.modules[__name__]): return
         if enterprise.handle(self, "POST", sys.modules[__name__]): return
         if usability.handle(self, "POST", sys.modules[__name__]): return
         if extended.handle(self, "POST", sys.modules[__name__]): return
@@ -1428,6 +1434,7 @@ class Handler(BaseHTTPRequestHandler):
                         if len(reason.strip()) < 8 or reason == old["motivo_ajuste"]:
                             raise ValueError("Explique a correção da diária já paga (mínimo de 8 caracteres).")
                     fields = ", ".join(f"{key} = ?" for key in updates)
+                    if effective['data_pagamento'] and not old['data_pagamento']:supervisor.check_payment(db,int(payment_match.group(1)),[int(payment_match.group(2))])
                     cur = db.execute(f"UPDATE diarias SET {fields} WHERE id = ? AND diarista_id = ?", (*updates.values(), int(payment_match.group(2)), int(payment_match.group(1))))
                     if not cur.rowcount:
                         return self.respond(HTTPStatus.NOT_FOUND, {"erro": "Diária não encontrada."})

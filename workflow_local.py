@@ -147,7 +147,9 @@ def void_receipt(db, receipt_id, reason):
 
 
 def pay_batch(db, worker_id, daily_ids, day, method):
+    import supervisor
     db.execute('BEGIN IMMEDIATE')
+    supervisor.check_payment(db,worker_id,daily_ids)
     placeholders = ','.join('?' for _ in daily_ids)
     rows = db.execute(f'SELECT * FROM diarias WHERE id IN ({placeholders})', daily_ids).fetchall()
     if len(rows) != len(daily_ids) or any(row['diarista_id'] != worker_id or row['data_pagamento'] or

@@ -126,6 +126,8 @@ def payment(db,p,core):
     rows=list(db.execute('SELECT id,diarista_id,valor_centavos,data_pagamento FROM diarias WHERE id IN ('+','.join('?'*len(d['diaria_ids']))+') ORDER BY id',d['diaria_ids']))
     if [dict(x) for x in rows]!=d['diarias_snapshot']:raise ValueError('As diárias mudaram; prepare uma nova conferência.')
     if any(db.execute('SELECT pagamento_lote_id FROM diarias WHERE id=?',(x['id'],)).fetchone()[0] for x in rows):raise ValueError('Uma diária já pertence a outro lote.')
+    import supervisor
+    supervisor.check_payment(db,r['diarista_id'],d['diaria_ids'])
     stamp=e.now();id=db.execute('INSERT INTO pagamento_lotes(diarista_id,valor_centavos,data_pagamento,forma,quantidade,criado_em) VALUES(?,?,?,?,?,?)',(d['diarista_id'],d['valor_conferido_centavos'],day,method,len(rows),stamp)).lastrowid
     for row in rows:db.execute('UPDATE diarias SET data_pagamento=?,forma_pagamento=?,pagamento_lote_id=? WHERE id=?',(day,method,id,row['id']))
     d.update(lote_id=id,data_registro=day,forma_registro=method)
