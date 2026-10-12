@@ -2,4 +2,4 @@
 #supervisor-page{min-width:0}#supervisor-page .page-header>div{min-width:0}@media(max-width:600px){#supervisor-page .page-header{flex-direction:column;align-items:stretch}#supervisor-page .page-header .button{width:100%;min-height:44px;font-size:14px;padding:10px 14px}}
 @media(max-width:700px){.sidebar nav a[data-mobile-label]::after{display:block;max-width:100%;min-width:0;white-space:normal;overflow-wrap:anywhere}.supervisor-filters select{height:44px}}
 
-.supervisor-filters select{max-width:100%;overflow:hidden;text-overflow:ellipsis}
+.supervisor-filters select{appearance:none;-webkit-appearance:none;max-width:100%;overflow:hidden;text-overflow:ellipsis;padding-right:32px;background-image:linear-gradient(45deg,transparent 50%,currentColor 50%),linear-gradient(135deg,currentColor 50%,transparent 50%);background-size:5px 5px;background-position:right 15px center,right 10px center;background-repeat:no-repeat}
