@@ -43,7 +43,10 @@ def run():
         c.execute('SELECT valor_centavos,valor_recebido_centavos,data_pagamento FROM public.diarias WHERE id=%s',(daily,));wage,revenue,paid=c.fetchone();assert (wage,revenue)==(10000,16000) and paid is not None
         assert rpc('acerto',base)['saldo_centavos']==0
         fail(lambda:rpc('registro',dict(tipo='estorno',registro_id=advance['id'],motivo='Errado',chave='qa:voidused:0001')),'utilizado')
-        fail(lambda:c.execute('UPDATE public.diarias SET data_pagamento=NULL WHERE id=%s',(daily,)),'Acerto preservado')
+        fail(lambda:c.execute('UPDATE public.diarias SET data_pagamento=NULL WHERE id=%s',(daily,)),'Reabra o fechamento')
+        c.execute('SELECT pagamento_lote_id FROM public.diarias WHERE id=%s',(daily,));batch=c.fetchone()[0]
+        fail(lambda:c.execute('SELECT public.direct_reopen_payment_batch(%s,%s)',(batch,'Teste isolado de proteção')),'Acerto preservado')
+        c.execute('SELECT status FROM public.pagamento_lotes WHERE id=%s',(batch,));assert c.fetchone()[0]=='pago'
         preview=rpc('fechamento',dict(inicio=day,fim=day,rede='Super Lagoa'));assert preview['pendencias']==[] and preview['totais']['receita_centavos']==16000
         close=rpc('registro',dict(tipo='fechamento',inicio=day,fim=day,rede='Super Lagoa',assinatura=preview['assinatura'],chave='qa:closing:0001'))
         assert close['dados']['totais']['adiantamentos_centavos']==3000
