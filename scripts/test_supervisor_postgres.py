@@ -14,8 +14,10 @@ def run():
         c.execute("INSERT INTO public.diaristas(nome,cpf,setores,cep,logradouro,numero,bairro) VALUES('Pessoa fictícia','52998224725','[\"Eventos\"]','','','','') RETURNING id");worker=c.fetchone()[0]
         c.execute("SELECT (now() at time zone 'America/Fortaleza')::date::text");day=c.fetchone()[0]
         c.execute("INSERT INTO public.pedidos(supermercado,unidade,setor,quantidade_diaristas,turnos) VALUES('Super Lagoa','Loja fictícia','Eventos',1,%s::jsonb) RETURNING id",(json.dumps([dict(data=day,inicio='07:00',fim='15:20')]),));order=c.fetchone()[0]
-        c.execute("INSERT INTO public.pedido_escalas(pedido_id,diarista_id,data,status) VALUES(%s,%s,%s,'presente') RETURNING id",(order,worker,day));scale=c.fetchone()[0]
-        c.execute("INSERT INTO public.diarias(diarista_id,data,local,setor,valor_centavos,valor_recebido_centavos,pedido_escala_id) VALUES(%s,%s,'Super Lagoa','Eventos',10000,16000,%s) RETURNING id",(worker,day,scale));daily=c.fetchone()[0]
+        c.execute("INSERT INTO public.pedido_escalas(pedido_id,diarista_id,data,disponibilidade_pedido_confirmada) VALUES(%s,%s,%s,true) RETURNING id",(order,worker,day));scale=c.fetchone()[0]
+        c.execute("select set_config('request.jwt.claims',%s,true)",(json.dumps(dict(sub=ADMIN,email='admin@example.invalid')),))
+        c.execute("UPDATE public.pedido_escalas SET status='presente' WHERE id=%s",(scale,))
+        c.execute("UPDATE public.diarias SET valor_centavos=10000,valor_recebido_centavos=16000 WHERE pedido_escala_id=%s RETURNING id",(scale,));daily=c.fetchone()[0]
         c.execute('SELECT md5(jsonb_agg(to_jsonb(d))::text) FROM public.diarias d');before=c.fetchone()[0]
         c.execute((ROOT/'supabase/migrations/20261012131722_supervisor_daily_closing.sql').read_text())
         c.execute('SELECT md5(jsonb_agg(to_jsonb(d))::text) FROM public.diarias d');assert c.fetchone()[0]==before,'Migration changed old daily values'

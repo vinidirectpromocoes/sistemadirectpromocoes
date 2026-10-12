@@ -26,6 +26,17 @@ class RecoveryAgentTests(unittest.TestCase):
             target=Path(directory)/'complete.directbackup';target.write_bytes(agent.encrypt(content,'qa-recovery-password'));result=verify(target,'qa-recovery-password');self.assertEqual(result['attachments'],1)
         with self.assertRaises(ValueError):agent.bundle(data,Path(__file__).resolve().parents[1],{photo_path:raw+b'corrupt'})
 
+    def test_supervisor_journal_restores_without_losing_original_values(self):
+        from verify_recovery import verify
+        data=self.data();tables=data['data']['tables']
+        tables['diaristas']=[dict(id=1,nome='Pessoa fictícia',cpf='52998224725',setores='[]',cep='',logradouro='',numero='',bairro='',cidade='Fortaleza',uf='CE',whatsapp='',experiencia='',trabalha_atualmente=0,disponibilidade='[]',locomocao='',transporte='',criado_em='2026-10-12',atualizado_em='2026-10-12')]
+        tables['pedidos']=[dict(id=1,supermercado='Rede fictícia',unidade='Loja fictícia',setor='Eventos',quantidade_diaristas=1,turnos='[]',situacao='novo',criado_em='2026-10-12',atualizado_em='2026-10-12')]
+        tables['supervisor_registros']=[dict(id=1,tipo='adiantamento',pedido_id=1,diarista_id=1,dados={'valor_centavos':3000,'data':'2026-10-12'},chave='qa:restore:001',autor='QA',criado_em='2026-10-12T12:00:00Z')]
+        data['data']['snapshot']['counts']={t:len(r) for t,r in tables.items()}
+        with tempfile.TemporaryDirectory() as directory:
+            target=Path(directory)/'journal.directbackup';target.write_bytes(agent.encrypt(agent.bundle(data,Path(__file__).resolve().parents[1]),'qa-password'))
+            self.assertEqual(verify(target,'qa-password')['tables'],36)
+
     def test_v10_backup_remains_accepted(self):
         from restore_backup import V10_TABLES
         data=self.data();data['data']['format']='direct-data-v10'
