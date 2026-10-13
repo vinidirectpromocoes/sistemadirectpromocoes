@@ -356,7 +356,7 @@ async function runExtendedWorkflow() {
   const api=async(method,route,body)=>{const r=await fetch(url.slice(0,-1)+route,{method,headers:{'Content-Type':'application/json'},body:body?JSON.stringify(body):undefined});const value=await r.json();assert.ok(r.ok,JSON.stringify(value));return value;};
   const worker=(await api('GET','/api/diaristas'))[0];
   await api('PUT',`/api/diaristas/${worker.id}`,{...worker,disponibilidade:['segunda','terca','quarta','quinta','sexta','sabado','domingo'].map(dia=>({dia,inicio:'00:00',fim:'23:59'}))});
-  const day=new Intl.DateTimeFormat('en-CA',{timeZone:'America/Fortaleza',year:'numeric',month:'2-digit',day:'2-digit'}).format(new Date());
+  const prior=new Date();prior.setDate(prior.getDate()-1);const day=prior.toISOString().slice(0,10);
   const source={supermercado:'Super do Povo',unidade:'Meireles',setor:'Operador de caixa',quantidade_diaristas:1,turnos:[{data:day,inicio:'07:00',fim:'15:20'}],situacao:'confirmado',observacoes:'TESTE INTERLIGAÇÃO'};
   const order=await api('POST','/api/pedidos',source);const scale=await api('POST',`/api/pedidos/${order.id}/escalas`,{diarista_id:worker.id,data:day});
   const browser=await chromium.launch({headless:true});
