@@ -557,7 +557,9 @@ async function runPaymentCalendars() {
       await page.getByText('Calendário de Super do Povo atualizado para recebimentos e pagamentos.',{exact:true}).waitFor();
       await page.waitForLoadState('networkidle'); await page.reload();
       await form.getByRole('button', {name:'Salvar calendário'}).waitFor(); assert.equal(await form.locator('input').nth(1).inputValue(),'18');
-      await form.locator('input').nth(1).fill('15');await form.getByRole('button',{name:'Salvar calendário'}).click();
+      const restored=page.waitForResponse(r=>r.request().method()==='PUT'&&r.url().endsWith('/calendario'));
+      await form.locator('input').nth(1).fill('15');await form.getByRole('button',{name:'Salvar calendário'}).click();assert.equal((await restored).status(),200);
+      await page.waitForFunction(()=>activeRequests===0);await page.waitForLoadState('networkidle');
       await page.getByText('Calendário de Super do Povo atualizado para recebimentos e pagamentos.',{exact:true}).waitFor();
       const weekly=page.getByRole('form',{name:'Calendário de Pinheiro',exact:true});
       assert.equal(await weekly.getByLabel('Frequência de pagamento').inputValue(),'semanal');
