@@ -9,6 +9,9 @@ def run():
     try:
         db=psycopg2.connect(initialize(pg,ROOT/'tests/fixtures/enterprise_migration_history.json'));c=db.cursor()
         for f in ['20261008185515_enterprise_operational_platform.sql','20261009140901_withdrawal_remaining_scope.sql','20261012131722_supervisor_daily_closing.sql']:c.execute((ROOT/'supabase/migrations'/f).read_text())
+        c.execute('SELECT direct_private.backup_snapshot_v11()');snapshot=c.fetchone()[0]
+        c.execute((ROOT/'supabase/migrations/20261013133132_backup_snapshot_materialization.sql').read_text())
+        c.execute('SELECT direct_private.backup_snapshot_v11()');assert c.fetchone()[0]==snapshot,'Backup optimization changed content or format'
         c.execute("INSERT INTO auth.users(id,email) VALUES(%s,'admin@example.invalid'),(%s,'staff@example.invalid')",(ADMIN,STAFF));c.execute("INSERT INTO public.direct_admins VALUES('admin@example.invalid');INSERT INTO public.direct_staff(email,role,active) VALUES('staff@example.invalid','financeiro',true)")
         def claims(role='admin'):
             c.execute('reset role');c.execute('set local role authenticated');c.execute("select set_config('request.jwt.claims',%s,true)",(json.dumps(dict(sub=ADMIN if role=='admin' else STAFF,email='admin@example.invalid' if role=='admin' else 'staff@example.invalid')),))

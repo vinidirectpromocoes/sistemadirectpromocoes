@@ -652,13 +652,13 @@ async function runOrderFilters() {
       await page.locator('#orders-sector-filter').selectOption('flv');assert.equal(await page.locator('#orders-rows tr').count(),1);
       await page.locator('#orders-start-filter').fill('2035-10-03');await page.locator('#orders-end-filter').fill('2035-10-04');
       await page.waitForFunction(()=>document.querySelector('#orders-demand-count').textContent==='2');
-      assert.equal(await page.locator('.weekly-card').count(),0);assert.match(await page.locator('#orders-rows').innerText(),/03\/10\/2026/);assert.doesNotMatch(await page.locator('#orders-rows').innerText(),/01\/10\/2026|05\/10\/2026/);
+      assert.equal(await page.locator('.weekly-card').count(),0);assert.match(await page.locator('#orders-rows').innerText(),/03\/10\/2035/);assert.doesNotMatch(await page.locator('#orders-rows').innerText(),/01\/10\/2035|05\/10\/2035/);
       assert.match(await page.locator('#orders-rows').innerText(),/1 dia.*2 diárias no período/);assert.equal(await page.locator('#weekly-date').count(),0);
       await page.locator('#orders-status-filter').selectOption('confirmado');assert.equal(await page.locator('#orders-rows tr').count(),0);assert.ok(await page.locator('#orders-no-results').isVisible());
       await page.locator('#orders-status-filter').selectOption('novo');
       await page.locator('#orders-start-filter').fill('2035-10-05');await page.locator('#orders-end-filter').fill('2035-10-03');assert.ok(await page.locator('#orders-filter-error').isVisible());assert.equal(await page.locator('#orders-rows tr').count(),0);
       await page.locator('#orders-end-filter').fill('2035-10-06');assert.equal(await page.locator('#orders-demand-count').innerText(),'2');assert.equal(await page.locator('#orders-filter-error').isVisible(),false);
-      await page.locator('#orders-start-filter').fill('');await page.locator('#orders-end-filter').fill('2035-10-02');assert.equal(await page.locator('#orders-demand-count').innerText(),'2');assert.match(await page.locator('#orders-rows').innerText(),/01\/10\/2026/);
+      await page.locator('#orders-start-filter').fill('');await page.locator('#orders-end-filter').fill('2035-10-02');assert.equal(await page.locator('#orders-demand-count').innerText(),'2');assert.match(await page.locator('#orders-rows').innerText(),/01\/10\/2035/);
       await page.locator('#orders-end-filter').fill('');await page.locator('#orders-start-filter').fill('2035-10-03');assert.equal(await page.locator('#orders-demand-count').innerText(),'4');assert.match(await page.locator('#orders-rows').innerText(),/2 dias/);
       for(const theme of ['light','dark']) {
         await page.evaluate(value=>document.documentElement.dataset.theme=value,theme);
