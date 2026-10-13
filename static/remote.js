@@ -251,6 +251,8 @@
       if(method==='POST')return unwrap(await sb.rpc('direct_replacement_response',{p}));
     }
     if (entity === 'diaristas') {
+      if(child==='historico-escalas'&&method==='GET'){const list=unwrap(await sb.from('pedido_escalas').select('*,pedidos(supermercado,unidade,setor,situacao)').eq('diarista_id',id).order('data',{ascending:false}).order('id',{ascending:false}));const references=list.map(s=>s.substituida_por_escala_id).filter(Boolean);const replacements=references.length?unwrap(await sb.from('pedido_escalas').select('id,diaristas(nome)').in('id',references)):[];return list.map(s=>({...s,...s.pedidos,pedido_situacao:s.pedidos?.situacao,substituto_nome:replacements.find(r=>r.id===s.substituida_por_escala_id)?.diaristas?.nome||''}));}
+
       if (child === 'diarias') {
         const dailyId = parts[4] ? Number(parts[4]) : null;
         if (method === 'GET') return (await rows('diarias')).filter(item => item.diarista_id === id).sort((a,b) => b.data.localeCompare(a.data) || b.id - a.id);
@@ -396,6 +398,7 @@
       return assignments.map(item => ({ ...item, diarista_nome: item.diaristas?.nome || '', diaria: byScale.get(item.id) || null }));
     }
     if (entity === 'pedidos') {
+      if(child==='encerrar'&&method==='POST')return orderView(unwrap(await sb.rpc('direct_close_order',{p_id:id,p_expected_updated_at:p.expected_updated_at,p_expected_scales:p.expected_scales})));
       if (child === 'escalas') {
         const scaleId = parts[4] ? Number(parts[4]) : null;
         if(parts[5]==='substituir' && method==='POST') return unwrap(await sb.rpc(p.expected_updated_at?'direct_read_replace_worker':p.todos_restantes===true?'direct_replace_order_remaining':'direct_replace_order_worker',{p_pedido_id:id,p_escala_id:scaleId,p_diarista_id:Number(p.diarista_id),p_motivo:p.motivo||'',p_disponibilidade_confirmada:p.disponibilidade_confirmada===true,...(p.expected_updated_at?{p_expected_updated_at:p.expected_updated_at}:{})}));
@@ -426,7 +429,7 @@
           const removed=unwrap(await query.select('id').maybeSingle());if(!removed)throw Error('A escala mudou ou já foi removida. Confira novamente.');return {ok:true};
         }
       }
-      if (method === 'GET') return (await rows('pedidos')).sort((a,b) => b.id - a.id).map(orderView);
+      if (method === 'GET'){const [orders,scales]=await Promise.all([rows('pedidos'),rows('pedido_escalas')]);return orders.sort((a,b)=>b.id-a.id).map(o=>{const lifecycle=DirectOrderLifecycle.state(o,scales);return {...orderView(o),lifecycle,situacao:lifecycle.situacao};});}
       if (method === 'POST') {
         if(p.solicitacao_loja_id)return orderView(unwrap(await sb.rpc('direct_store_review_request',{p_id:p.solicitacao_loja_id,p_dados:orderPayload(p),p_aceitar:true,p_motivo:''})));
         const response=await sb.from('pedidos').insert(orderPayload(p)).select().single();

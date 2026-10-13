@@ -10,6 +10,7 @@ import usability
 import enterprise
 import supervisor
 import scale_lifecycle
+import order_lifecycle
 import store_portal
 from datetime import date, datetime, timezone
 from decimal import Decimal, InvalidOperation
@@ -584,6 +585,7 @@ def validate_order(payload):
     shifts = payload.get("turnos")
     if not isinstance(shifts, list) or not 1 <= len(shifts) <= 90:
         raise ValueError("Informe de 1 a 90 datas para o pedido.")
+    if status=='concluido' and any(t.get('data','')>=order_lifecycle.today() for t in shifts if isinstance(t,dict)):raise ValueError('Encerre somente após o último dia do pedido.')
     seen = set()
     normalized = []
     for shift in shifts:
@@ -748,6 +750,7 @@ def apply_local_attendance(db, order_id, scale_id, payload):
     if status == 'desistiu':
         return scale_lifecycle.withdraw_remaining(db, order_id, scale_id, payload, sys.modules[__name__])
     order = db.execute("SELECT * FROM pedidos WHERE id = ?", (order_id,)).fetchone()
+    if order['situacao'] in ('cancelado','concluido') and status!=scale['status']:raise ValueError('Pedido encerrado; preserve o histórico de presença e ocorrências.')
     if scale['status']=='desistiu' and status!='desistiu': raise ValueError('Preserve a desistência registrada. Escolha uma substituição.')
     if status=='desistiu' and scale['status'] not in ('escalada','desistiu'): raise ValueError('Desistência disponível apenas antes da presença ou falta.')
     if status != scale["status"]:
@@ -884,7 +887,16 @@ class Handler(BaseHTTPRequestHandler):
         if path == "/api/pedidos":
             with connect() as db:
                 rows = db.execute("SELECT * FROM pedidos ORDER BY id DESC").fetchall()
-            return self.respond(HTTPStatus.OK, [public_order(row) for row in rows])
+                scales=db.execute("SELECT * FROM pedido_escalas").fetchall()
+            return self.respond(HTTPStatus.OK, [{**public_order(row), 'lifecycle':order_lifecycle.state(row,scales), 'situacao':order_lifecycle.state(row,scales)['situacao']} for row in rows])
+        history_match=re.fullmatch(r"/api/diaristas/(\d+)/historico-escalas",path)
+        if history_match:
+            with connect() as db:
+                rows=db.execute("""SELECT s.*,o.supermercado,o.unidade,o.setor,o.situacao AS pedido_situacao,w.nome AS substituto_nome
+                    FROM pedido_escalas s JOIN pedidos o ON o.id=s.pedido_id
+                    LEFT JOIN pedido_escalas r ON r.id=s.substituida_por_escala_id LEFT JOIN diaristas w ON w.id=r.diarista_id
+                    WHERE s.diarista_id=? ORDER BY s.data DESC,s.id DESC""",(int(history_match[1]),)).fetchall()
+            return self.respond(HTTPStatus.OK,[dict(r) for r in rows])
         if path == "/api/escalas":
             with connect() as db:
                 scales = all_scale_rows(db)
@@ -929,7 +941,7 @@ class Handler(BaseHTTPRequestHandler):
             path = "/rede.html"
         if path == "/":
             path = "/index.html"
-        assets = {"/supervisor.js":"text/javascript; charset=utf-8","/supervisor-model.js":"text/javascript; charset=utf-8","/supervisor.css":"text/css; charset=utf-8","/enterprise-workspace.js":"text/javascript; charset=utf-8","/empresa-ajuda.html":"text/html; charset=utf-8","/enterprise-language.js":"text/javascript; charset=utf-8","/enterprise-features.js":"text/javascript; charset=utf-8","/enterprise-local.js":"text/javascript; charset=utf-8","/enterprise-local-worker.js":"text/javascript; charset=utf-8","/relatorio.html":"text/html; charset=utf-8","/relatorio.js":"text/javascript; charset=utf-8","/enterprise-contract.js":"text/javascript; charset=utf-8", "/enterprise-model.js":"text/javascript; charset=utf-8", "/enterprise.js":"text/javascript; charset=utf-8", "/enterprise.css":"text/css; charset=utf-8", "/enterprise-schema.json":"application/json", "/rede.html":"text/html; charset=utf-8","/network-links.js":"text/javascript; charset=utf-8","/usability.css":"text/css; charset=utf-8","/management-model.js":"text/javascript; charset=utf-8", "/management.js":"text/javascript; charset=utf-8", "/management.css":"text/css; charset=utf-8", "/loja.html":"text/html; charset=utf-8", "/store-portal.js":"text/javascript; charset=utf-8", "/automation-model.js":"text/javascript; charset=utf-8", "/automation.js":"text/javascript; charset=utf-8", "/automation.css":"text/css; charset=utf-8", "/index.html": "text/html; charset=utf-8", "/style.css": "text/css; charset=utf-8", "/brand.css": "text/css; charset=utf-8", "/theme.css": "text/css; charset=utf-8", "/mobile.css": "text/css; charset=utf-8", "/reading.css": "text/css; charset=utf-8", "/motion.css": "text/css; charset=utf-8", "/operations.css": "text/css; charset=utf-8", "/workflow.css": "text/css; charset=utf-8", "/route-loader.js": "text/javascript; charset=utf-8", "/session-sync.js": "text/javascript; charset=utf-8",
+        assets = {"/order-lifecycle-model.js":"text/javascript; charset=utf-8","/supervisor.js":"text/javascript; charset=utf-8","/supervisor-model.js":"text/javascript; charset=utf-8","/supervisor.css":"text/css; charset=utf-8","/enterprise-workspace.js":"text/javascript; charset=utf-8","/empresa-ajuda.html":"text/html; charset=utf-8","/enterprise-language.js":"text/javascript; charset=utf-8","/enterprise-features.js":"text/javascript; charset=utf-8","/enterprise-local.js":"text/javascript; charset=utf-8","/enterprise-local-worker.js":"text/javascript; charset=utf-8","/relatorio.html":"text/html; charset=utf-8","/relatorio.js":"text/javascript; charset=utf-8","/enterprise-contract.js":"text/javascript; charset=utf-8", "/enterprise-model.js":"text/javascript; charset=utf-8", "/enterprise.js":"text/javascript; charset=utf-8", "/enterprise.css":"text/css; charset=utf-8", "/enterprise-schema.json":"application/json", "/rede.html":"text/html; charset=utf-8","/network-links.js":"text/javascript; charset=utf-8","/usability.css":"text/css; charset=utf-8","/management-model.js":"text/javascript; charset=utf-8", "/management.js":"text/javascript; charset=utf-8", "/management.css":"text/css; charset=utf-8", "/loja.html":"text/html; charset=utf-8", "/store-portal.js":"text/javascript; charset=utf-8", "/automation-model.js":"text/javascript; charset=utf-8", "/automation.js":"text/javascript; charset=utf-8", "/automation.css":"text/css; charset=utf-8", "/index.html": "text/html; charset=utf-8", "/style.css": "text/css; charset=utf-8", "/brand.css": "text/css; charset=utf-8", "/theme.css": "text/css; charset=utf-8", "/mobile.css": "text/css; charset=utf-8", "/reading.css": "text/css; charset=utf-8", "/motion.css": "text/css; charset=utf-8", "/operations.css": "text/css; charset=utf-8", "/workflow.css": "text/css; charset=utf-8", "/route-loader.js": "text/javascript; charset=utf-8", "/session-sync.js": "text/javascript; charset=utf-8",
             "/app.js": "text/javascript; charset=utf-8", "/theme.js": "text/javascript; charset=utf-8", "/finance.js": "text/javascript; charset=utf-8", "/forecast.js": "text/javascript; charset=utf-8", "/operations.js": "text/javascript; charset=utf-8", "/workflow.js": "text/javascript; charset=utf-8", "/matching.js": "text/javascript; charset=utf-8", "/backup.js": "text/javascript; charset=utf-8", "/orders.js": "text/javascript; charset=utf-8", "/stores.js": "text/javascript; charset=utf-8", "/settings.js": "text/javascript; charset=utf-8", "/reading.js": "text/javascript; charset=utf-8", "/reading-parser.js": "text/javascript; charset=utf-8", "/remote.js": "text/javascript; charset=utf-8", "/payment-calendar.js": "text/javascript; charset=utf-8", "/vendor/supabase-2.117.2.js": "text/javascript; charset=utf-8", "/stores.css": "text/css; charset=utf-8", "/settings.css": "text/css; charset=utf-8", "/login.css": "text/css; charset=utf-8", "/favicon.svg": "image/svg+xml", "/logo-direct-promocoes.jpg": "image/jpeg", "/logo-direct-promocoes-transparente.png": "image/png"}
         for asset in ['messages-model.js','messages.js','backup-model.js']:
             assets['/'+asset]='text/javascript; charset=utf-8'
@@ -951,6 +963,14 @@ class Handler(BaseHTTPRequestHandler):
         if not self._allowed_origin():
             return self.respond(HTTPStatus.FORBIDDEN, {"erro": "Acesso não permitido."})
         path = urlparse(self.path).path
+        close_match=re.fullmatch(r"/api/pedidos/(\d+)/encerrar",path)
+        if close_match:
+            try:
+                p=self.read_json()
+                with connect() as db:
+                    db.execute('BEGIN IMMEDIATE');saved=order_lifecycle.close(db,int(close_match[1]),p)
+                return self.respond(HTTPStatus.OK,public_order(saved))
+            except (ValueError,TypeError,json.JSONDecodeError) as exc:return self.respond(HTTPStatus.BAD_REQUEST,{'erro':str(exc)})
         if path == "/api/leitura/pedido-escalado":
             return linked_reading.handle(self, sys.modules[__name__])
         replacement_route=re.fullmatch(r"/api/pedidos/(\d+)/escalas/(\d+)/substituir",urlparse(self.path).path)
@@ -1072,6 +1092,7 @@ class Handler(BaseHTTPRequestHandler):
                     for day in days:
                         if order_shift(order, day) is None:
                             raise ValueError(f"A data {day} não consta no pedido.")
+                        if day<order_lifecycle.today() and db.execute("SELECT 1 FROM pedido_escalas WHERE pedido_id=? AND data=? AND status IN ('falta','desistiu')",(scale_route[0],day)).fetchone():raise ValueError('Dias anteriores ficam no histórico; não é possível repor no passado.')
                         validate_worker_shift(db, person, order, day, scoped_availability=payload.get('disponibilidade_confirmada') is True)
                         if db.execute("SELECT 1 FROM pedido_escalas WHERE pedido_id = ? AND data = ? AND diarista_id = ?", (scale_route[0], day, person["id"])).fetchone():
                             raise ValueError(f"A diarista já está neste pedido em {day}.")
@@ -1280,12 +1301,14 @@ class Handler(BaseHTTPRequestHandler):
                 data = validate_order(payload)
                 order_id = int(order_match.group(1))
                 with connect() as db:
+                    db.execute('BEGIN IMMEDIATE')
                     old = db.execute("SELECT * FROM pedidos WHERE id = ?", (order_id,)).fetchone()
                     if old and db.execute("SELECT 1 FROM pedido_escalas WHERE pedido_id = ? LIMIT 1", (order_id,)).fetchone():
                         # O setor pode ser corrigido sem recriar a equipe ou valores históricos.
                         fixed = ("supermercado", "unidade", "quantidade_diaristas", "turnos")
                         if any(old[key] != data[key] for key in fixed):
                             raise ValueError("Este pedido já possui escalas. Você pode corrigir o setor; preserve a rede, a loja, a quantidade e as datas e horários registrados.")
+                    if data['situacao']=='concluido' and old and old['situacao']!='concluido' and db.execute("SELECT 1 FROM pedido_escalas WHERE pedido_id=? AND status='escalada'",(order_id,)).fetchone():raise ValueError('Confira as presenças pendentes antes de encerrar.')
                     fields = ", ".join(f"{key} = ?" for key in data)
                     cur = db.execute(f"UPDATE pedidos SET {fields}, atualizado_em = ? WHERE id = ? AND (? IS NULL OR atualizado_em = ?)", (*data.values(), datetime.now(timezone.utc).isoformat(), order_id, payload.get("expected_updated_at"), payload.get("expected_updated_at")))
                     if not cur.rowcount:

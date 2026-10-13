@@ -32,3 +32,5 @@ html[data-theme="dark"] .workflow-line, html[data-theme="dark"] .workflow-choice
 .reconciliation-entry summary { cursor: pointer; font-weight: 650; overflow-wrap: anywhere; }
 .reconciliation-body { display: grid; gap: .65rem; margin-top: .8rem; }
 .reconciliation-issue { margin: 0; color: var(--color-warning, #d27b39); font-size: .875rem; overflow-wrap: anywhere; }
+
+.order-closure{padding:16px;margin:14px 0;border:1px solid var(--border,#c5d4dc);border-radius:12px;background:var(--surface,#f8fafb);overflow-wrap:anywhere}.order-close-review{display:flex;flex-wrap:wrap;gap:10px}.order-close-review p{flex-basis:100%}.attendance-history-item{align-items:flex-start}.attendance-history-item>div{min-width:0;overflow-wrap:anywhere}.attendance-history-item span,.attendance-history-item small{white-space:normal}.order-close-shortcut{white-space:normal}.order-closure .button{white-space:normal;min-height:44px}html[data-theme=dark] .order-closure{background:var(--dark-raised,#17263d);border-color:var(--dark-border,#375075)}@media(max-width:600px){.attendance-history-item{flex-direction:column}.order-close-review .button{flex:1}}

@@ -1,5 +1,6 @@
 """Desistências e substituições preservam a escala original e sua auditoria."""
 import json
+import order_lifecycle
 import re
 from datetime import datetime, timezone
 
@@ -26,10 +27,9 @@ def migrate(core):
 def sync(db,order_id):
     order=db.execute('SELECT * FROM pedidos WHERE id=?',(order_id,)).fetchone()
     if not order or order['situacao'] in ('concluido','cancelado'): return
-    shifts=json.loads(order['turnos'])
-    counts=[db.execute("SELECT count(*) FROM pedido_escalas WHERE pedido_id=? AND data=? AND status NOT IN ('falta','desistiu')",(order_id,t['data'])).fetchone()[0] for t in shifts]
-    status='confirmado' if counts and all(n>=order['quantidade_diaristas'] for n in counts) else 'em_selecao' if db.execute('SELECT 1 FROM pedido_escalas WHERE pedido_id=?',(order_id,)).fetchone() else 'novo'
-    db.execute('UPDATE pedidos SET situacao=?,atualizado_em=? WHERE id=?',(status,datetime.now(timezone.utc).isoformat(),order_id))
+    status=order_lifecycle.state(order,db.execute('SELECT * FROM pedido_escalas WHERE pedido_id=?',(order_id,)).fetchall())['situacao']
+    if status!=order['situacao']:db.execute('UPDATE pedidos SET situacao=?,atualizado_em=? WHERE id=?',(status,datetime.now(timezone.utc).isoformat(),order_id))
+
 
 
 def withdraw_remaining(db, order_id, scale_id, payload, core):
@@ -58,6 +58,7 @@ def replace(db,order_id,scale_id,payload,core):
     if not old or not order: raise ValueError('Escala não encontrada.')
     if payload.get('expected_updated_at') and payload['expected_updated_at']!=old['atualizado_em']: raise ValueError('A escala mudou depois da leitura. Confira novamente antes de substituir.')
     if order['situacao'] in ('cancelado','concluido') or old['status']=='presente': raise ValueError('Substituição disponível apenas antes da presença e em pedido aberto.')
+    if old['data']<order_lifecycle.today():raise ValueError('Dias anteriores ficam no histórico; não é possível repor no passado.')
     if old['diarista_id']==payload['diarista_id']: raise ValueError('Escolha outra pessoa para substituir.')
     if old['substituida_por_escala_id']:
         found=db.execute('SELECT * FROM pedido_escalas WHERE id=?',(old['substituida_por_escala_id'],)).fetchone()

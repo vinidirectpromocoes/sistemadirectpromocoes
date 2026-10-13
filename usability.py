@@ -70,6 +70,7 @@ def response_save(db,p):
 def replace_remaining(db,order_id,scale_id,p,core):
     old=db.execute('SELECT * FROM pedido_escalas WHERE id=? AND pedido_id=?',(scale_id,order_id)).fetchone()
     if not old:raise ValueError('Escala não encontrada.')
+    if old['data']<core.order_lifecycle.today():raise ValueError('Dias anteriores ficam no histórico; não é possível repor no passado.')
     order=db.execute('SELECT * FROM pedidos WHERE id=?',(order_id,)).fetchone()
     if order['situacao'] in ('cancelado','concluido') or old['status']=='presente':raise ValueError('Substituição disponível apenas antes da presença e em pedido aberto.')
     if type(p.get('diarista_id')) is not int or p['diarista_id']==old['diarista_id']:raise ValueError('Escolha outra pessoa para substituir.')
