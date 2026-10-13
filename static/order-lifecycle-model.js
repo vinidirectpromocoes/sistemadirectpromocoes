@@ -1,0 +1,8 @@
+/* Read-only operational state, calculated in the company's calendar. */
+(function(root,factory){const value=factory();if(typeof module==='object')module.exports=value;else root.DirectOrderLifecycle=value;})(globalThis,()=>{
+ const today=()=>{const p=Object.fromEntries(new Intl.DateTimeFormat('en-US',{timeZone:'America/Fortaleza',year:'numeric',month:'2-digit',day:'2-digit'}).formatToParts(new Date()).map(x=>[x.type,x.value]));return p.year+'-'+p.month+'-'+p.day;};
+ function state(order,all,day=today()){const shifts=order.turnos||[],rows=all.filter(s=>s.pedido_id===order.id),q=order.quantidade_diaristas,current=shifts.filter(t=>t.data>=day),ended=shifts.length>0&&shifts.every(t=>t.data<day);const vacancies=current.reduce((n,t)=>n+Math.max(0,q-rows.filter(s=>s.data===t.data&&!['falta','desistiu'].includes(s.status)).length),0),pending=rows.filter(s=>s.data<day&&s.status==='escalada').length,missing=shifts.filter(t=>t.data<day).reduce((n,t)=>n+Math.max(0,q-rows.filter(s=>s.data===t.data&&s.status==='presente').length),0);
+ return {situacao:['cancelado','concluido'].includes(order.situacao)?order.situacao:!vacancies?'confirmado':rows.length?'em_selecao':'novo',periodo_finalizado:ended,encerravel:ended&&!pending&&!['cancelado','concluido'].includes(order.situacao),presencas_pendentes:pending,vagas_atuais:vacancies,dias_nao_atendidos:missing,presencas:rows.filter(s=>s.status==='presente').length,faltas:rows.filter(s=>s.status==='falta').length,dias_desistencia:rows.filter(s=>s.status==='desistiu').length};}
+ const versions=rows=>rows.slice().sort((a,b)=>a.id-b.id).map(s=>({id:s.id,status:s.status,atualizado_em:s.atualizado_em}));
+ return {today,state,versions};
+});

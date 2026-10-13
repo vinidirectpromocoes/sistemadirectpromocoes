@@ -56,6 +56,8 @@ class LinkedReadingTests(unittest.TestCase):
         p=self.payload(diarista={'nome':'Pessoa Existente','cpf':'52998224725'});self.assertEqual(self.save(p)[0],400)
     def test_partial_staffing_stays_in_selection_and_last_worker_confirms(self):
         p=self.payload(confirmar_cadastro=True);p['pedido']['quantidade_diaristas']=2
+        today=datetime.now(ZoneInfo('America/Fortaleza')).date()
+        for i,t in enumerate(p['pedido']['turnos']):t['data']=(today+timedelta(days=i)).isoformat()
         _,first=self.save(p);self.assertEqual(first['situacao'],'em_selecao')
         second={**p,'chave_operacao':str(uuid4()),'pedido_id':first['pedido_id'],'diarista':{'nome':'Segunda Pessoa','cpf':'52998224725'}}
         status,saved=self.save(second);self.assertEqual(status,200,saved);self.assertEqual(saved['situacao'],'confirmado');self.assertEqual(self.counts(),(2,1,4,0))

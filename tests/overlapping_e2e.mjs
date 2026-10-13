@@ -6,6 +6,7 @@ import {chromium,webkit} from 'playwright';
 const folder=await mkdtemp(path.join(os.tmpdir(),'direct-overlap-')),socket=net.createServer();
 await new Promise(r=>socket.listen(0,'127.0.0.1',r));const port=socket.address().port;await new Promise(r=>socket.close(r));
 const url='http://127.0.0.1:'+port,child=spawn(process.env.PYTHON||'python3',['server.py'],{env:{...process.env,DIARISTAS_DB_PATH:path.join(folder,'test.db'),DIARISTAS_PORT:String(port)},stdio:'ignore'});
+const companyDay=new Intl.DateTimeFormat('en-CA',{timeZone:'America/Fortaleza',year:'numeric',month:'2-digit',day:'2-digit'}).format(new Date()),futureDates=Array.from({length:7},(_,i)=>{const d=new Date(companyDay+'T12:00:00Z');d.setUTCDate(d.getUTCDate()+i+1);return d.toISOString().slice(0,10);}),label=d=>d.split('-').reverse().join('/');
 const api=async(method,route,body)=>{const r=await fetch(url+route,{method,headers:{'Content-Type':'application/json'},body:body?JSON.stringify(body):undefined}),d=await r.json();assert.ok(r.ok,JSON.stringify(d));return d;};
 try {
  for(let i=0;i<80;i++){try{await api('GET','/api/lojas');break;}catch{}await new Promise(r=>setTimeout(r,100));}
@@ -13,7 +14,7 @@ try {
   const browser=await engine.launch(),context=await browser.newContext({viewport:{width,height:844},isMobile:width<500,hasTouch:width<500}),page=await context.newPage(),errors=[];
   page.on('pageerror',e=>errors.push(e.message));await page.goto(url+'/#leitura');
   for(const time of ['13:40 as 22:00','07:00 as 15:20']) {
-   const message=`Rede: Super do Povo\nLoja: Meireles\nFunção: Balcao de Frios\nHorário: ${time}\nData de inicio: 06/10/2026 a 12/10/2026\nQuantidade de dias: 7\nNome: Paulo Roberto Porfirio\nCPF: 64865592334`;
+   const message=`Rede: Super do Povo\nLoja: Meireles\nFunção: Balcao de Frios\nHorário: ${time}\nData de inicio: ${label(futureDates[0])} a ${label(futureDates[6])}\nQuantidade de dias: 7\nNome: Paulo Roberto Porfirio\nCPF: 64865592334`;
    await page.locator('#reading-text').fill(message);await page.locator('#reading-submit').click();await page.locator('.reading-preview').waitFor();
    await page.locator('#reading-confirm').click();await page.locator('#reading-result-items .reading-item.saved').waitFor();
   }
@@ -21,7 +22,7 @@ try {
   let orders=await api('GET','/api/pedidos'),scales=await api('GET','/api/escalas');assert.equal(orders.length,2);assert.equal(scales.length,14);assert.ok(orders.every(o=>o.situacao==='confirmado'));assert.ok(scales.every(s=>s.diarista_id===worker.id));
   const third=await api('POST','/api/pedidos',{supermercado:'Super do Povo',unidade:'Meireles',setor:'frios ( dois)',quantidade_diaristas:1,turnos:orders[0].turnos});
   await page.locator('#nav-pedidos').click();await page.evaluate(id=>openOrderDetail(id),third.id);
-  await page.getByLabel('Escolher diarista para 06/10/2026',{exact:true}).selectOption(String(worker.id));await page.getByRole('button',{name:'Todos os dias possíveis (7)',exact:true}).click();await page.waitForFunction(()=>document.querySelector('#order-detail-success')?.textContent.includes('7 dias'));
+  await page.getByLabel('Escolher diarista para '+label(futureDates[0]),{exact:true}).selectOption(String(worker.id));await page.getByRole('button',{name:'Todos os dias possíveis (7)',exact:true}).click();await page.waitForFunction(()=>document.querySelector('#order-detail-success')?.textContent.includes('7 dias'));
   const beforeEdit=await api('GET',`/api/pedidos/${third.id}/escalas`);assert.equal(beforeEdit.length,7);
   await page.locator('#order-edit-button').click();await page.locator('#order-sector').fill('Balconista de frios');await page.locator('#order-save-button').click();await page.locator('#order-dialog').waitFor({state:'hidden'});
   const corrected=(await api('GET','/api/pedidos')).find(o=>o.id===third.id);assert.equal(corrected.setor,'Balconista de frios');assert.deepEqual(corrected.turnos,third.turnos);assert.deepEqual(await api('GET',`/api/pedidos/${third.id}/escalas`),beforeEdit);

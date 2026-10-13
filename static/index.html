@@ -25,6 +25,7 @@
   <link rel="manifest" href="/manifest.webmanifest">
   <script src="/vendor/supabase-2.117.2.js" defer></script>
   <script src="/payment-calendar.js" defer></script>
+  <script src="/order-lifecycle-model.js" defer></script>
   <script src="/supervisor-model.js" defer></script>
   <link rel="stylesheet" href="/supervisor.css">
   <script src="/remote.js" defer></script>
@@ -443,6 +444,7 @@
       <div id="detail-status" class="detail-status"></div>
       <div id="detail-error" class="form-error" role="alert" hidden></div>
       <div id="detail-fields" class="detail-fields"></div>
+      <section class="history-section" aria-labelledby="attendance-history-title"><h3 id="attendance-history-title">Presenças, faltas e desistências</h3><p id="attendance-history-summary" class="section-help"></p><div id="attendance-history-list"></div></section>
       <section class="history-section" aria-labelledby="history-title"><div class="history-heading"><div><h3 id="history-title">Histórico de diárias</h3><p>Diárias registradas para esta profissional.</p></div><button class="button button-outline" id="add-daily-button" type="button">＋ Registrar diária</button></div><div id="history-list"></div></section>
     </div>
     <div class="dialog-footer detail-footer"><button class="button button-danger" id="delete-button" type="button">Excluir</button><div><button class="button button-quiet" id="block-button" type="button"></button><button class="button button-primary" id="edit-button" type="button">Editar cadastro</button></div></div>
@@ -518,7 +520,7 @@
   </dialog>
   <dialog id="order-detail-dialog" aria-labelledby="order-detail-title">
     <div class="dialog-header"><div><span class="eyebrow">PEDIDO DO SUPERMERCADO</span><h2 id="order-detail-title"></h2></div><button class="icon-button" type="button" id="order-detail-close" aria-label="Fechar">×</button></div>
-    <div class="dialog-body"><div id="order-detail-fields" class="detail-fields"></div><details id="order-suggestions" class="profile-more" hidden><summary>Sugestões para a escala inteira</summary><div id="order-suggestions-list" class="automation-list"></div></details><button id="order-messages" class="button button-outline" type="button">▧ Mensagens para copiar</button><section class="history-section"><h3>Dias e horários solicitados</h3><div id="order-detail-shifts" class="order-detail-shifts"></div></section><div id="order-detail-success" class="feedback" role="status" aria-live="polite" hidden></div><div id="order-detail-error" class="form-error" role="alert" hidden></div></div>
+    <div class="dialog-body"><div id="order-detail-fields" class="detail-fields"></div><section id="order-closure" class="order-closure" hidden></section><details id="order-suggestions" class="profile-more" hidden><summary>Sugestões para a escala inteira</summary><div id="order-suggestions-list" class="automation-list"></div></details><button id="order-messages" class="button button-outline" type="button">▧ Mensagens para copiar</button><section class="history-section"><h3>Dias e horários solicitados</h3><div id="order-detail-shifts" class="order-detail-shifts"></div></section><div id="order-detail-success" class="feedback" role="status" aria-live="polite" hidden></div><div id="order-detail-error" class="form-error" role="alert" hidden></div></div>
     <div class="dialog-footer detail-footer"><button class="button button-danger" id="order-delete-button" type="button">Excluir pedido</button><div><button class="button button-quiet" id="order-detail-close-bottom" type="button">Fechar</button><button class="button button-primary" id="order-edit-button" type="button">Editar pedido</button></div></div>
   </dialog>
 <dialog id="order-model-dialog" aria-labelledby="order-model-title"><div class="dialog-header"><h2 id="order-model-title">Modelos de pedidos</h2><button id="order-model-close" class="icon-button" type="button" aria-label="Fechar modelos">×</button></div><div class="dialog-body"><p class="section-help">Gera um rascunho para conferir. A vaga só será publicada ao salvar o pedido.</p><label>Início da nova escala<input id="order-model-start" type="date" required></label><div id="order-model-list" class="automation-list"></div><p id="order-model-error" class="form-error" role="alert" hidden></p></div></dialog>

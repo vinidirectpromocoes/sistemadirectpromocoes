@@ -72,7 +72,8 @@ def save(db, payload, core):
             db.execute('UPDATE pedido_escalas SET substituida_por_escala_id=? WHERE id=?',(scale_id,absence['id']))
     shifts = json.loads(order['turnos'])
     complete = all(db.execute("SELECT count(*) FROM pedido_escalas WHERE pedido_id=? AND data=? AND status NOT IN ('falta','desistiu')", (order['id'], shift['data'])).fetchone()[0] >= order['quantidade_diaristas'] for shift in shifts)
-    situation = 'confirmado' if complete else 'em_selecao'
+    core.scale_lifecycle.sync(db,order['id'])
+    situation=db.execute('SELECT situacao FROM pedidos WHERE id=?',(order['id'],)).fetchone()[0]
     db.execute('UPDATE pedidos SET situacao=?,atualizado_em=? WHERE id=?', (situation,now,order['id']))
     if pending_id:
         db.execute("UPDATE leituras_pendentes SET status='resolvido',atualizado_em=? WHERE id=? AND tipo='pedido' AND json_extract(dados,'$.diarista_escalado.cpf')=?",(now,pending_id,person['cpf']))

@@ -111,7 +111,9 @@ function showOrderFeedback(message, isError = false) {
 
 function orderCoverage(order,filters=orderFilters(),now=Date.now()) {
   if(order.situacao==='cancelado')return {color:'neutral',label:'Pedido cancelado'};
-  const gaps=orderFilteredShifts(order,filters).filter(t=>(weeklyScales[order.id]||[]).filter(s=>s.data===t.data&&!['falta','desistiu'].includes(s.status)).length<order.quantidade_diaristas);
+  if(order.situacao==='concluido')return {color:'neutral',label:'Pedido encerrado; histórico preservado'};
+  const displayed=orderFilteredShifts(order,filters);if(displayed.every(t=>t.data<orderToday()))return {color:'neutral',label:'Período encerrado; confira o histórico de atendimento'};
+  const gaps=displayed.filter(t=>t.data>=orderToday()).filter(t=>(weeklyScales[order.id]||[]).filter(s=>s.data===t.data&&!['falta','desistiu'].includes(s.status)).length<order.quantidade_diaristas);
   if(!gaps.length)return {color:'green',label:'Equipe preenchida em todos os dias exibidos'};
   const running=gaps.some(t=>Date.parse(`${t.data}T${t.inicio}:00-03:00`)<=now&&now<Date.parse(`${t.data}T${t.fim}:00-03:00`));
   return running?{color:'yellow',label:'Diária já iniciou e há vaga sem diarista'}:{color:'red',label:'Pedido não atendido: há vaga sem diarista'};
@@ -147,7 +149,7 @@ function renderOrders() {
   const body = $('#orders-rows'); body.replaceChildren();
   DirectPager.slice('orders',filtered,$('#orders-table-wrap'),renderOrders).forEach(item => {
     const shifts=orderFilteredShifts(item,filters),days=shifts.length,totalDemand=days*item.quantidade_diaristas;
-    const row = document.createElement('tr');
+    const row = document.createElement('tr');row.dataset.orderId=item.id;
     const market = document.createElement('td');
     const name = document.createElement('strong'); name.textContent = item.supermercado;
     const unit = document.createElement('small'); unit.textContent = item.unidade || 'Unidade não informada';
@@ -176,7 +178,7 @@ function renderOrders() {
     const indicator=document.createElement('span'); indicator.className=`order-neon ${coverage.color}`; indicator.setAttribute('role','img'); indicator.setAttribute('aria-label',coverage.label); indicator.title=coverage.label;
     state.append(indicator);
     const badge = document.createElement('span'); badge.className = `order-status ${item.situacao}`;
-    badge.textContent = orderStatusLabels[item.situacao]; state.append(badge); row.append(state);
+    badge.textContent = item.lifecycle?.periodo_finalizado&&!['concluido','cancelado'].includes(item.situacao)?item.lifecycle.presencas_pendentes?'Baixas pendentes':'Pronto para encerrar':orderStatusLabels[item.situacao]; state.append(badge); row.append(state);
     const action = document.createElement('td'); action.className = 'actions';
     const view = document.createElement('button'); view.type = 'button'; view.className = 'order-view-button';
     view.textContent = '◉'; view.setAttribute('aria-label', `Ver pedido de ${item.supermercado}`);
@@ -187,6 +189,7 @@ function renderOrders() {
       edit.innerHTML='<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="m16 3 5 5L8 21H3v-5zM14 5l5 5"/></svg>';
       edit.setAttribute('aria-label',`Editar pedido #${item.id}`);edit.title='Editar pedido';edit.addEventListener('click',()=>openOrderForm(item));action.append(edit);
     }
+    if(item.lifecycle?.periodo_finalizado&&!['concluido','cancelado'].includes(item.situacao)&&(!window.directRemote||['admin','operacao'].includes(directRemote.role))){const close=document.createElement('button');close.type='button';close.className='text-button order-close-shortcut';close.textContent='Encerrar';close.setAttribute('aria-label','Encerrar pedido #'+item.id);close.addEventListener('click',()=>openOrderDetail(item.id));action.append(close);}
     row.append(action);row.addEventListener('click',event=>{if(!event.target.closest('button'))openOrderDetail(item.id);}); body.append(row);
   });
 }
@@ -194,7 +197,7 @@ function renderOrders() {
 async function loadOrders() {
   try {
     const [records,allScales] = await Promise.all([request('/api/pedidos'),request('/api/escalas')]);
-    orderRecords=records;
+    orderRecords=records.map(o=>{const lifecycle=DirectOrderLifecycle.state(o,allScales,orderToday());return {...o,lifecycle,situacao:lifecycle.situacao};});
     loadOrderCatalog().catch(() => {});
     weeklyScales = Object.groupBy ? Object.groupBy(allScales, scale => scale.pedido_id) :
       allScales.reduce((groups, scale) => ((groups[scale.pedido_id] ||= []).push(scale), groups), {});
@@ -329,8 +332,8 @@ async function refreshOrderScales() {
   weeklyScales[id] = savedScales;
   if (orderDetailId !== id) return;
   orderScales = savedScales;
-  renderOrderShifts();
   await loadOrders();
+  if(orderDetailId===id)renderOrderShifts();
   if (typeof loadHome === 'function') loadHome().catch(() => {});
 }
 
@@ -360,7 +363,7 @@ async function addOrderWorker(dates, workerId) {
       ? `A escala foi salva, mas não foi possível atualizar a tela. Reabra o pedido para conferir. ${err.message}`
       : `Não foi possível confirmar a escala. Reabra o pedido antes de tentar novamente. ${err.message}`);
   }
-  finally { orderDetailBusy = false; }
+  finally { orderDetailBusy = false; if($('#order-detail-dialog').open)renderOrderClosure(); }
 }
 
 function chooseOrderWorker(data, select, picker) {
@@ -373,7 +376,7 @@ function chooseOrderWorker(data, select, picker) {
   const assigned = new Set(orderScales.filter(scale => scale.diarista_id === worker.id).map(scale => scale.data));
   let full = 0;
   const dates = item.turnos.filter(shift => {
-    if (assigned.has(shift.data)) return false;
+    if (shift.data<orderToday() || assigned.has(shift.data)) return false;
     const occupied = orderScales.filter(scale => scale.data === shift.data && !['falta','desistiu'].includes(scale.status)).length;
     if (occupied >= item.quantidade_diaristas) { full++; return false; }
     return true;
@@ -430,7 +433,7 @@ async function changeOrderAttendance(scale, status) {
       if(pending&&row&&!pending.substituida_por_escala_id){orderDetailBusy=false;showOrderSubstitute(pending,row);}
     }
   } catch (err) { orderDetailError(err.message); }
-  finally { orderDetailBusy = false; }
+  finally { orderDetailBusy = false; if($('#order-detail-dialog').open)renderOrderClosure(); }
 }
 
 function showOrderSubstitute(scale,row) {
@@ -463,7 +466,7 @@ function showOrderSubstitute(scale,row) {
       const result=await request(`/api/pedidos/${scale.pedido_id}/escalas/${scale.id}/substituir`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({diarista_id:Number(select.value),motivo:reason.value.trim(),disponibilidade_confirmada:checkbox.checked,todos_restantes:all.checked})});
       await refreshOrderScales();if(typeof loadFinance==='function'&&(!window.directRemote||['admin','financeiro'].includes(window.directRemote.role)))await loadFinance();
       $('#order-detail-success').textContent=`Substituição registrada ${all.checked?`em ${result.length} dia(s) restantes do pedido`:`somente em ${dateLabel(scale.data)}`}. Histórico preservado; confirme se a nova pessoa vai e depois registre presença ou falta.`;$('#order-detail-success').hidden=false;
-    }catch(error){orderDetailError(error.message);}finally{orderDetailBusy=false;save.disabled=false;}
+    }catch(error){orderDetailError(error.message);}finally{orderDetailBusy=false;save.disabled=false;if($('#order-detail-dialog').open)renderOrderClosure();}
   });
   const cancel=document.createElement('button');cancel.type='button';cancel.className='button button-quiet';cancel.textContent='Cancelar';cancel.addEventListener('click',()=>{panel.remove();refreshOrderScales().catch(e=>orderDetailError(e.message));});actions.append(save,cancel);panel.append(actions);row.append(panel);panel.scrollIntoView({block:'nearest'});
   window.DirectUI.replacement(panel,{scale,order:orderRecords.find(o=>o.id===scale.pedido_id),workers:orderWorkers,stores:orderCatalogStores,orders:orderRecords,scales:orderScales,select,all});
@@ -477,7 +480,7 @@ async function removeOrderWorker(scale) {
     await request(`/api/pedidos/${orderDetailId}/escalas/${scale.id}`, { method: 'DELETE' });
     await refreshOrderScales();
   } catch (err) { orderDetailError(err.message); }
-  finally { orderDetailBusy = false; }
+  finally { orderDetailBusy = false; if($('#order-detail-dialog').open)renderOrderClosure(); }
 }
 
 function renderOrderShifts() {
@@ -485,7 +488,7 @@ function renderOrderShifts() {
   if (!item) return;
   const canOperate = !window.directRemote || ['admin', 'operacao'].includes(window.directRemote.role);
   window.DirectAutomationUI?.suggest(item,orderWorkers,orderCatalogStores,orderRecords,weeklyScales,orderScales);
-  const list = $('#order-detail-shifts'); list.replaceChildren();
+  const list = $('#order-detail-shifts'); list.replaceChildren();renderOrderClosure();
   item.turnos.forEach(shift => {
     const scales = orderScales.filter(scale => scale.data === shift.data);
     const active = scales.filter(scale => !['falta','desistiu'].includes(scale.status)).length;
@@ -509,7 +512,7 @@ function renderOrderShifts() {
       if (['falta','desistiu'].includes(scale.status)) {
         const absence = document.createElement('small'); absence.className = 'order-absence-detail';
         const replacement = scales.find(item => item.id === scale.substituida_por_escala_id);
-        absence.textContent = `${scale.desistencia_motivo || scale.falta_motivo || 'Motivo não registrado (histórico anterior)'} · ${scale.desistencia_por || scale.falta_confirmada_por || 'Autor não registrado'}${(scale.desistencia_em || scale.falta_confirmada_em) ? ` · ${new Date(scale.desistencia_em || scale.falta_confirmada_em).toLocaleString('pt-BR')}` : ''}${replacement ? ` · Substituta: ${replacement.diarista_nome}` : ' · Substituição pendente'}`;
+        absence.textContent = `${scale.desistencia_motivo || scale.falta_motivo || 'Motivo não registrado (histórico anterior)'} · ${scale.desistencia_por || scale.falta_confirmada_por || 'Autor não registrado'}${(scale.desistencia_em || scale.falta_confirmada_em) ? ` · ${new Date(scale.desistencia_em || scale.falta_confirmada_em).toLocaleString('pt-BR')}` : ''}${replacement ? ` · Substituta: ${replacement.diarista_nome}` : shift.data<orderToday()?' · Dia encerrado; ocorrência preservada':active>=item.quantidade_diaristas?' · Equipe preenchida neste dia':' · Substituição pendente'}`;
         row.append(absence);
       }
       const actions = document.createElement('div'); actions.className = 'order-worker-actions';
@@ -524,7 +527,7 @@ function renderOrderShifts() {
         });
         actions.append(profile);
       }
-      for (const [status, label] of canOperate && scale.status!=='desistiu' ? [['presente', 'Presença'], ['falta', 'Falta']] : []) {
+      for (const [status, label] of canOperate && !['cancelado','concluido'].includes(item.situacao) && scale.status!=='desistiu' ? [['presente', 'Presença'], ['falta', 'Falta']] : []) {
         const button = document.createElement('button'); button.type = 'button';
         button.className = `order-attendance-button ${status}${scale.status === status ? ' selected' : ''}`;
         button.textContent = label; button.disabled = scale.status === status || shift.data > orderToday();
@@ -537,13 +540,13 @@ function renderOrderShifts() {
           const withdraw=document.createElement('button');withdraw.type='button';withdraw.className='order-attendance-button desistiu';withdraw.textContent='Desistência';
           withdraw.setAttribute('aria-label',`Desistência de ${scale.diarista_nome} em ${dateLabel(shift.data)}`);withdraw.addEventListener('click',()=>changeOrderAttendance(scale,'desistiu'));actions.append(withdraw);
         }
-        if(scale.status!=='presente' && !scale.substituida_por_escala_id) {
+        if(shift.data>=orderToday() && scale.status!=='presente' && !scale.substituida_por_escala_id) {
           const replace=document.createElement('button');replace.type='button';replace.className='order-attendance-button substitute';replace.textContent='Substituir';
           replace.setAttribute('aria-label',`Substituir ${scale.diarista_nome} em ${dateLabel(shift.data)}`);replace.addEventListener('click',()=>showOrderSubstitute(scale,row));actions.append(replace);
         }
       }
       row.append(actions);
-      window.DirectOperations?.appendScale(row, scale);
+      window.DirectOperations?.appendScale(row, scale, {closed:['cancelado','concluido'].includes(item.situacao)});
       if (scale.status === 'presente' && (!window.directRemote || ['admin', 'financeiro'].includes(window.directRemote.role))) {
         const payment = document.createElement('div'); payment.className = 'order-payment-line';
         const label = document.createElement('span');
@@ -564,7 +567,7 @@ function renderOrderShifts() {
       }
       body.append(row);
     });
-    if (canOperate && !['concluido', 'cancelado'].includes(item.situacao) && active < item.quantidade_diaristas) {
+    if (canOperate && shift.data>=orderToday() && !['concluido', 'cancelado'].includes(item.situacao) && active < item.quantidade_diaristas) {
       const picker = document.createElement('div'); picker.className = 'order-worker-picker';
       const select = document.createElement('select'); select.setAttribute('aria-label', `Escolher diarista para ${dateLabel(shift.data)}`);
       const placeholder = document.createElement('option'); placeholder.value = ''; placeholder.textContent = 'Selecione uma diarista'; select.append(placeholder);
@@ -641,8 +644,18 @@ async function openOrderDetail(id) {
     const canOperate = !window.directRemote || ['admin', 'operacao'].includes(window.directRemote.role);
     const result = await Promise.all([canOperate ? request('/api/diaristas') : Promise.resolve([]), request(`/api/pedidos/${id}/escalas`)]);
     if (orderDetailId !== id || !$('#order-detail-dialog').open) return;
-    [orderWorkers, orderScales] = result; renderOrderShifts();
+    [orderWorkers, orderScales] = result; renderOrderShifts();renderOrderClosure();
   } catch (err) { orderDetailError(`Não foi possível carregar as escalas: ${err.message}`); }
+}
+
+function renderOrderClosure(){
+  const box=$('#order-closure'),o=orderRecords.find(o=>o.id===orderDetailId);box.replaceChildren();box.hidden=true;if(!o)return;const info=DirectOrderLifecycle.state(o,orderScales,orderToday());if(!info.periodo_finalizado)return;box.hidden=false;
+  const title=document.createElement('h3');title.textContent=o.situacao==='concluido'?'Pedido encerrado':'Período finalizado';const summary=document.createElement('p');summary.textContent=`${info.presencas} presença(s) · ${info.faltas} falta(s) · ${info.dias_desistencia} dia(s) com desistência · ${info.dias_nao_atendidos} diária(s) não atendida(s).`;box.append(title,summary);
+  if(['concluido','cancelado'].includes(o.situacao))return;
+  const note=document.createElement('p');note.textContent=info.presencas_pendentes?`${info.presencas_pendentes} presença(s) ainda sem baixa. Confira abaixo antes de encerrar; o sistema não presume falta nem presença.`:'Dias passados permanecem no histórico. O encerramento preserva os atendimentos e pagamentos e não cria reposições.';box.append(note);
+  if(window.directRemote&&!['admin','operacao'].includes(directRemote.role))return;
+  const start=document.createElement('button');start.type='button';start.className='button button-primary';start.id='order-close-period';start.textContent='Encerrar pedido';start.disabled=orderDetailBusy||!info.encerravel;box.append(start);
+  start.onclick=()=>{start.hidden=true;const review=document.createElement('div');review.className='order-close-review';const p=document.createElement('p');p.textContent='Confirma o encerramento com as presenças e ocorrências acima? As diárias continuam disponíveis para pagamento no Financeiro.';const confirm=document.createElement('button');confirm.type='button';confirm.className='button button-primary';confirm.id='order-confirm-close';confirm.textContent='Confirmar encerramento';const cancel=document.createElement('button');cancel.type='button';cancel.className='button button-outline';cancel.textContent='Cancelar encerramento';cancel.onclick=()=>{review.remove();start.hidden=false;};confirm.onclick=async()=>{confirm.disabled=cancel.disabled=true;try{await request(`/api/pedidos/${o.id}/encerrar`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({expected_updated_at:o.atualizado_em,expected_scales:DirectOrderLifecycle.versions(orderScales)})});clearRequestCache();$('#order-detail-dialog').close();await loadOrders();await openOrderDetail(o.id);showOrderFeedback('Pedido encerrado. Histórico e pagamentos preservados.');window.DirectManagementUI?.refresh();}catch(e){orderDetailError(e.message);confirm.disabled=cancel.disabled=false;}};review.append(p,confirm,cancel);box.append(review);};
 }
 
 async function deleteOrder() {
@@ -691,3 +704,7 @@ setInterval(()=>{if(location.hash==='#pedidos'&&!orderDetailBusy)renderOrders();
 window.addEventListener('direct:remote-changed',()=>{if($('#order-detail-dialog').open&&!orderDetailBusy){if(document.querySelector('.order-substitute-panel')){window.DirectUI?.notify('Dados atualizados. Sua edição de substituição foi preservada; a disponibilidade será conferida ao salvar.');return;}refreshOrderScales().catch(e=>orderDetailError(e.message));}});
 
 window.addEventListener('direct:signed-out',()=>{ orderRecords=[]; orderWorkers=[]; orderScales=[]; $('#orders-rows').replaceChildren(); if($('#order-detail-dialog').open)$('#order-detail-dialog').close(); });
+
+let orderCalendarDay=orderToday();
+function refreshOrderCalendar(){const day=orderToday();if(day===orderCalendarDay)return;orderCalendarDay=day;orderRecords=orderRecords.map(o=>{const lifecycle=DirectOrderLifecycle.state(o,weeklyScales[o.id]||[],day);return {...o,lifecycle,situacao:lifecycle.situacao};});if(location.hash.split('?')[0]==='#pedidos'){renderOrders();renderOrderMetrics();if($('#order-detail-dialog').open)renderOrderShifts();}}
+window.addEventListener('focus',refreshOrderCalendar);document.addEventListener('visibilitychange',()=>{if(!document.hidden)refreshOrderCalendar();});window.setInterval(refreshOrderCalendar,60000);

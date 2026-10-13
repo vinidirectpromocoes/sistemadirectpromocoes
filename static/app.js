@@ -470,8 +470,16 @@ function renderHistory(items) {
   });
 }
 
+function renderAttendanceHistory(items){
+  const list=$('#attendance-history-list');list.replaceChildren();const count=s=>items.filter(r=>r.status===s).length;$('#attendance-history-summary').textContent=`${count('presente')} presença(s) · ${count('falta')} falta(s) · ${count('desistiu')} dia(s) com desistência. Cada linha conserva a data do pedido; dias afetados por uma mesma desistência não representam novas desistências.`;
+  if(!items.length){const p=document.createElement('p');p.textContent='Nenhuma escala registrada para esta pessoa.';list.append(p);return;}
+  for(const s of items){const row=document.createElement('article');row.className='history-item attendance-history-item';const content=document.createElement('div'),when=document.createElement('strong');when.textContent=dateLabel(s.data)+' · '+({presente:'Presença',falta:'Falta',desistiu:'Desistência',escalada:s.data<financeToday()?'Presença a conferir':'Escalado'}[s.status]||s.status);const place=document.createElement('span');place.textContent=`Pedido #${s.pedido_id} · ${s.supermercado} · ${s.unidade||''} · ${s.setor}`;content.append(when,place);const reason=s.desistencia_motivo||s.falta_motivo;if(reason){const note=document.createElement('small');note.textContent=reason;content.append(note);}if(s.substituto_nome){const replacement=document.createElement('small');replacement.textContent='Reposição: '+s.substituto_nome+'. A ocorrência original permanece no histórico.';content.append(replacement);}const who=s.desistencia_por||s.falta_confirmada_por,stamp=s.desistencia_em||s.falta_confirmada_em;if(who||stamp){const audit=document.createElement('small');audit.textContent='Registro: '+(who||'autor não informado')+(stamp?' · '+new Date(stamp).toLocaleString('pt-BR',{timeZone:'America/Fortaleza'}):'');content.append(audit);}const button=document.createElement('button');button.type='button';button.className='text-button';button.textContent='Ver pedido #'+s.pedido_id;button.onclick=async()=>{$('#detail-dialog').close();location.hash='#pedidos';await loadOrders();await openOrderDetail(s.pedido_id);};row.append(content,button);list.append(row);}
+}
+
 async function loadHistory() {
-  try { renderHistory(await request(`/api/diaristas/${detailId}/diarias`)); }
+  const id=detailId;
+  request(`/api/diaristas/${id}/historico-escalas`).then(items=>{if(id===detailId)renderAttendanceHistory(items);}).catch(e=>{if(id===detailId)$('#attendance-history-list').textContent='Não foi possível carregar as ocorrências: '+e.message;});
+  try { const items=await request(`/api/diaristas/${id}/diarias`);if(id===detailId)renderHistory(items); }
   catch (err) { $('#history-list').textContent = `Não foi possível carregar o histórico: ${err.message}`; }
 }
 
@@ -481,6 +489,7 @@ async function openDetail(id) {
   detailId = id;
   $('#detail-error').hidden = true;
   renderDetail(record);
+  $('#attendance-history-list').textContent='Carregando presenças e ocorrências...';$('#attendance-history-summary').textContent='';
   $('#history-list').textContent = 'Carregando histórico...';
   if (!$('#detail-dialog').open) $('#detail-dialog').showModal();
   await loadHistory();

@@ -557,7 +557,9 @@ async function runPaymentCalendars() {
       await page.getByText('Calendário de Super do Povo atualizado para recebimentos e pagamentos.',{exact:true}).waitFor();
       await page.waitForLoadState('networkidle'); await page.reload();
       await form.getByRole('button', {name:'Salvar calendário'}).waitFor(); assert.equal(await form.locator('input').nth(1).inputValue(),'18');
-      await form.locator('input').nth(1).fill('15');await form.getByRole('button',{name:'Salvar calendário'}).click();
+      const restored=page.waitForResponse(r=>r.request().method()==='PUT'&&r.url().endsWith('/calendario'));
+      await form.locator('input').nth(1).fill('15');await form.getByRole('button',{name:'Salvar calendário'}).click();assert.equal((await restored).status(),200);
+      await page.waitForFunction(()=>activeRequests===0);await page.waitForLoadState('networkidle');
       await page.getByText('Calendário de Super do Povo atualizado para recebimentos e pagamentos.',{exact:true}).waitFor();
       const weekly=page.getByRole('form',{name:'Calendário de Pinheiro',exact:true});
       assert.equal(await weekly.getByLabel('Frequência de pagamento').inputValue(),'semanal');
@@ -610,8 +612,8 @@ async function runLinkedReading() {
       await page.locator('#reading-text').fill(message);await page.locator('#reading-submit').click();await page.locator('#reading-confirm').click();await page.locator('#reading-result-items .reading-item.duplicate').waitFor();
       assert.equal((await api('GET','/api/escalas')).filter(e=>e.diarista_id===worker.id).length,2,'Releitura não duplica escala');
       await page.locator('#reading-result-items').getByRole('button',{name:'Ver pedido e escala',exact:true}).click();await page.locator('#order-detail-dialog').waitFor({state:'visible'});await page.waitForFunction(name=>document.querySelector('#order-detail-shifts')?.textContent.includes(name),workerName);assert.match(await page.locator('#order-detail-shifts').innerText(),new RegExp(workerName));await page.locator('#order-detail-close-bottom').click();
-      let orderRow=page.locator('#orders-rows tr').filter({hasText:workerName});assert.equal(await orderRow.count(),1);assert.match(await orderRow.innerText(),/Confirmado/);
-      await page.reload();await orderRow.waitFor();assert.match(await orderRow.innerText(),/Confirmado/);
+      let orderRow=page.locator('#orders-rows tr').filter({hasText:workerName});assert.equal(await orderRow.count(),1);assert.match(await orderRow.innerText(),/Baixas pendentes/);
+      await page.reload();await orderRow.waitFor();assert.match(await orderRow.innerText(),/Baixas pendentes/);
       assert.ok(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth+2),'Nome escalado cabe na tela');
       await page.waitForLoadState('networkidle');assert.deepEqual(errors,[]);
       for(const scale of assignments) await api('DELETE',`/api/pedidos/${scale.pedido_id}/escalas/${scale.id}`);
@@ -630,8 +632,10 @@ async function runOrderFilters() {
     ['Super do Povo','Cambeba','Operador de caixa',1,'confirmado',[2,4]],
     ['Hipermarket','Vila União','FLV',3,'novo',[1,6]],
     ['Super do Povo','Meireles','Operador de caixa',1,'cancelado',[3]]]) {
-    created.push(await api('POST','/api/pedidos',{supermercado:network,unidade:store,setor:sector,quantidade_diaristas:quantity,situacao:status,contato:'Teste Filtros QA',turnos:days.map(d=>({data:`2026-10-${String(d).padStart(2,'0')}`,inicio:'07:00',fim:'15:20'}))}));
+    created.push(await api('POST','/api/pedidos',{supermercado:network,unidade:store,setor:sector,quantidade_diaristas:quantity,situacao:status,contato:'Teste Filtros QA',turnos:days.map(d=>({data:`2035-10-${String(d).padStart(2,'0')}`,inicio:'07:00',fim:'15:20'}))}));
   }
+  const worker=(await api('GET','/api/diaristas')).find(w=>w.cpf==='11144477735')||await api('POST','/api/diaristas',{nome:'Pessoa fictícia dos filtros',cpf:'11144477735'});
+  await api('POST',`/api/pedidos/${created[1].id}/escalas`,{diarista_id:worker.id,datas:created[1].turnos.map(t=>t.data),disponibilidade_confirmada:true});
   const total=(await api('GET','/api/pedidos')).length;
   try {for(const [engine,name] of [[chromium,'Chromium'],[webkit,'WebKit']]) {
     const browser=await engine.launch({headless:true});
@@ -646,16 +650,16 @@ async function runOrderFilters() {
       assert.equal(await page.locator('#orders-rows tr').count(),3);assert.equal(await page.locator('#orders-confirmed-count').innerText(),'1');
       await page.locator('#orders-store-filter').selectOption('meireles');assert.equal(await page.locator('#orders-rows tr').count(),2);
       await page.locator('#orders-sector-filter').selectOption('flv');assert.equal(await page.locator('#orders-rows tr').count(),1);
-      await page.locator('#orders-start-filter').fill('2026-10-03');await page.locator('#orders-end-filter').fill('2026-10-04');
+      await page.locator('#orders-start-filter').fill('2035-10-03');await page.locator('#orders-end-filter').fill('2035-10-04');
       await page.waitForFunction(()=>document.querySelector('#orders-demand-count').textContent==='2');
-      assert.equal(await page.locator('.weekly-card').count(),0);assert.match(await page.locator('#orders-rows').innerText(),/03\/10\/2026/);assert.doesNotMatch(await page.locator('#orders-rows').innerText(),/01\/10\/2026|05\/10\/2026/);
+      assert.equal(await page.locator('.weekly-card').count(),0);assert.match(await page.locator('#orders-rows').innerText(),/03\/10\/2035/);assert.doesNotMatch(await page.locator('#orders-rows').innerText(),/01\/10\/2035|05\/10\/2035/);
       assert.match(await page.locator('#orders-rows').innerText(),/1 dia.*2 diárias no período/);assert.equal(await page.locator('#weekly-date').count(),0);
       await page.locator('#orders-status-filter').selectOption('confirmado');assert.equal(await page.locator('#orders-rows tr').count(),0);assert.ok(await page.locator('#orders-no-results').isVisible());
       await page.locator('#orders-status-filter').selectOption('novo');
-      await page.locator('#orders-start-filter').fill('2026-10-05');await page.locator('#orders-end-filter').fill('2026-10-03');assert.ok(await page.locator('#orders-filter-error').isVisible());assert.equal(await page.locator('#orders-rows tr').count(),0);
-      await page.locator('#orders-end-filter').fill('2026-10-06');assert.equal(await page.locator('#orders-demand-count').innerText(),'2');assert.equal(await page.locator('#orders-filter-error').isVisible(),false);
-      await page.locator('#orders-start-filter').fill('');await page.locator('#orders-end-filter').fill('2026-10-02');assert.equal(await page.locator('#orders-demand-count').innerText(),'2');assert.match(await page.locator('#orders-rows').innerText(),/01\/10\/2026/);
-      await page.locator('#orders-end-filter').fill('');await page.locator('#orders-start-filter').fill('2026-10-03');assert.equal(await page.locator('#orders-demand-count').innerText(),'4');assert.match(await page.locator('#orders-rows').innerText(),/2 dias/);
+      await page.locator('#orders-start-filter').fill('2035-10-05');await page.locator('#orders-end-filter').fill('2035-10-03');assert.ok(await page.locator('#orders-filter-error').isVisible());assert.equal(await page.locator('#orders-rows tr').count(),0);
+      await page.locator('#orders-end-filter').fill('2035-10-06');assert.equal(await page.locator('#orders-demand-count').innerText(),'2');assert.equal(await page.locator('#orders-filter-error').isVisible(),false);
+      await page.locator('#orders-start-filter').fill('');await page.locator('#orders-end-filter').fill('2035-10-02');assert.equal(await page.locator('#orders-demand-count').innerText(),'2');assert.match(await page.locator('#orders-rows').innerText(),/01\/10\/2035/);
+      await page.locator('#orders-end-filter').fill('');await page.locator('#orders-start-filter').fill('2035-10-03');assert.equal(await page.locator('#orders-demand-count').innerText(),'4');assert.match(await page.locator('#orders-rows').innerText(),/2 dias/);
       for(const theme of ['light','dark']) {
         await page.evaluate(value=>document.documentElement.dataset.theme=value,theme);
         assert.ok(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth+2),'Filtros cabem na tela');
