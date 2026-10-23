@@ -98,3 +98,17 @@ jobs:
           pnpm exec playwright install --with-deps chromium webkit
       - name: Fluxos, perfis e telas móveis
         run: ${{ matrix.scripts }}
+  publicacao:
+    name: Publicação — produção
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Conferir todos os arquivos publicados
+        run: python scripts/verify_publication.py --site https://directpedidos.vercel.app --expected-commit "$GITHUB_SHA"

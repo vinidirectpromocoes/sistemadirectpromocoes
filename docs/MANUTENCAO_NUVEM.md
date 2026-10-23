@@ -65,6 +65,8 @@ As Edge Functions `portal-cadastro` (versão 2) e `backup-evidencias` (versão 1
 
 ## Como atualizar sem notebook
 
+**Orientação do proprietário, 23/10/2026:** cada melhoria ou implantação solicitada neste chat deve ser concluída com testes, merge, deploy e conferência da publicação, dentro do escopo do pedido. Não é necessário pedir uma nova confirmação genérica de publicação a cada etapa. Mudanças fora do pedido, exclusões de dados e contratação de serviços exigem uma decisão própria.
+
 1. O proprietário descreve a alteração e, quando útil, envia uma captura da tela pelo celular.
 2. O assistente consulta a versão atual no GitHub e confirma os alvos Vercel/Supabase. Recria o checkout na nuvem se o ambiente anterior tiver expirado.
 3. Implementa a mudança em branch `codex/...`, valida em ambiente isolado e abre PR com uma descrição objetiva.
@@ -72,6 +74,10 @@ As Edge Functions `portal-cadastro` (versão 2) e `backup-evidencias` (versão 1
 5. Após os checks aprovados, faz merge dentro do escopo autorizado, acompanha a publicação da Vercel e confere commit, ambiente e estado READY.
 6. Se houver mudança de banco, a migração e sua verificação são etapas próprias no Supabase; merge no GitHub não aplica SQL nem publica Edge Functions automaticamente.
 7. Entrega o link atualizado, o resultado dos testes e eventuais pendências. O proprietário confere o comportamento no próprio celular.
+
+Cada push na `main` aciona a publicação pela integração Git da Vercel e o job **Publicação — produção** no GitHub. Esse job usa `scripts/verify_publication.py` para comparar, por conteúdo, todos os arquivos versionados de `static/` com o site online. Repetições breves permitem a propagação do deploy. Se outra mudança já avançou a `main`, a execução anterior informa `superseded`; a verificação da versão mais recente é a referência. O resultado fica no GitHub Actions. A conferência é somente de leitura e não precisa de credenciais administrativas da Vercel ou do Supabase.
+
+O código e as configurações do site são publicados pela Vercel. Mudanças solicitadas no banco e nas Edge Functions continuam sendo executadas e verificadas pelo assistente no Supabase conectado, com as respectivas migrações/código registrados no GitHub. O deploy do site não é uma migração automática do banco. Uma atualização comum não exige alterar os três serviços quando apenas um deles é afetado.
 
 A execução de qualidade pode ser iniciada manualmente pelo navegador do celular em **GitHub → Actions → Qualidade antes da publicação → Run workflow**, depois que a versão com `workflow_dispatch` estiver na branch principal. O workflow usa dados de teste e não executa a publicação nem migrações de produção.
 
