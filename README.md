@@ -1,5 +1,7 @@
 # Sistema Direct Promoções
 
+**Manutenção pelo celular e pela nuvem:** consulte o [mapa do projeto e fluxo de atualização](docs/MANUTENCAO_NUVEM.md). Código, testes e publicação podem ser mantidos remotamente; o backup automático existente ainda depende do Mac.
+
 Gestão interna de diaristas, pedidos, escalas e financeiro. Site: **https://sistemadirectpromocoes-zeta.vercel.app/**. Funcionários entram com Supabase Auth e autorização da Direct. Diaristas não criam conta nem acessam o painel interno.
 
 ## Rotina de trabalho
