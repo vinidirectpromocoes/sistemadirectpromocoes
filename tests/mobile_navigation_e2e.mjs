@@ -20,10 +20,10 @@ const adminControls=page=>page.evaluate(()=>{
   document.getElementById('logout-button').hidden=false;
   document.getElementById('backup-health-alert').hidden=false;
 });
-const ready=page=>page.waitForFunction(()=>{
-  const main=document.querySelector('main.main-content:not([hidden])');
-  return main&&!main.hasAttribute('aria-busy');
-});
+const ready=(page,id)=>page.waitForFunction(expected=>{
+  const main=expected?document.getElementById(expected+'-page'):document.querySelector('main.main-content:not([hidden])');
+  return main&&!main.hidden&&!main.hasAttribute('aria-busy')&&(!expected||document.getElementById('nav-'+expected).getAttribute('aria-current')==='page');
+},id);
 const dimensions=page=>page.evaluate(()=>{
   const sidebar=document.querySelector('.sidebar'),nav=sidebar.querySelector('nav');
   return {height:sidebar.getBoundingClientRect().height,width:sidebar.getBoundingClientRect().width,
@@ -71,12 +71,12 @@ try{
             ?['inicio','pedidos','diaristas','crm','financeiro','supervisor','redes','leitura','vagas','pedidos-links','convites','empresa','configuracoes']
             :['inicio','pedidos','diaristas','crm','financeiro','empresa','configuracoes'];
           for(const id of ids){
-            await page.locator('#nav-'+id).click();await ready(page);
+            await page.locator('#nav-'+id).click();await ready(page,id);
             assert.equal(await page.locator('#nav-'+id).getAttribute('aria-current'),'page');
             assert.equal(await page.locator('#'+id+'-page').isVisible(),true);
             assert.ok((await dimensions(page)).height<=140,'Trocar de página não expande o menu');
           }
-          await page.locator('#nav-empresa').click();await ready(page);
+          await page.locator('#nav-empresa').click();await ready(page,'empresa');
           await page.locator('#enterprise-area-cards a').last().waitFor();
           assert.equal(await page.locator('#enterprise-area-cards a').count(),9,'Todas as áreas continuam na página da empresa');
           await page.locator('#enterprise-area-cards a[href="#empresa?area=financeiro"]').click();
@@ -86,7 +86,7 @@ try{
           await page.locator('#global-search-button').click();
           await page.locator('#global-search-dialog').waitFor();
           await page.locator('#global-search-close').click();
-          await page.locator('#nav-inicio').click();await ready(page);
+          await page.locator('#nav-inicio').click();await ready(page,'inicio');
           for(const id of ['global-search-button','theme-toggle','logout-button','backup-health-alert']){
             const box=await page.locator('#'+id).boundingBox();assert.ok(box&&box.width>=32&&box.height>=36,id+' acessível');
           }
