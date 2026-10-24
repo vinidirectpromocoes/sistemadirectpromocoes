@@ -1,0 +1,153 @@
+/* Adaptado do tema Direct Gestão de Diárias, versão 10 (22/10/2026).
+   Mantém a navegação e os fluxos do sistema oficial. */
+:root {
+  --direct-bg: #f7faff; --direct-glow: #2d77e729;
+  --direct-surface: #ffffffc7; --direct-raised: #fffffff0;
+  --direct-soft: #edf6ffb8; --direct-line: #6e94c23d;
+  --direct-text: #152d55; --direct-heading: #092653; --direct-muted: #526782;
+  --direct-control: #ffffffed; --direct-accent: #096fe3;
+  --direct-shadow: 0 8px 22px #11325e0e, inset 0 1px 0 #ffffffa8;
+  --metric-blue: #0967cd; --metric-amber: #985a08; --metric-green: #14754a;
+  --metric-red: #b53548; --metric-purple: #6a4baa;
+  --surface: var(--direct-surface); --text: var(--direct-text); --line: var(--direct-line);
+}
+html[data-theme="dark"] {
+  --direct-bg: #020711; --direct-glow: #1a60c440;
+  --direct-surface: #0a2246e8; --direct-raised: #0e2b54f0;
+  --direct-soft: #163765ad; --direct-line: #95c5ff30;
+  --direct-text: #e7f0ff; --direct-heading: #fff; --direct-muted: #b9cae2;
+  --direct-control: #051937ed; --direct-accent: #80baff;
+  --direct-shadow: 0 8px 24px #0004123d, inset 0 1px 0 #ffffff0a;
+  --metric-blue: #8bc0ff; --metric-amber: #ffce81; --metric-green: #8ae0b3;
+  --metric-red: #ffb2bf; --metric-purple: #cbb4ff;
+  --dark-bg: var(--direct-bg); --dark-surface: var(--direct-surface);
+  --dark-raised: var(--direct-raised); --dark-field: var(--direct-control);
+  --dark-border: var(--direct-line); --dark-text: var(--direct-text); --dark-muted: var(--direct-muted);
+  --brand-dark: var(--direct-text);
+}
+html[data-theme] body {
+  color: var(--direct-text);
+  background: radial-gradient(circle at 92% 4%, var(--direct-glow), transparent 29%), radial-gradient(circle at 8% 94%, #052d6d0d, transparent 34%), var(--direct-bg);
+}
+html[data-theme] .sidebar {
+  background: linear-gradient(155deg, #08204df5, #114d8ee8);
+  border-color: #ffffff38; box-shadow: 0 12px 28px #00081d2e, inset 0 1px 0 #ffffff26;
+  backdrop-filter: blur(18px) saturate(130%);
+}
+html[data-theme="dark"] .sidebar { background: linear-gradient(155deg, #03122ef5, #073064ed); }
+html[data-theme] .sidebar nav a.nav-active { background: linear-gradient(105deg, #2679e8, #0a5ec7); box-shadow: 0 4px 12px #00081d26; }
+html[data-theme] .app-shell h1, html[data-theme] .app-shell h2, html[data-theme] .app-shell h3 { color: var(--direct-heading); }
+html[data-theme] .app-shell .page-header p, html[data-theme] .app-shell .section-help, html[data-theme] .app-shell .list-top p { color: var(--direct-muted); }
+html[data-theme] .app-shell .order-legend { color: var(--direct-muted); }
+html[data-theme="dark"] .app-shell .order-legend { color: #b9cae2; }
+html[data-theme] .app-shell .list-card, html[data-theme] .app-shell .finance-chart-card,
+html[data-theme] .app-shell .stat-card, html[data-theme] .app-shell .finance-stat,
+html[data-theme] .app-shell .supervisor-stat, html[data-theme] .app-shell .supervisor-card,
+html[data-theme] .app-shell .enterprise-card, html[data-theme] .app-shell .store-group {
+  border: 1px solid var(--direct-line); border-radius: 16px;
+  color: var(--direct-text); background: linear-gradient(135deg, var(--direct-raised), var(--direct-surface));
+  box-shadow: var(--direct-shadow);
+}
+html[data-theme] .app-shell .list-top, html[data-theme] .app-shell td, html[data-theme] .app-shell .dialog-header { border-color: var(--direct-line); }
+html[data-theme] .app-shell th { color: var(--direct-muted); background: var(--direct-soft); }
+html[data-theme] .app-shell td { color: var(--direct-text); }
+html[data-theme] .app-shell .search-wrap input, html[data-theme] .app-shell label input:not([type=checkbox]):not([type=radio]),
+html[data-theme] .app-shell label select, html[data-theme] .app-shell label textarea,
+html[data-theme] .app-shell .hub-controls input, html[data-theme] .app-shell .hub-controls select {
+  color: var(--direct-text); background: var(--direct-control); border-color: var(--direct-line);
+}
+html[data-theme] .app-shell input::placeholder { color: var(--direct-muted); opacity: .9; }
+html[data-theme] .app-shell .button-primary { background: linear-gradient(135deg, #0877ed, #075cc8); color: #fff; box-shadow: 0 4px 12px #0064da26; }
+html[data-theme] .app-shell .button-outline { color: var(--direct-accent); border-color: var(--direct-line); background: var(--direct-control); }
+html[data-theme] .app-shell .finance-stat, html[data-theme] .app-shell .stat-card, html[data-theme] .app-shell .supervisor-stat {
+  --metric: var(--metric-blue); border-top: 3px solid var(--metric);
+  background: linear-gradient(125deg, color-mix(in srgb, var(--metric) 12%, var(--direct-raised)), var(--direct-surface));
+}
+html[data-theme] .app-shell .finance-stat span, html[data-theme] .app-shell .stat-label, html[data-theme] .app-shell .supervisor-stat span { color: var(--direct-muted); }
+html[data-theme] .app-shell .finance-stat strong, html[data-theme] .app-shell .stat-card strong, html[data-theme] .app-shell .supervisor-stat strong { color: var(--metric); }
+html[data-theme] .app-shell .finance-stat small { color: var(--direct-muted); opacity: 1; }
+html[data-theme] .app-shell .finance-stat:has(#orders-demand-count, #orders-open-count, #orders-awaiting-attendance, #home-open, #home-attendance, #home-reading, #home-day-awaiting, #crm-count-vacancy, #crm-count-response, #crm-count-attendance) { --metric: var(--metric-amber); }
+html[data-theme] .app-shell .finance-stat:has(#orders-done-count, #orders-fill-rate, #home-revenue, #home-profit, #home-day-present), html[data-theme] .app-shell .stat-card:has(#available-count) { --metric: var(--metric-green); }
+html[data-theme] .app-shell .finance-stat:has(#orders-absence-rate, #home-overdue, #home-crm-open, #home-cost, #home-day-absent, #crm-count-payment), html[data-theme] .app-shell .stat-card:has(#blocked-count) { --metric: var(--metric-red); }
+html[data-theme] .app-shell .finance-stat:has(#home-stores) { --metric: var(--metric-purple); }
+.day-panel { margin: 0 0 20px; padding: 18px; }
+.day-panel-head { display: flex; justify-content: space-between; align-items: start; gap: 14px; }
+.day-panel-head h2 { font-size: 19px; margin: 0 0 5px; }
+.day-panel-head p { margin: 0; font-size: 12px; color: var(--direct-muted); line-height: 1.5; }
+.day-updated { color: var(--direct-muted); font-size: 11px; white-space: nowrap; padding-top: 4px; }
+.day-tools { display: flex; flex-wrap: wrap; gap: 8px; align-items: end; margin: 15px 0; }
+.day-tools label { min-width: 0; flex: 1 1 150px; }
+.day-exports { display: flex; gap: 6px; flex-wrap: wrap; }
+.day-exports .button { min-height: 40px; font-size: 12px; padding: 8px 11px; }
+.day-stats { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 8px; margin-bottom: 15px; }
+.day-stats .finance-stat { padding: 11px; min-height: 76px; }
+.day-stats .finance-stat span { font-size: 12px; margin-bottom: 6px; }
+.day-columns { display: grid; grid-template-columns: minmax(0, 1.7fr) minmax(0, 1fr); gap: 18px; }
+.day-columns h3 { font-size: 14px; margin-bottom: 9px; }
+.day-row { display: grid; grid-template-columns: minmax(0, 1fr) auto auto; gap: 9px; align-items: center; padding: 10px 0; border-bottom: 1px solid var(--direct-line); }
+.day-row strong, .day-row small { display: block; overflow-wrap: anywhere; }
+.day-row strong { font-size: 13px; }
+.day-row small { font-size: 11px; color: var(--direct-muted); line-height: 1.5; margin-top: 2px; }
+.day-row .button { min-height: 38px; padding: 7px 9px; font-size: 11px; }
+.day-status { --state: var(--metric-amber); color: var(--state); background: color-mix(in srgb, var(--state) 12%, var(--direct-raised)); font-size: 10px; font-weight: 700; padding: 5px 7px; border-radius: 8px; }
+.day-status[data-status=presente] { --state: var(--metric-green); }
+.day-status[data-status=falta], .day-status[data-status=desistiu] { --state: var(--metric-red); }
+.day-city { display: grid; grid-template-columns: minmax(0, 1fr) minmax(35px, .8fr) 25px; align-items: center; gap: 7px; font-size: 12px; margin-bottom: 12px; }
+.day-city>span:first-child { overflow-wrap: anywhere; }
+.day-city-bar { height: 6px; border-radius: 5px; background: var(--direct-soft); overflow: hidden; }
+.day-city-bar i { display: block; height: 100%; background: linear-gradient(90deg, #0a5ec7, #6aaeff); border-radius: inherit; }
+.day-empty { color: var(--direct-muted); font-size: 12px; }
+#home-day-count { margin: 10px 0; }
+#home-day-feedback { margin: 12px 0 0; }
+@media (max-width: 1000px) { .day-columns { grid-template-columns: 1fr; } }
+@media (max-width: 700px) {
+  html[data-theme] .app-shell .main-content { padding: 17px 10px 38px; }
+  html[data-theme] .app-shell .page-header { gap: 9px; margin-bottom: 14px; }
+  html[data-theme] .app-shell .page-header h1 { font-size: 25px; margin: 5px 0; line-height: 1.15; }
+  html[data-theme] .app-shell .page-header p { font-size: 12px; line-height: 1.4; }
+  html[data-theme] .app-shell .list-card, html[data-theme] .app-shell .finance-chart-card { border-radius: 14px; }
+  html[data-theme] .app-shell .finance-stat, html[data-theme] .app-shell .stat-card, html[data-theme] .app-shell .supervisor-stat {
+    min-height: 68px; padding: 8px 9px; border-radius: 12px; box-shadow: 0 3px 10px #11325e08;
+  }
+  html[data-theme] .app-shell .finance-stat span, html[data-theme] .app-shell .stat-label, html[data-theme] .app-shell .supervisor-stat span { font-size: 11px; line-height: 1.25; margin: 0 0 5px; overflow-wrap: anywhere; }
+  html[data-theme] .app-shell .finance-stat strong, html[data-theme] .app-shell .stat-card strong, html[data-theme] .app-shell .supervisor-stat strong { font-size: 21px; line-height: 1.1; white-space: normal; overflow-wrap: anywhere; }
+  html[data-theme] .app-shell .finance-stat small { font-size: 10px; line-height: 1.3; margin-top: 4px; }
+  .app-shell .order-stats { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 6px; margin-bottom: 12px; }
+  .app-shell .order-stats .finance-stat:last-child { grid-column: 1 / -1; min-height: 48px; display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+  html[data-theme] .app-shell .order-stats .finance-stat:last-child span { margin: 0; }
+  .app-shell .hub-stats, .app-shell .hub-finance-cards, .app-shell .crm-summary { gap: 6px; margin-bottom: 12px; }
+  .app-shell .hub-finance-cards .emphasis, .app-shell .hub-stats .emphasis { grid-column: auto; }
+  .app-shell .stats { grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 6px; }
+  .app-shell .stats .stat-card:first-child { grid-column: auto; flex-direction: column; align-items: start; gap: 5px; }
+  .app-shell .stat-icon { width: 22px; height: 22px; font-size: 14px; }
+  .app-shell .orders-filter-panel { padding: 11px; margin-bottom: 12px; }
+  .app-shell .orders-filter-toolbar { padding: 0; gap: 6px; }
+  .app-shell .orders-filter-count { margin: 8px 0 0; padding: 0; font-size: 11px; }
+  .app-shell .hub-controls { gap: 6px; margin-bottom: 12px; }
+  .app-shell .hub-controls .section-help { font-size: 10px; line-height: 1.35; }
+  .day-panel { padding: 12px; margin-bottom: 14px; }
+  .day-panel-head { display: block; }
+  .day-panel-head h2 { font-size: 17px; }
+  .day-updated { display: block; margin-top: 4px; }
+  .day-tools { gap: 7px; margin: 12px 0; }
+  .day-tools label { flex: 1 1 120px; font-size: 11px; }
+  .day-exports { width: 100%; }
+  .day-exports .button { flex: 1; padding: 7px; }
+  .day-stats { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 6px; margin-bottom: 12px; }
+  .day-row { grid-template-columns: minmax(0, 1fr) auto; gap: 6px; }
+  .day-row>div { grid-column: 1 / -1; }
+  .day-row .button { justify-self: end; }
+  .day-status { justify-self: start; }
+}
+@media (min-width: 360px) and (max-width: 700px) {
+  .app-shell .order-stats { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+  .app-shell .order-stats .finance-stat:last-child { grid-column: 1 / -1; min-height: 54px; display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+  html[data-theme] .app-shell .order-stats .finance-stat:last-child span { margin: 0; }
+}
+@media (max-width: 359px) {
+  html[data-theme] .app-shell .order-stats .finance-stat { min-height: 56px; padding: 5px 7px; }
+  html[data-theme] .app-shell .order-stats .finance-stat span { font-size: 10px; line-height: 1.2; margin-bottom: 3px; }
+  html[data-theme] .app-shell .order-stats .finance-stat strong { font-size: 19px; }
+  html[data-theme] .app-shell .order-stats .finance-stat:last-child { min-height: 46px; }
+  html[data-theme] .app-shell .order-stats .finance-stat:last-child span { margin: 0; }
+}

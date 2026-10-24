@@ -103,6 +103,14 @@ O último registro encontrado em `direct_private.backup_runs` nesta conferência
 
 Portanto, não considerar o backup diário independente do computador. Para migrá-lo serão necessários destino privado para arquivos criptografados, credencial de leitura revogável, senha guardada de modo recuperável e ensaio de restauração. Não copiar credenciais do Mac para o código ou pedir que sejam publicadas nesta conversa. O backup manual já disponível em Configurações continua sendo uma alternativa para administradores, sujeito às validações do aplicativo.
 
+## Tema e central do dia
+
+A camada `static/direct-theme.css` adapta o tema da versão 10 de **Direct Gestão de Diárias** (22/10/2026, origem Sites `appgprj_6ad963a601808191a8a74e72560030d3`, commit `524515709ed4cdd679c3e1b6a4206641d7cbe6a7`). Reutiliza superfícies translúcidas, fundo azul suave, controles e os temas claro/escuro. Os indicadores usam cores semânticas e espaçamento compacto; Pedidos reúne sete indicadores em uma grade, com três colunas a partir de 360 px e duas em celulares menores. A navegação compacta existente continua no mesmo sistema.
+
+A comparação funcional preservou os cadastros, tarifas, baixas, pagamentos, relatórios e sincronização já existentes. O complemento é a **Central do dia** em Início: data própria, filtro por presença, escala com acesso ao pedido, distribuição por cidade e exportação do filtro atual em CSV, planilha XML compatível com Excel (`.xls`) e PDF com download direto no navegador. O painel usa a carga autorizada do Hub e não faz gravações. Consulta não recebe o painel; nomes e registros não ficam no repositório. Cidades sem correspondência exata de rede/loja aparecem como não informadas.
+
+Horários são previstos; presença só é contabilizada quando registrada. A data usa Fortaleza e não copia a data fixa ou os dados de demonstração do site de referência. Não foram transferidos registros do banco independente do site de referência. Nenhuma rota de baixa ou confirmação de pagamento foi substituída. `tests/test_day_panel.cjs` verifica os cálculos e exportações; `tests/direct_theme_e2e.mjs` testa 320/390 px e desktop em Chromium/WebKit, filtros, exportações, acesso ao pedido e ocultação por perfil. Capturas e medidas ficam junto ao artefato `sidebar-mobile` no GitHub Actions.
+
 ## Regras operacionais a preservar
 
 A navegação no celular usa uma faixa horizontal de atalhos, com prioridade para Início, Pedidos, Equipe, Pendências e Finanças. Os demais atalhos continuam acessíveis por rolagem lateral. Busca, tema, saída e aviso de backup ficam compactos no topo. As nove áreas da empresa continuam acessíveis dentro de Minha empresa; o submenu lateral duplicado fica restrito ao desktop. `tests/mobile_navigation_e2e.mjs` verifica larguras de 320/390 px, celular em paisagem e desktop, com capturas e medidas guardadas nos artefatos do GitHub Actions.
