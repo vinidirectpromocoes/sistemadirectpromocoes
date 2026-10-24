@@ -110,15 +110,16 @@ html[data-theme] .app-shell .finance-stat:has(#home-stores) { --metric: var(--me
   html[data-theme] .app-shell .finance-stat strong, html[data-theme] .app-shell .stat-card strong, html[data-theme] .app-shell .supervisor-stat strong { font-size: 21px; line-height: 1.1; white-space: normal; overflow-wrap: anywhere; }
   html[data-theme] .app-shell .finance-stat small { font-size: 10px; line-height: 1.3; margin-top: 4px; }
   .app-shell .order-stats { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 6px; margin-bottom: 12px; }
-  .app-shell .order-stats .finance-stat:last-child { grid-column: 1 / -1; }
+  .app-shell .order-stats .finance-stat:last-child { grid-column: 1 / -1; min-height: 48px; display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+  html[data-theme] .app-shell .order-stats .finance-stat:last-child span { margin: 0; }
   .app-shell .hub-stats, .app-shell .hub-finance-cards, .app-shell .crm-summary { gap: 6px; margin-bottom: 12px; }
   .app-shell .hub-finance-cards .emphasis { grid-column: auto; }
   .app-shell .stats { grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 6px; }
   .app-shell .stats .stat-card:first-child { grid-column: auto; flex-direction: column; align-items: start; gap: 5px; }
   .app-shell .stat-icon { width: 22px; height: 22px; font-size: 14px; }
-  .app-shell .orders-filter-panel { margin-bottom: 12px; }
-  .app-shell .orders-filter-toolbar { padding: 11px; gap: 6px; }
-  .app-shell .orders-filter-count { margin: 0; padding: 0 11px 10px; font-size: 11px; }
+  .app-shell .orders-filter-panel { padding: 11px; margin-bottom: 12px; }
+  .app-shell .orders-filter-toolbar { padding: 0; gap: 6px; }
+  .app-shell .orders-filter-count { margin: 8px 0 0; padding: 0; font-size: 11px; }
   .app-shell .hub-controls { gap: 6px; margin-bottom: 12px; }
   .app-shell .hub-controls .section-help { font-size: 10px; line-height: 1.35; }
   .day-panel { padding: 12px; margin-bottom: 14px; }
@@ -140,9 +141,10 @@ html[data-theme] .app-shell .finance-stat:has(#home-stores) { --metric: var(--me
   .app-shell .order-stats .finance-stat:last-child { grid-column: 1 / -1; min-height: 54px; display: flex; align-items: center; justify-content: space-between; gap: 8px; }
   html[data-theme] .app-shell .order-stats .finance-stat:last-child span { margin: 0; }
 }
-@media print {
-  body.printing-demonstrative { background: #fff !important; }
-  #day-print { color: #152d55; }
-  #day-print table { min-width: 0; table-layout: auto; }
-  #day-print th, #day-print td { white-space: normal; padding: 5px; font-size: 9px; }
+@media (max-width: 359px) {
+  html[data-theme] .app-shell .order-stats .finance-stat { min-height: 56px; padding: 5px 7px; }
+  html[data-theme] .app-shell .order-stats .finance-stat span { font-size: 10px; line-height: 1.2; margin-bottom: 3px; }
+  html[data-theme] .app-shell .order-stats .finance-stat strong { font-size: 19px; }
+  html[data-theme] .app-shell .order-stats .finance-stat:last-child { min-height: 46px; }
+  html[data-theme] .app-shell .order-stats .finance-stat:last-child span { margin: 0; }
 }

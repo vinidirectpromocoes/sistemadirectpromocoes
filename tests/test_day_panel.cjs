@@ -15,3 +15,7 @@ test('Exporta somente as linhas recebidas e protege CSV/Excel sem executar fórm
   const rows=[{day,worker:' =HYPERLINK("fake")',network:'A&B <Rede>',label:'Presença registrada'}],csv=model.csv(rows),xml=model.excel(rows);
   assert.match(csv,/"' =HYPERLINK/);assert.match(csv,/Data/);assert.match(xml,/ss:Type="String"/);assert.match(xml,/A&amp;B &lt;Rede&gt;/);assert.doesNotMatch(xml,/<Formula/);assert.equal(model.cells([]).length,1);
 });
+test('PDF preserva acentos e escapa delimitadores, com paginação para escalas longas',()=>{
+  const rows=Array.from({length:30},(_,id)=>({day,worker:'Pessoa '+id+' (ação) \\',network:'Rede',store:'Loja',city:'Eusébio',sector:'FLV',start:'07:00',end:'15:20',label:'Presença registrada',confirmation:'Confirmou que vai'}));
+  const pdf=Buffer.from(model.pdf(rows,day)).toString('latin1');assert.ok(pdf.startsWith('%PDF-1.4'));assert.match(pdf,/Eusébio/);assert.match(pdf,/Presença registrada/);assert.match(pdf,/\\\(ação\\\)/);assert.match(pdf,/\/Count [3-9]/);assert.match(pdf,/Pagina 1 de/);const offset=Number(pdf.match(/startxref\n(\d+)/)[1]);assert.equal(pdf.slice(offset,offset+4),'xref');
+});
