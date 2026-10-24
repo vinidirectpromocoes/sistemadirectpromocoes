@@ -64,6 +64,7 @@ jobs:
               node tests/enterprise_integrations_e2e.mjs
           - area: Operação
             scripts: |
+              node tests/mobile_navigation_e2e.mjs
               node tests/order_lifecycle_e2e.mjs
               node tests/overlapping_e2e.mjs
               node tests/usability_e2e.mjs
@@ -98,6 +99,14 @@ jobs:
           pnpm exec playwright install --with-deps chromium webkit
       - name: Fluxos, perfis e telas móveis
         run: ${{ matrix.scripts }}
+      - name: Guardar capturas da navegação móvel
+        if: always() && matrix.area == 'Operação'
+        uses: actions/upload-artifact@v4
+        with:
+          name: sidebar-mobile-${{ github.run_attempt }}
+          path: .design-qa/sidebar/
+          retention-days: 5
+          include-hidden-files: true
   publicacao:
     name: Publicação — produção
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'
