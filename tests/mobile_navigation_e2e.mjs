@@ -53,7 +53,8 @@ try{
           await page.screenshot({path:path.join(output,`before-${name}-${width}.png`)});
           await page.unroute('**/mobile-navigation.css');
         }
-        await page.goto(url+'/#inicio');await ready(page);await adminControls(page);
+        if(before)await page.reload();else await page.goto(url+'/#inicio');
+        await ready(page);await adminControls(page);
         const after=await dimensions(page);
         metrics.push({browser:name,width,height,before,after});
         await page.screenshot({path:path.join(output,`after-${name}-${width}-initial.png`)});
