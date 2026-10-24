@@ -7,8 +7,8 @@ Referência inicial conferida em **23/10/2026**, horário de Fortaleza. O propri
 | Componente | Alvo confirmado | Função |
 | --- | --- | --- |
 | Código | [vinidirectpromocoes/sistemadirectpromocoes](https://github.com/vinidirectpromocoes/sistemadirectpromocoes) | Fonte principal, histórico, PRs e testes |
-| Produção | [directpedidos.vercel.app](https://directpedidos.vercel.app/) | Sistema online |
-| Endereço existente | [sistemadirectpromocoes-zeta.vercel.app](https://sistemadirectpromocoes-zeta.vercel.app/) | Alias do mesmo projeto |
+| Produção oficial | [sistemadirectpromocoes-zeta.vercel.app](https://sistemadirectpromocoes-zeta.vercel.app/) | Sistema existente em uso pela equipe; manter este endereço nas entregas e verificações |
+| Alias preexistente | `directpedidos.vercel.app` | Outro endereço do mesmo projeto, não é um sistema separado nem o endereço de referência do proprietário |
 | Vercel | Equipe `sistemadirectpromocoes`, projeto `sistemadirectpromocoes` | Publicação de `static/` pela integração Git |
 | ID da equipe Vercel | `team_kW55Rdvix5ihMK4ErsQ89HcF` | Escopo das operações remotas |
 | ID do projeto Vercel | `prj_u9o6iYnsfh3Cym7hrK5aD19K0AhV` | Identificação exata da publicação |
@@ -16,6 +16,8 @@ Referência inicial conferida em **23/10/2026**, horário de Fortaleza. O propri
 | Organização Supabase | `fhwbnlcyzhvmbffgxhpk` | Organização conectada |
 
 O repositório `aplicativodirecto` também está disponível, mas estava vazio nesta conferência. Ele não é a origem confirmada do sistema publicado.
+
+O proprietário reafirmou em 23/10/2026 que a manutenção deve continuar exclusivamente no sistema existente em `sistemadirectpromocoes-zeta.vercel.app`, preservando o endereço, o banco e os cadastros em uso. A conferência nas três ferramentas confirmou que os dois aliases acima resolviam a mesma publicação Vercel, do mesmo repositório, e que o adaptador servido em ambos apontava para o Supabase `jxthqgtzybcyediyciqc`. Não criar outro sistema ou copiar os registros para uma base nova para realizar melhorias. Dados pessoais e resultados de consultas aos cadastros não devem ser registrados neste repositório público.
 
 ## Estrutura de código
 

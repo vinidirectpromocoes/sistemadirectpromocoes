@@ -111,4 +111,4 @@ jobs:
         with:
           python-version: '3.12'
       - name: Conferir todos os arquivos publicados
-        run: python scripts/verify_publication.py --site https://directpedidos.vercel.app --expected-commit "$GITHUB_SHA"
+        run: python scripts/verify_publication.py --site https://sistemadirectpromocoes-zeta.vercel.app --expected-commit "$GITHUB_SHA"
