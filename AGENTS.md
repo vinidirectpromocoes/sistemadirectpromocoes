@@ -4,6 +4,7 @@ O proprietário acompanha o sistema pelo celular. Execute desenvolvimento, teste
 
 ## Comece por aqui
 
+- O endereço oficial indicado pelo proprietário é `https://sistemadirectpromocoes-zeta.vercel.app/`. Use esse link nas entregas e verificações. Continue no repositório, projeto Vercel e Supabase existentes; não crie outro sistema, projeto, banco ou endereço para substituir esse sistema em uso. Preserve os cadastros e o trabalho da equipe.
 - Leia `docs/MANUTENCAO_NUVEM.md` para alvos, módulos, fluxo e limitações verificados.
 - Atualize a leitura da branch `main` antes de cada tarefa. GitHub é a fonte persistente do código; o checkout do ambiente de trabalho pode ser temporário.
 - Produção: Vercel publica `static/`; dados, Auth e regras estão no Supabase. O SQLite de `server.py` é independente e não sincroniza com produção.

@@ -70,7 +70,7 @@ def superseded(root, expected_commit):
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument('--site', default='https://directpedidos.vercel.app')
+    parser.add_argument('--site', default='https://sistemadirectpromocoes-zeta.vercel.app')
     parser.add_argument('--expected-commit')
     args = parser.parse_args()
     if urlsplit(args.site).scheme != 'https':
