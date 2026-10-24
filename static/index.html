@@ -53,6 +53,7 @@
   <link rel="stylesheet" href="/messages.css">
 <link rel="stylesheet" href="automation.css"><script src="automation.js" defer></script>
 <link rel="stylesheet" href="/management.css"><script src="/management.js" defer></script>
+  <link rel="stylesheet" href="/mobile-navigation.css">
 </head>
 <body>
   <div id="global-loading" class="global-loading" role="progressbar" aria-label="Carregando dados" hidden><span></span></div>
@@ -102,9 +103,10 @@
           <a href="#configuracoes" id="nav-configuracoes" aria-label="Configurações" data-mobile-label="Ajustes"><span class="nav-icon" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 6h16M4 12h16M4 18h16"/><circle cx="9" cy="6" r="2" fill="currentColor" stroke="none"/><circle cx="15" cy="12" r="2" fill="currentColor" stroke="none"/><circle cx="10" cy="18" r="2" fill="currentColor" stroke="none"/></svg></span>Configurações</a>
         </div>
       </nav>
+      <p class="mobile-nav-hint" aria-hidden="true">Deslize para ver mais opções →</p>
       <div class="sidebar-foot">
         <div class="sidebar-status"><span class="status-dot" aria-hidden="true"></span><span id="storage-status">Dados salvos neste computador</span></div>
-        <a id="backup-health-alert" href="#configuracoes" class="sidebar-backup-alert" hidden>⚠ Conferir backup</a><div class="sidebar-controls"><button id="global-search-button" class="sidebar-control" type="button" aria-label="Buscar no sistema" title="Buscar (Ctrl/⌘ K)"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><circle cx="10" cy="10" r="6"/><path d="m15 15 6 6"/></svg></button>
+        <a id="backup-health-alert" href="#configuracoes" class="sidebar-backup-alert" title="Conferir backup" hidden>⚠ Conferir backup</a><div class="sidebar-controls"><button id="global-search-button" class="sidebar-control" type="button" aria-label="Buscar no sistema" title="Buscar (Ctrl/⌘ K)"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><circle cx="10" cy="10" r="6"/><path d="m15 15 6 6"/></svg></button>
           <button id="theme-toggle" class="sidebar-control theme-toggle" type="button" aria-label="Ativar tema escuro" title="Ativar tema escuro" aria-pressed="false">
             <svg class="theme-icon-moon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20.5 14.4A8.5 8.5 0 0 1 9.6 3.5 8.5 8.5 0 1 0 20.5 14.4Z"/></svg>
             <svg class="theme-icon-sun" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="4"/><path d="M12 2v2m0 16v2M4.93 4.93l1.42 1.42m11.3 11.3 1.42 1.42M2 12h2m16 0h2M4.93 19.07l1.42-1.42m11.3-11.3 1.42-1.42"/></svg>

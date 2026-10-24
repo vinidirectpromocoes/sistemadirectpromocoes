@@ -105,6 +105,8 @@ Portanto, não considerar o backup diário independente do computador. Para migr
 
 ## Regras operacionais a preservar
 
+A navegação no celular usa uma faixa horizontal de atalhos, com prioridade para Início, Pedidos, Equipe, Pendências e Finanças. Os demais atalhos continuam acessíveis por rolagem lateral. Busca, tema, saída e aviso de backup ficam compactos no topo. As nove áreas da empresa continuam acessíveis dentro de Minha empresa; o submenu lateral duplicado fica restrito ao desktop. `tests/mobile_navigation_e2e.mjs` verifica larguras de 320/390 px, celular em paisagem e desktop, com capturas e medidas guardadas nos artefatos do GitHub Actions.
+
 - Escalar ou confirmar compromisso não registra presença nem pagamento.
 - Presença, falta, substituição e encerramento mantêm histórico e as proteções financeiras existentes.
 - Valores congelados em diárias realizadas/pagas não devem ser recalculados por uma mudança de tarifa.

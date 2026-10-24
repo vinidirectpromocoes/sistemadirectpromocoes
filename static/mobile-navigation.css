@@ -1,0 +1,135 @@
+/* A navegação móvel ocupa uma única faixa, sem empurrar o conteúdo para baixo. */
+.mobile-nav-hint { display: none; }
+
+@media (max-width: 700px), (max-width: 900px) and (max-height: 500px) and (pointer: coarse) {
+  .app-shell { display: block; }
+  .sidebar {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    align-items: center;
+    gap: 4px 6px;
+    width: calc(100% - 16px);
+    height: auto;
+    position: relative;
+    top: auto;
+    margin: 8px 8px 0;
+    padding: 8px 9px;
+    overflow: visible;
+    border-radius: 14px;
+  }
+  .sidebar .brand { grid-column: 1; grid-row: 1; min-width: 0; gap: 6px; padding: 0; }
+  .sidebar .brand-logo { width: 25px; height: 25px; }
+  .sidebar .brand-name strong { font-size: 12px; }
+  .sidebar .brand-name small { font-size: 7px; }
+  .sidebar .sidebar-foot {
+    grid-column: 2;
+    grid-row: 1;
+    display: flex;
+    flex-direction: row;
+    align-items: center;
+    gap: 5px;
+    margin: 0;
+    padding: 0;
+    border: 0;
+  }
+  .sidebar .sidebar-status { display: none; }
+  .sidebar .sidebar-controls { display: contents; }
+  .sidebar .sidebar-control {
+    flex: none;
+    width: 40px;
+    height: 40px;
+    min-width: 40px;
+    min-height: 40px;
+    padding: 0;
+  }
+  .sidebar .theme-toggle-label { display: none; }
+  .sidebar .sidebar-backup-alert:not([hidden]) {
+    display: inline-flex;
+    flex: none;
+    align-items: center;
+    justify-content: center;
+    width: 32px;
+    min-height: 40px;
+    font-size: 0;
+    text-decoration: none;
+    border-radius: 9px;
+    background: #ffdf8c16;
+  }
+  .sidebar .sidebar-backup-alert::before { content: '⚠'; font-size: 17px; }
+  .sidebar nav {
+    grid-column: 1 / -1;
+    grid-row: 2;
+    display: flex;
+    flex-wrap: nowrap;
+    align-items: stretch;
+    gap: 4px;
+    min-width: 0;
+    max-width: 100%;
+    margin: 0;
+    padding: 2px 0 4px;
+    overflow-x: auto;
+    overflow-y: hidden;
+    overscroll-behavior-x: contain;
+    scrollbar-width: none;
+    -webkit-overflow-scrolling: touch;
+  }
+  .sidebar nav::-webkit-scrollbar { display: none; }
+  .sidebar nav .nav-group { display: contents; }
+  .sidebar nav .nav-group-label, .sidebar #enterprise-sidebar { display: none; }
+  .sidebar nav a {
+    flex: 0 0 70px;
+    min-width: 70px;
+    min-height: 48px;
+    padding: 5px 4px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 4px;
+    font-size: 0;
+    line-height: 1;
+    text-align: center;
+    border-radius: 9px;
+  }
+  .sidebar nav a[data-mobile-label]::after {
+    content: attr(data-mobile-label);
+    display: block;
+    width: 100%;
+    font-size: 10px;
+    line-height: 1.15;
+    white-space: nowrap;
+    overflow-wrap: normal;
+  }
+  .sidebar nav .nav-icon, .sidebar nav .nav-icon svg { width: 18px; height: 18px; }
+  .sidebar nav [hidden], .sidebar .sidebar-foot [hidden] { display: none !important; }
+  #nav-inicio { order: 0; }
+  #nav-pedidos { order: 1; }
+  #nav-diaristas { order: 2; }
+  #nav-crm { order: 3; }
+  #nav-financeiro { order: 4; }
+  #nav-supervisor { order: 5; }
+  #nav-redes { order: 6; }
+  #nav-leitura { order: 7; }
+  #nav-vagas { order: 8; }
+  #nav-pedidos-links { order: 9; }
+  #nav-convites { order: 10; }
+  #nav-empresa { order: 11; }
+  #nav-configuracoes { order: 12; }
+  .sidebar .mobile-nav-hint {
+    display: block;
+    grid-column: 1 / -1;
+    grid-row: 3;
+    margin: 0;
+    color: #c3d5ff;
+    font-size: 10px;
+    line-height: 1.2;
+    text-align: right;
+  }
+}
+
+@media (max-width: 900px) and (max-height: 500px) and (pointer: coarse) {
+  .sidebar { padding-block: 6px; }
+  .sidebar .sidebar-control { width: 36px; height: 36px; min-width: 36px; min-height: 36px; }
+  .sidebar .sidebar-backup-alert:not([hidden]) { min-height: 36px; }
+  .sidebar .mobile-nav-hint { display: none; }
+}
