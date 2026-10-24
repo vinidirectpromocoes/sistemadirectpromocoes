@@ -39,6 +39,7 @@ html[data-theme] .sidebar nav a.nav-active { background: linear-gradient(105deg,
 html[data-theme] .app-shell h1, html[data-theme] .app-shell h2, html[data-theme] .app-shell h3 { color: var(--direct-heading); }
 html[data-theme] .app-shell .page-header p, html[data-theme] .app-shell .section-help, html[data-theme] .app-shell .list-top p { color: var(--direct-muted); }
 html[data-theme] .app-shell .order-legend { color: var(--direct-muted); }
+html[data-theme="dark"] .app-shell .order-legend { color: #b9cae2; }
 html[data-theme] .app-shell .list-card, html[data-theme] .app-shell .finance-chart-card,
 html[data-theme] .app-shell .stat-card, html[data-theme] .app-shell .finance-stat,
 html[data-theme] .app-shell .supervisor-stat, html[data-theme] .app-shell .supervisor-card,
