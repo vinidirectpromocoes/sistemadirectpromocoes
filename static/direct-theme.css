@@ -115,7 +115,7 @@ html[data-theme] .app-shell .finance-stat:has(#home-stores) { --metric: var(--me
   .app-shell .order-stats .finance-stat:last-child { grid-column: 1 / -1; min-height: 48px; display: flex; align-items: center; justify-content: space-between; gap: 8px; }
   html[data-theme] .app-shell .order-stats .finance-stat:last-child span { margin: 0; }
   .app-shell .hub-stats, .app-shell .hub-finance-cards, .app-shell .crm-summary { gap: 6px; margin-bottom: 12px; }
-  .app-shell .hub-finance-cards .emphasis { grid-column: auto; }
+  .app-shell .hub-finance-cards .emphasis, .app-shell .hub-stats .emphasis { grid-column: auto; }
   .app-shell .stats { grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 6px; }
   .app-shell .stats .stat-card:first-child { grid-column: auto; flex-direction: column; align-items: start; gap: 5px; }
   .app-shell .stat-icon { width: 22px; height: 22px; font-size: 14px; }
