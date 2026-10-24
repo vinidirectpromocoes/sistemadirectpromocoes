@@ -48,12 +48,15 @@
   <script src="/operations-extended.js" defer></script>
   <script src="/crm-model.js" defer></script>
   <script src="/usability-model.js" defer></script>
+  <script src="/day-panel-model.js" defer></script>
   <script src="/hub.js" defer></script>
+  <script src="/day-panel.js" defer></script>
   <script src="/usability.js" defer></script><link rel="stylesheet" href="/usability.css">
   <link rel="stylesheet" href="/messages.css">
 <link rel="stylesheet" href="automation.css"><script src="automation.js" defer></script>
 <link rel="stylesheet" href="/management.css"><script src="/management.js" defer></script>
   <link rel="stylesheet" href="/mobile-navigation.css">
+  <link rel="stylesheet" href="/direct-theme.css">
 </head>
 <body>
   <div id="global-loading" class="global-loading" role="progressbar" aria-label="Carregando dados" hidden><span></span></div>
@@ -132,6 +135,13 @@
         <a href="#financeiro" class="finance-stat"><span>Pagamentos e cobranças atrasados</span><strong id="home-overdue">0</strong><small>Vencidos e com saldo pendente</small></a>
       </section>
       <section id="home-finance-cards" class="hub-finance-cards" aria-label="Previsão no período"><a href="#financeiro" class="finance-stat"><span>Faturamento previsto</span><strong id="home-revenue">R$ 0,00</strong></a><a href="#financeiro" class="finance-stat"><span>Custo previsto de diárias</span><strong id="home-cost">R$ 0,00</strong></a><a href="#financeiro" class="finance-stat emphasis"><span>Lucro previsto · após extras</span><strong id="home-profit">R$ 0,00</strong><small>Antes de outras despesas da empresa</small></a><p id="home-rates-warning" class="finance-warning" hidden></p></section>
+      <section id="home-day-panel" class="list-card day-panel" aria-labelledby="home-day-title" hidden>
+        <header class="day-panel-head"><div><h2 id="home-day-title">Central do dia</h2><p>Escalas, presenças registradas e distribuição por cidade.</p></div><span id="home-day-updated" class="day-updated"></span></header>
+        <div class="day-tools"><label>Data da escala<input id="home-day-date" type="date" required></label><label>Presença<select id="home-day-status"><option value="">Todas as situações</option><option value="escalada">Presença a conferir</option><option value="presente">Presença registrada</option><option value="falta">Falta registrada</option><option value="desistiu">Desistência</option></select></label><div class="day-exports" role="group" aria-label="Exportar escala selecionada"><button id="home-day-csv" class="button button-outline" type="button">CSV</button><button id="home-day-excel" class="button button-outline" type="button">Excel</button><button id="home-day-print" class="button button-outline" type="button">PDF / imprimir</button></div></div>
+        <div class="day-stats" aria-label="Resumo da data"><div class="finance-stat"><span>Pessoas escaladas</span><strong id="home-day-assigned">0</strong></div><div class="finance-stat"><span>Presenças registradas</span><strong id="home-day-present">0</strong></div><div class="finance-stat"><span>Presenças a conferir</span><strong id="home-day-awaiting">0</strong></div><div class="finance-stat"><span>Faltas registradas</span><strong id="home-day-absent">0</strong></div></div>
+        <div class="day-columns"><div><h3>Escala e conferência</h3><p id="home-day-count" class="section-help" aria-live="polite"></p><div id="home-day-list"></div><button id="home-day-more" class="button button-outline" type="button" hidden>Ver mais escalas</button></div><div><h3>Distribuição por cidade</h3><p class="section-help">Pessoas escaladas e presenças registradas na data, sem faltas ou desistências.</p><div id="home-day-cities"></div><a class="button button-outline" href="#supervisor?view=rotina">Abrir rotina e baixas</a></div></div>
+        <p id="home-day-feedback" class="feedback" role="status" hidden></p>
+      </section>
       <section class="hub-charts" aria-label="Dashboards do sistema"><article id="home-workers-chart-card" class="finance-chart-card"><h2>Equipe</h2><div id="home-workers-chart"></div></article><article class="finance-chart-card"><h2>Pedidos</h2><div id="home-orders-chart"></div></article><article class="finance-chart-card"><h2>Atendimentos no período</h2><div id="home-attendance-chart"></div></article><article class="finance-chart-card"><h2>Pendências por área</h2><div id="home-crm-chart"></div></article></section>
     </main>
     <main class="main-content" id="crm-page" hidden>
@@ -284,13 +294,12 @@
         </div>
         <p id="orders-filter-error" class="feedback error" role="alert" hidden>A data inicial deve ser anterior ou igual à data final.</p><p id="orders-filter-count" class="orders-filter-count" aria-live="polite"></p>
       </section>
-      <section class="order-stats" aria-label="Resumo dos pedidos">
+      <section class="order-stats operation-kpis" aria-label="Resumo dos pedidos e da operação">
         <div class="finance-stat"><span>Pedidos em aberto</span><strong id="orders-open-count">0</strong></div>
         <div class="finance-stat"><span>Diárias solicitadas · em aberto</span><strong id="orders-demand-count">0</strong></div>
         <div class="finance-stat"><span>Pedidos confirmados</span><strong id="orders-confirmed-count">0</strong></div>
         <div class="finance-stat"><span>Pedidos concluídos</span><strong id="orders-done-count">0</strong></div>
-      </section>
-      <section class="order-stats operation-kpis" aria-label="Indicadores da operação"><div class="finance-stat"><span>Vagas preenchidas</span><strong id="orders-fill-rate">0%</strong></div><div class="finance-stat"><span>Taxa de faltas confirmadas</span><strong id="orders-absence-rate">0%</strong></div><div class="finance-stat"><span>Presenças por confirmar</span><strong id="orders-awaiting-attendance">0</strong></div></section>
+      <div class="finance-stat"><span>Vagas preenchidas</span><strong id="orders-fill-rate">0%</strong></div><div class="finance-stat"><span>Taxa de faltas confirmadas</span><strong id="orders-absence-rate">0%</strong></div><div class="finance-stat"><span>Presenças por confirmar</span><strong id="orders-awaiting-attendance">0</strong></div></section>
       <section class="list-card" aria-labelledby="orders-list-title">
         <div class="list-top order-list-top"><div><h2 id="orders-list-title">Solicitações recebidas</h2><p>Acompanhe cada pedido desde o recebimento até a conclusão.</p></div></div>
         <div class="order-legend"><span><i class="order-neon red" aria-hidden="true"></i>Vaga não atendida</span><span><i class="order-neon yellow" aria-hidden="true"></i>Já iniciou com vaga</span><span><i class="order-neon green" aria-hidden="true"></i>Equipe preenchida</span></div>

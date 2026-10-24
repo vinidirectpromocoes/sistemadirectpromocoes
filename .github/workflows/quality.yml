@@ -64,6 +64,7 @@ jobs:
               node tests/enterprise_integrations_e2e.mjs
           - area: Operação
             scripts: |
+              node tests/direct_theme_e2e.mjs
               node tests/mobile_navigation_e2e.mjs
               node tests/order_lifecycle_e2e.mjs
               node tests/overlapping_e2e.mjs

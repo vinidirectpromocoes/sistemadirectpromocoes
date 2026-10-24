@@ -947,6 +947,9 @@ class Handler(BaseHTTPRequestHandler):
             assets['/'+asset]='text/javascript; charset=utf-8'
         assets['/messages.css']='text/css; charset=utf-8'
         assets['/mobile-navigation.css']='text/css; charset=utf-8'
+        assets['/direct-theme.css']='text/css; charset=utf-8'
+        assets['/day-panel-model.js']='text/javascript; charset=utf-8'
+        assets['/day-panel.js']='text/javascript; charset=utf-8'
         assets["/reconciliation.js"] = "text/javascript; charset=utf-8"
         for asset in ['usability.js','usability-model.js','reading-assistant.js','reading-dialogue.js','insights.js','offline.js','operations-extended.js','crm-model.js','hub.js','portal-admin.js','vacancies-admin.js','portal.js','sw.js']:
             assets['/'+asset]='text/javascript; charset=utf-8'
