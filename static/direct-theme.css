@@ -23,6 +23,7 @@ html[data-theme="dark"] {
   --dark-bg: var(--direct-bg); --dark-surface: var(--direct-surface);
   --dark-raised: var(--direct-raised); --dark-field: var(--direct-control);
   --dark-border: var(--direct-line); --dark-text: var(--direct-text); --dark-muted: var(--direct-muted);
+  --brand-dark: var(--direct-text);
 }
 html[data-theme] body {
   color: var(--direct-text);
@@ -37,6 +38,7 @@ html[data-theme="dark"] .sidebar { background: linear-gradient(155deg, #03122ef5
 html[data-theme] .sidebar nav a.nav-active { background: linear-gradient(105deg, #2679e8, #0a5ec7); box-shadow: 0 4px 12px #00081d26; }
 html[data-theme] .app-shell h1, html[data-theme] .app-shell h2, html[data-theme] .app-shell h3 { color: var(--direct-heading); }
 html[data-theme] .app-shell .page-header p, html[data-theme] .app-shell .section-help, html[data-theme] .app-shell .list-top p { color: var(--direct-muted); }
+html[data-theme] .app-shell .order-legend { color: var(--direct-muted); }
 html[data-theme] .app-shell .list-card, html[data-theme] .app-shell .finance-chart-card,
 html[data-theme] .app-shell .stat-card, html[data-theme] .app-shell .finance-stat,
 html[data-theme] .app-shell .supervisor-stat, html[data-theme] .app-shell .supervisor-card,
