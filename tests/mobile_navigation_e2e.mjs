@@ -38,6 +38,8 @@ try{
     await new Promise(resolve=>setTimeout(resolve,100));
   }
   assert.ok(started,'Servidor isolado disponível');
+  const stylesheet=await fetch(url+'/mobile-navigation.css');
+  assert.ok(stylesheet.ok&&stylesheet.headers.get('content-type')?.includes('text/css'),'Estilo da navegação servido pelo ambiente isolado');
   for(const [engine,name] of [[chromium,'Chromium'],[webkit,'WebKit']]){
     const browser=await engine.launch();
     try{

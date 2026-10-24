@@ -946,6 +946,7 @@ class Handler(BaseHTTPRequestHandler):
         for asset in ['messages-model.js','messages.js','backup-model.js']:
             assets['/'+asset]='text/javascript; charset=utf-8'
         assets['/messages.css']='text/css; charset=utf-8'
+        assets['/mobile-navigation.css']='text/css; charset=utf-8'
         assets["/reconciliation.js"] = "text/javascript; charset=utf-8"
         for asset in ['usability.js','usability-model.js','reading-assistant.js','reading-dialogue.js','insights.js','offline.js','operations-extended.js','crm-model.js','hub.js','portal-admin.js','vacancies-admin.js','portal.js','sw.js']:
             assets['/'+asset]='text/javascript; charset=utf-8'
